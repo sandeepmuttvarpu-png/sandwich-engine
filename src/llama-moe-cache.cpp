@@ -363,7 +363,10 @@ struct llama_moe_cache::impl {
 
 #ifdef GGML_USE_IO_URING
             if (uring_active) {
-                // Reap any already-completed async lookahead CQEs first
+                static std::atomic<uint32_t> s_io_epoch{0};
+                const uint32_t current_epoch = ++s_io_epoch;
+
+                // Drain any already-completed asynchronous lookahead CQEs from previous calls
                 struct io_uring_cqe * cqe_reap = nullptr;
                 while (io_uring_peek_cqe(&ring, &cqe_reap) == 0 && cqe_reap) {
                     io_uring_cqe_seen(&ring, cqe_reap);
@@ -379,35 +382,70 @@ struct llama_moe_cache::impl {
                             struct io_uring_sqe * sqe = io_uring_get_sqe(&ring);
                             if (!sqe) break;
                             io_uring_prep_read(sqe, op.fd, op.dst, op.len, op.offset);
-                            io_uring_sqe_set_data(sqe, (void *)(uintptr_t)(op_idx + batch_count));
+                            uint64_t tag = (static_cast<uint64_t>(current_epoch) << 32) | static_cast<uint64_t>(op_idx + batch_count);
+                            io_uring_sqe_set_data64(sqe, tag);
                             batch_count++;
                         } else {
                             break;
                         }
                     }
                     if (batch_count > 0) {
+                        std::vector<uint8_t> completed(batch_count, 0);
                         int submitted = io_uring_submit(&ring);
                         if (submitted > 0) {
-                            for (int c = 0; c < submitted; ++c) {
+                            int reaped = 0;
+                            while (reaped < submitted) {
                                 struct io_uring_cqe * cqe = nullptr;
-                                if (io_uring_wait_cqe(&ring, &cqe) == 0 && cqe) {
-                                    uintptr_t completed_idx = (uintptr_t)io_uring_cqe_get_data(cqe);
-                                    if (completed_idx < cold_reads.size() && (cqe->res < 0 || (size_t)cqe->res != cold_reads[completed_idx].len)) {
-                                        const auto & op = cold_reads[completed_idx];
-                                        ssize_t n = pread(op.fd, op.dst, op.len, op.offset);
-                                        if (n != (ssize_t)op.len) {
-                                            memcpy(op.dst, op.fallback_src, op.len);
+                                int ret = io_uring_wait_cqe(&ring, &cqe);
+                                if (ret == -EINTR) {
+                                    continue;
+                                }
+                                if (ret < 0 || !cqe) {
+                                    break;
+                                }
+                                uint64_t tag = io_uring_cqe_get_data64(cqe);
+                                uint32_t cqe_epoch = static_cast<uint32_t>(tag >> 32);
+                                uint32_t cqe_idx   = static_cast<uint32_t>(tag & 0xFFFFFFFF);
+
+                                if (cqe_epoch == current_epoch) {
+                                    reaped++;
+                                    if (cqe_idx >= op_idx && cqe_idx < op_idx + batch_count) {
+                                        size_t slot_rel = cqe_idx - op_idx;
+                                        if (cqe->res >= 0 && static_cast<size_t>(cqe->res) == cold_reads[cqe_idx].len) {
+                                            completed[slot_rel] = 1;
                                         }
                                     }
-                                    io_uring_cqe_seen(&ring, cqe);
+                                }
+                                io_uring_cqe_seen(&ring, cqe);
+                            }
+
+                            // If some submitted operations did not complete, cancel outstanding tags and drain
+                            if (reaped < submitted) {
+                                for (size_t b = 0; b < static_cast<size_t>(submitted); ++b) {
+                                    if (!completed[b]) {
+                                        struct io_uring_sqe * sqe_cancel = io_uring_get_sqe(&ring);
+                                        if (sqe_cancel) {
+                                            uint64_t cancel_tag = (static_cast<uint64_t>(current_epoch) << 32) | static_cast<uint64_t>(op_idx + b);
+                                            io_uring_prep_cancel64(sqe_cancel, cancel_tag, 0);
+                                        }
+                                    }
+                                }
+                                io_uring_submit(&ring);
+                                struct io_uring_cqe * cqe_cancel = nullptr;
+                                while (io_uring_peek_cqe(&ring, &cqe_cancel) == 0 && cqe_cancel) {
+                                    io_uring_cqe_seen(&ring, cqe_cancel);
+                                    cqe_cancel = nullptr;
                                 }
                             }
-                            // Any unsubmitted operations fall back to pread
-                            for (size_t b = (size_t)submitted; b < batch_count; ++b) {
-                                const auto & op = cold_reads[op_idx + b];
-                                ssize_t n = pread(op.fd, op.dst, op.len, op.offset);
-                                if (n != (ssize_t)op.len) {
-                                    memcpy(op.dst, op.fallback_src, op.len);
+
+                            // Fallback only for uncompleted slots
+                            for (size_t b = 0; b < batch_count; ++b) {
+                                if (!completed[b]) {
+                                    const auto & op = cold_reads[op_idx + b];
+                                    ssize_t n = pread(op.fd, op.dst, op.len, op.offset);
+                                    if (n != (ssize_t)op.len) {
+                                        memcpy(op.dst, op.fallback_src, op.len);
+                                    }
                                 }
                             }
                             op_idx += batch_count;

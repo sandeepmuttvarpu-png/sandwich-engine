@@ -9,11 +9,12 @@ namespace sandwich {
 namespace dispatch {
 
 // Invariant Constants
-constexpr uint64_t WAYLAND_VRAM_GUARD_MB = 7800; // Hard invariant: 7,800 MB max VRAM allocation
-constexpr double   RAM_RULE_42_RATIO     = 0.70; // Hard invariant: Technique #42 (70% Max Host RAM)
-constexpr int      FALLBACK_THREADS      = 4;
-constexpr uint64_t FALLBACK_VRAM_MB      = 4096;
-constexpr uint64_t FALLBACK_RAM_MB       = 16384;
+constexpr uint64_t WAYLAND_VRAM_GUARD_MB = 7100; // Hard invariant: 7,100 MB max VRAM allocation
+constexpr double   RAM_RULE_42_RATIO     = 0.70; // Hard invariant: Technique #42 (70% Max Host RAM = 16,552 MB)
+constexpr uint64_t HOST_RAM_CEILING_MB   = 16552;
+constexpr int      FALLBACK_THREADS      = 6;    // Optimal physical P-cores on i7-13620H
+constexpr uint64_t FALLBACK_VRAM_MB      = 7100;
+constexpr uint64_t FALLBACK_RAM_MB       = 16552;
 
 struct CPUProfile {
     std::string model_name           = "Generic x86_64";

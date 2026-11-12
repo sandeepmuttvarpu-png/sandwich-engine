@@ -10,11 +10,6 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 
-#if __has_include(<cuda_runtime.h>)
-    #include <cuda_runtime.h>
-    #define SANDWICH_CUDA_AVAILABLE 1
-#endif
-
 namespace sandwich {
 namespace dispatch {
 
@@ -31,12 +26,10 @@ GDSManager::~GDSManager() {
 void GDSManager::probe_capabilities() {
     std::lock_guard<std::mutex> lock(mutex_);
 
-    // Check for native NVIDIA GPUDirect Storage driver
     bool cufile_dev = (access("/dev/cufile", F_OK) == 0);
     bool nvidia_fs  = (access("/proc/driver/nvidia-fs", F_OK) == 0 || access("/sys/kernel/cufile", F_OK) == 0);
     status_.has_cufile_driver = cufile_dev || nvidia_fs;
 
-    // Check for Linux io_uring availability
     bool io_uring_ok = true;
     int disabled_fd = open("/proc/sys/kernel/io_uring_disabled", O_RDONLY);
     if (disabled_fd >= 0) {
@@ -52,12 +45,13 @@ void GDSManager::probe_capabilities() {
 
 bool GDSManager::init() {
     std::lock_guard<std::mutex> lock(mutex_);
+    if (initialized_.load(std::memory_order_acquire)) return true;
 
     if (!config_.enabled) {
         status_.enabled = false;
         status_.active_backend = GDSBackendMode::DISABLED;
         status_.backend_name = "DISABLED";
-        initialized_ = false;
+        initialized_.store(false, std::memory_order_release);
         return true;
     }
 
@@ -73,20 +67,85 @@ bool GDSManager::init() {
         status_.backend_name = "COMPAT_POSIX_DIRECT (Aligned Direct I/O pread)";
     }
 
-    initialized_ = true;
+#if defined(SANDWICH_CUDA_AVAILABLE)
+    cudaStreamCreateWithFlags(&dma_stream_, cudaStreamNonBlocking);
+#endif
+
+    ring_ = std::make_unique<PinnedSlot[]>(slot_count_);
+    for (size_t i = 0; i < slot_count_; ++i) {
+        ring_[i].capacity = GDS_SLOT_CAPACITY;
+        ring_[i].is_pinned = false;
+        ring_[i].in_use.store(false, std::memory_order_relaxed);
+
+#if defined(SANDWICH_CUDA_AVAILABLE)
+        cudaError_t err = cudaHostAlloc((void**)&ring_[i].buffer, GDS_SLOT_CAPACITY, cudaHostAllocPortable);
+        if (err == cudaSuccess && ring_[i].buffer) {
+            ring_[i].is_pinned = true;
+        } else {
+            ring_[i].buffer = nullptr;
+        }
+#endif
+        if (!ring_[i].buffer) {
+            int ret = posix_memalign((void**)&ring_[i].buffer, GDS_SECTOR_ALIGNMENT, GDS_SLOT_CAPACITY);
+            if (ret != 0 || !ring_[i].buffer) {
+                // Total allocation failure -> clean up already allocated slots
+                for (size_t j = 0; j < i; ++j) {
+                    if (ring_[j].buffer) {
+#if defined(SANDWICH_CUDA_AVAILABLE)
+                        if (ring_[j].is_pinned) cudaFreeHost(ring_[j].buffer);
+                        else free(ring_[j].buffer);
+#else
+                        free(ring_[j].buffer);
+#endif
+                        ring_[j].buffer = nullptr;
+                    }
+                }
+                status_.enabled = false;
+                initialized_.store(false, std::memory_order_release);
+                return false;
+            }
+            ring_[i].is_pinned = false;
+        }
+    }
+
+    initialized_.store(true, std::memory_order_release);
     return true;
 }
 
 void GDSManager::shutdown() {
     std::lock_guard<std::mutex> lock(mutex_);
-    initialized_ = false;
+    if (!initialized_.exchange(false, std::memory_order_acq_rel)) return;
+
+#if defined(SANDWICH_CUDA_AVAILABLE)
+    if (dma_stream_) {
+        cudaStreamSynchronize(dma_stream_);
+        cudaStreamDestroy(dma_stream_);
+        dma_stream_ = nullptr;
+    }
+#endif
+
+    for (size_t i = 0; i < slot_count_; ++i) {
+        if (ring_[i].buffer) {
+#if defined(SANDWICH_CUDA_AVAILABLE)
+            if (ring_[i].is_pinned) {
+                cudaFreeHost(ring_[i].buffer);
+            } else {
+                free(ring_[i].buffer);
+            }
+#else
+            free(ring_[i].buffer);
+#endif
+            ring_[i].buffer = nullptr;
+            ring_[i].is_pinned = false;
+        }
+        ring_[i].in_use.store(false, std::memory_order_relaxed);
+    }
     status_.enabled = false;
     status_.active_backend = GDSBackendMode::DISABLED;
 }
 
 bool GDSManager::is_active() const {
-    std::lock_guard<std::mutex> lock(mutex_);
-    return initialized_ && status_.enabled && status_.active_backend != GDSBackendMode::DISABLED;
+    return initialized_.load(std::memory_order_acquire) && status_.enabled && status_.active_backend != GDSBackendMode::DISABLED;
 }
 
 GDSStatus GDSManager::get_status() const {
@@ -125,6 +184,23 @@ void GDSManager::align_bounds(
     aligned_length = ((total + alignment - 1) / alignment) * alignment;
 }
 
+uint32_t GDSManager::acquire_slot() {
+    for (size_t attempt = 0; attempt < slot_count_ * 4; ++attempt) {
+        uint32_t idx = static_cast<uint32_t>(head_.fetch_add(1, std::memory_order_relaxed) & slot_mask_);
+        bool expected = false;
+        if (ring_[idx].in_use.compare_exchange_strong(expected, true, std::memory_order_acquire)) {
+            return idx;
+        }
+    }
+    return UINT32_MAX;
+}
+
+void GDSManager::release_slot(uint32_t idx) {
+    if (idx < slot_count_) {
+        ring_[idx].in_use.store(false, std::memory_order_release);
+    }
+}
+
 GDSTransferResult GDSManager::transfer(const GDSTransferRequest & req) {
     if (!is_active()) {
         GDSTransferResult res;
@@ -154,25 +230,7 @@ GDSTransferResult GDSManager::transfer(const GDSTransferRequest & req) {
         return res;
     }
 
-    GDSBackendMode backend;
-    {
-        std::lock_guard<std::mutex> lock(mutex_);
-        backend = status_.active_backend;
-    }
-
-    GDSTransferResult res;
-    switch (backend) {
-        case GDSBackendMode::DIRECT_CUFILE:
-            res = execute_cufile(req);
-            break;
-        case GDSBackendMode::COMPAT_IO_URING_DIRECT:
-            res = execute_io_uring(req);
-            break;
-        case GDSBackendMode::COMPAT_POSIX_DIRECT:
-        default:
-            res = execute_posix_direct(req);
-            break;
-    }
+    GDSTransferResult res = execute_posix_direct(req);
 
     if (res.success) {
         std::lock_guard<std::mutex> lock(mutex_);
@@ -194,16 +252,6 @@ std::vector<GDSTransferResult> GDSManager::transfer_batch(const std::vector<GDST
     return results;
 }
 
-GDSTransferResult GDSManager::execute_cufile(const GDSTransferRequest & req) {
-    // Native cuFile path (delegates to hardware direct DMA, or fallback if descriptor unaligned)
-    return execute_posix_direct(req);
-}
-
-GDSTransferResult GDSManager::execute_io_uring(const GDSTransferRequest & req) {
-    // Linux io_uring asynchronous direct DMA path
-    return execute_posix_direct(req);
-}
-
 GDSTransferResult GDSManager::execute_posix_direct(const GDSTransferRequest & req) {
     GDSTransferResult res;
     auto start_time = std::chrono::high_resolution_clock::now();
@@ -215,8 +263,9 @@ GDSTransferResult GDSManager::execute_posix_direct(const GDSTransferRequest & re
     align_bounds(req.file_offset, req.length, config_.block_alignment,
                  aligned_offset, aligned_length, offset_padding);
 
-    // If request is already aligned and destination is properly sized AND destination is host RAM
-    if (!req.is_gpu_vram && offset_padding == 0 && (req.length % config_.block_alignment == 0)) {
+    // Fast path: Host destination already sector aligned with zero padding
+    if (!req.is_gpu_vram && offset_padding == 0 && (reinterpret_cast<uintptr_t>(req.dest_ptr) % config_.block_alignment == 0)) {
+        posix_fadvise(req.fd, aligned_offset, aligned_length, POSIX_FADV_DONTNEED);
         ssize_t bytes_read = pread(req.fd, req.dest_ptr, req.length, req.file_offset);
         if (bytes_read < 0) {
             res.success = false;
@@ -225,18 +274,25 @@ GDSTransferResult GDSManager::execute_posix_direct(const GDSTransferRequest & re
         }
         res.bytes_transferred = static_cast<size_t>(bytes_read);
     } else {
-        // Aligned bounce buffer to comply with O_DIRECT sector boundaries
-        void * aligned_buf = nullptr;
-        int ret = posix_memalign(&aligned_buf, config_.block_alignment, aligned_length);
-        if (ret != 0 || !aligned_buf) {
+        uint32_t slot_idx = acquire_slot();
+        if (slot_idx == UINT32_MAX) {
             res.success = false;
-            res.error_message = "Failed to allocate aligned DMA bounce buffer";
+            res.error_message = "All pinned GDS staging ring buffer slots busy";
             return res;
         }
 
-        ssize_t bytes_read = pread(req.fd, aligned_buf, aligned_length, aligned_offset);
+        PinnedSlot & slot = ring_[slot_idx];
+        if (aligned_length > slot.capacity) {
+            release_slot(slot_idx);
+            res.success = false;
+            res.error_message = "Transfer size exceeds 4MB slot capacity";
+            return res;
+        }
+
+        posix_fadvise(req.fd, aligned_offset, aligned_length, POSIX_FADV_DONTNEED);
+        ssize_t bytes_read = pread(req.fd, slot.buffer, aligned_length, aligned_offset);
         if (bytes_read < 0) {
-            free(aligned_buf);
+            release_slot(slot_idx);
             res.success = false;
             res.error_message = strerror(errno);
             return res;
@@ -244,20 +300,21 @@ GDSTransferResult GDSManager::execute_posix_direct(const GDSTransferRequest & re
 
         if (static_cast<size_t>(bytes_read) > offset_padding) {
             size_t copy_size = std::min(req.length, static_cast<size_t>(bytes_read) - offset_padding);
-            const uint8_t * src_ptr = static_cast<const uint8_t *>(aligned_buf) + offset_padding;
+            const uint8_t * src_ptr = slot.buffer + offset_padding;
             if (req.is_gpu_vram) {
 #if defined(SANDWICH_CUDA_AVAILABLE)
-                cudaError_t err = cudaMemcpy(req.dest_ptr, src_ptr, copy_size, cudaMemcpyHostToDevice);
+                cudaError_t err = cudaMemcpyAsync(req.dest_ptr, src_ptr, copy_size, cudaMemcpyHostToDevice, dma_stream_);
                 if (err != cudaSuccess) {
-                    free(aligned_buf);
+                    release_slot(slot_idx);
                     res.success = false;
-                    res.error_message = std::string("cudaMemcpy failed: ") + cudaGetErrorString(err);
+                    res.error_message = std::string("cudaMemcpyAsync failed: ") + cudaGetErrorString(err);
                     return res;
                 }
+                cudaStreamSynchronize(dma_stream_);
 #else
-                free(aligned_buf);
+                release_slot(slot_idx);
                 res.success = false;
-                res.error_message = "GPU VRAM destination specified but CUDA runtime unavailable in fallback";
+                res.error_message = "GPU VRAM destination specified but CUDA runtime unavailable";
                 return res;
 #endif
             } else {
@@ -267,7 +324,8 @@ GDSTransferResult GDSManager::execute_posix_direct(const GDSTransferRequest & re
         } else {
             res.bytes_transferred = 0;
         }
-        free(aligned_buf);
+
+        release_slot(slot_idx);
     }
 
     auto end_time = std::chrono::high_resolution_clock::now();
