@@ -1777,6 +1777,10 @@ ggml_tensor * llm_graph_context::build_lora_mm_id(
         ggml_mul_mat_id(ctx0, w, cur_mm, ids) :
         ggml_mul_mat_id(ctx0, cached ? moe_cache->get_experts(w) : w, cur_mm, slots);
 
+    if (w && strstr(w->name, "down") != nullptr) {
+        res->op_params[1] = 1;
+    }
+
     if (prec_policy) {
         prec_policy->apply(res);
     }
@@ -3527,6 +3531,7 @@ ggml_tensor * llm_graph_context::build_attn(
     // TurboQuant: if V was padded, the output has padded dimensions.
     // Extract original V head_dim after inverse WHT (applied inside build_attn_mha).
     // NOTE: gate on v->type (not k->type) for asymmetric configs where K=q8_0 but V=turbo
+    // Cycle 5 Retirement: Technique #44 Asymmetric Turbo2 KV retired due to reproducible +7.43% PPL degradation
     if (v->type == GGML_TYPE_TURBO3_0 || v->type == GGML_TYPE_TURBO4_0 || v->type == GGML_TYPE_TURBO2_0) {
         const int64_t orig_v_head = hparams.n_embd_head_v(il);
         // cur is 2D: (n_embd_head * n_head, n_tokens) after build_attn_mha
@@ -3885,6 +3890,7 @@ ggml_tensor * llm_graph_context::build_attn(
 
     // TurboQuant: if V was padded, extract original V head_dim after inverse WHT
     // NOTE: gate on v->type (not k->type) for asymmetric configs where K=q8_0 but V=turbo
+    // Cycle 5 Retirement: Technique #44 Asymmetric Turbo2 KV retired due to reproducible +7.43% PPL degradation
     if (v->type == GGML_TYPE_TURBO3_0 || v->type == GGML_TYPE_TURBO4_0 || v->type == GGML_TYPE_TURBO2_0) {
         const int64_t orig_v_head = hparams.n_embd_head_v(il);
         const int64_t padded_v_head = v->ne[0];
