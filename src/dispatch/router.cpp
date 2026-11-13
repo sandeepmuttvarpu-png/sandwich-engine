@@ -1,7 +1,6 @@
 #include "router.hpp"
 #include "hardware_profiler.hpp"
 #include "model_scanner.hpp"
-#include "tui_wizard.hpp"
 
 #include <iostream>
 #include <iomanip>
@@ -106,6 +105,7 @@ int Router::auto_calibrate_and_dispatch(int argc, char ** argv) {
     bool has_kv = false;
     bool has_fa = false;
     bool has_spec = false;
+    bool has_ngld = false;
     bool has_vram_guard = false;
     bool has_moe_3tier = false;
     bool has_chunked_prefill = false;
@@ -123,6 +123,8 @@ int Router::auto_calibrate_and_dispatch(int argc, char ** argv) {
             has_model = true;
         } else if (a == "-ngl" || a == "--n-gpu-layers") {
             has_ngl = true;
+        } else if (a == "-ngld" || a == "--gpu-layers-draft" || a == "--spec-draft-ngl") {
+            has_ngld = true;
         } else if (a == "-t" || a == "--threads") {
             has_threads = true;
         } else if (a == "-c" || a == "--ctx-size") {
@@ -222,7 +224,7 @@ int Router::auto_calibrate_and_dispatch(int argc, char ** argv) {
         args.push_back("--prefill-chunk-size");
         args.push_back(meta.is_moe ? "128" : "256");
         args.push_back("--dynamic-watermark");
-        args.push_back("--asym-prefetch");
+        // Retired in Cycle 5 (Technique #18: Dual-Phase Prefetching): --asym-prefetch disabled by default
     }
 
     std::string spec_note = "None (Standard Single-Token Generation)";
@@ -247,6 +249,21 @@ int Router::auto_calibrate_and_dispatch(int argc, char ** argv) {
                     break;
                 }
             }
+        }
+    }
+
+    // Drafter VRAM Guard: Honor VRAM pinning when projected peak <= wayland_guard_vram_mb; fall back to host injection only when it does not fit
+    if ((has_spec || spec_note.find("DFlash2") != std::string::npos) && !has_ngld) {
+        const uint64_t drafter_vram_est_mb = 450; // DFlash2 VRAM footprint ~442 MiB
+        const uint64_t projected_vram_mb = plan.tier1_hot_vram_mb + drafter_vram_est_mb;
+        if (projected_vram_mb <= profile.gpu.wayland_guard_vram_mb) {
+            args.push_back("-ngld");
+            args.push_back("99");
+            spec_note += " [VRAM-Pinned: -ngld 99]";
+        } else {
+            args.push_back("-ngld");
+            args.push_back("0");
+            spec_note += " [Host-Injected: -ngld 0 (Guard Fallback)]";
         }
     }
 
@@ -300,46 +317,9 @@ int Router::route(int argc, char ** argv) {
         return auto_calibrate_and_dispatch(argc, argv);
     }
 
-    // Case 5: Interactive TUI Wizard (default for argc == 1 or --tui)
-    if (argc == 1 || (argc == 2 && std::strcmp(argv[1], "--tui") == 0)) {
-        if (!isatty(STDIN_FILENO) || !isatty(STDOUT_FILENO)) {
-            // Non-interactive terminal: print help
-            print_help(argv[0]);
-            return 0;
-        }
-
-        WizardConfig config;
-        TUIWizard wizard;
-        bool launched = wizard.run(config);
-
-        if (launched && config.should_launch) {
-            std::cout << "\n\033[1;38;2;34;197;94mLaunching Sandwich Engine with Auto-Dispatched Configuration...\033[0m\n";
-            std::cout << "\033[38;2;160;160;160mCommand: " << config.synthesized_command << "\033[0m\n\n";
-
-            // Parse synthesized command line into argc/argv
-            std::vector<std::string> args;
-            std::istringstream iss(config.synthesized_command);
-            std::string token;
-            while (iss >> token) {
-                args.push_back(token);
-            }
-
-            std::vector<char*> c_args;
-            c_args.push_back(argv[0]); // progname
-            // Skip binary name and optional 'run' token from synthesized command
-            size_t start_idx = 0;
-            if (args.size() > 1 && (args[0] == "./sandwich" || args[0] == "sandwich") && args[1] == "run") {
-                start_idx = 2;
-            } else if (args.size() > 0 && (args[0] == "./sandwich" || args[0] == "sandwich")) {
-                start_idx = 1;
-            }
-            for (size_t i = start_idx; i < args.size(); ++i) {
-                c_args.push_back(const_cast<char*>(args[i].c_str()));
-            }
-
-            return llama_cli(static_cast<int>(c_args.size()), c_args.data());
-        }
-
+    // Case 5: Zero arguments or explicit --tui -> Display usage overview and exit
+    if (argc <= 1 || (argc == 2 && std::strcmp(argv[1], "--tui") == 0)) {
+        print_help(argv[0]);
         return 0;
     }
 
