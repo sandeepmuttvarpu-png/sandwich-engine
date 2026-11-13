@@ -1795,7 +1795,7 @@ void sandwich_auto_dispatch(common_params & params) {
 
 #if defined(_SC_PHYS_PAGES) && defined(_SC_PAGE_SIZE)
         int64_t total_host_ram_mb = ((int64_t)sysconf(_SC_PHYS_PAGES) * (int64_t)sysconf(_SC_PAGE_SIZE)) / (1024 * 1024);
-        if (!params.moe_warm_ram_mb_user_set && total_host_ram_mb >= 22000 && params.moe_warm_ram_mb <= 14336) {
+        if (total_host_ram_mb >= 22000 && params.moe_warm_ram_mb <= 14336) {
             params.moe_warm_ram_mb = 18432; // Squeeze 18 GiB into Tier 2 WARM DDR5 pool on 24GB host (22.2 GB total RSS, zero swap)
         }
 #endif
@@ -2411,7 +2411,8 @@ void sandwich_auto_dispatch(common_params & params) {
     if (params.dynamic_watermark) {
         LOG_INF("   -> [Technique #73] Dynamic Memory Watermarking System ACTIVE (--dynamic-watermark, live HWM 85%% / LWM 70%% tracking)\n");
     }
-    if (params.asym_prefetch) {
+    if (params.asym_prefetch || (is_moe && expert_count >= 256)) {
+        params.asym_prefetch = true;
         setenv("SANDWICH_ASYM_PREFETCH", "1", 1);
         LOG_INF("   -> [Technique #74] Asymmetric Parallel Prefetch ACTIVE (--asym-prefetch, pinned DMA shared weights + async MoE lookahead)\n");
     }
