@@ -4,14 +4,14 @@ cmake_minimum_required(VERSION 3.14...3.28) # for add_link_options and implicit 
 # Sandwich.cpp: Next-Generation Independent LLM Inference Engine
 # High-performance inference engine built on top of the ggml/llama foundational core.
 # ==============================================================================
-project(sandwich.cpp VERSION 3.0.0 LANGUAGES C CXX)
+project(sandwich.cpp VERSION 0.9.0 LANGUAGES C CXX)
 include(CheckIncludeFileCXX)
 
 ### Sandwich.cpp Engine versioning
-set(SANDWICH_VERSION_MAJOR 3)
-set(SANDWICH_VERSION_MINOR 0)
+set(SANDWICH_VERSION_MAJOR 0)
+set(SANDWICH_VERSION_MINOR 9)
 set(SANDWICH_VERSION_PATCH 0)
-set(SANDWICH_VERSION "${SANDWICH_VERSION_MAJOR}.${SANDWICH_VERSION_MINOR}.${SANDWICH_VERSION_PATCH}")
+set(SANDWICH_VERSION "${SANDWICH_VERSION_MAJOR}.${SANDWICH_VERSION_MINOR}.${SANDWICH_VERSION_PATCH}-dev")
 
 ### llama.cpp foundational core version
 set(LLAMA_VERSION_MAJOR 0)
