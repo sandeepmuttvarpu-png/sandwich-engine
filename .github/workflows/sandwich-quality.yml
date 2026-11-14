@@ -1,0 +1,38 @@
+name: Sandwich Quality & Invariant Checks
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  validate-dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Validate audit ledgers
+        run: |
+          if [ -f "docs/audit/validate_ledger.py" ]; then
+            python docs/audit/validate_ledger.py --ledger docs/audit/technique_ledger.json
+          fi
+
+      - name: Check TUI and dispatch headers
+        run: |
+          test -f src/dispatch/tui_wizard.hpp
+          test -f src/dispatch/tui_wizard.cpp
+          test -f src/dispatch/flash_decoding_scheduler.hpp
+          test -f src/dispatch/flash_decoding_scheduler.cpp
+
+      - name: Verify provenance files
+        run: |
+          test -f NOTICE.md
+          test -f UPSTREAM.md
+          test -f LICENSE
