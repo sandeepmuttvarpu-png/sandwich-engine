@@ -1,14 +1,14 @@
 # Notice
 
-This project, **Sandwich Engine** (`sandwich-engine`), is derived from [llama.cpp](https://github.com/ggerganov/llama.cpp), created by Georgi Gerganov and the ggml authors.
+This project, **Sandwich.cpp** (`sandwich.cpp`), is derived from [llama.cpp](https://github.com/ggerganov/llama.cpp), created by Georgi Gerganov and the ggml authors.
 
 ## Upstream Base
 - **Upstream Repository:** https://github.com/ggerganov/llama.cpp
 - **Merge-Base Commit:** `3837bf0bc02ea5d08f8ee3585fc8c7784a81bce8` (2026-11-10)
 - **Upstream License:** MIT License (see `LICENSE`)
 
-## Project Sandwich Enhancements
-Sandwich Engine extends llama.cpp with specialized bare-metal MoE memory tiering, compressed KV caches, and low-latency speculative decoding designed for constrained consumer GPUs:
+## Sandwich.cpp Enhancements
+Sandwich.cpp extends llama.cpp with specialized bare-metal MoE memory tiering, compressed KV caches, and low-latency speculative decoding designed for constrained consumer GPUs:
 1. **Dynamic MoE Caching & Memory Tiering:** O(1) LRU VRAM slab caching, 3-tier hierarchical engine (HOT VRAM -> WARM DDR5 -> COLD NVMe via kernel `io_uring`), 2Q ghost-cache replacement, and lookahead asynchronous prefetching.
 2. **TurboQuant KV Cache:** Fused 4-bit / 3-bit / 2-bit vector quantization with Variance-Adaptive Residual Normalization (VARN).
 3. **Speculative Decoding Engines:** Multi-Token Prediction (MTP) sidecar support, EAGLE3 tree speculative decoding, DFlash2 integration, and zero-overhead N-gram lookup.

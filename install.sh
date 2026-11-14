@@ -2,13 +2,13 @@
 # ==============================================================================
 # 🥪 Sandwich.cpp Production Turnkey Installer
 # Sub-8GB Ultra-Context (128k) Standalone Inference Engine
-# Repository: https://github.com/sandeepmuttvarpu-png/Sandwich-cpp
+# Repository: https://github.com/sandeepmuttvarpu-png/sandwich-engine
 # ==============================================================================
 
 set -eo pipefail
 
 VERSION="1.2.0-standalone"
-REPO="sandeepmuttvarpu-png/Sandwich-cpp"
+REPO="sandeepmuttvarpu-png/sandwich-engine"
 FORCE_BUILD=false
 CUSTOM_INSTALL_DIR=""
 RELEASE_TAG="latest"
@@ -272,7 +272,10 @@ case "${1:-}" in
         ;;
     bench)
         shift
-        SCRIPT_LOC="/home/sandeep/dev/sandwich/sandwich-cpp/sustained_stress_test_of_sandwich_cpp.py"
+        SCRIPT_LOC="/home/sandeep/dev/sandwich/sandwich-engine/sustained_stress_test_of_sandwich_cpp.py"
+        if [ ! -f "${SCRIPT_LOC}" ]; then
+            SCRIPT_LOC="${SCRIPT_DIR}/sustained_stress_test_of_sandwich_cpp.py"
+        fi
         if [ -f "${SCRIPT_LOC}" ]; then
             exec python3 "${SCRIPT_LOC}" "$@"
         else
@@ -282,7 +285,10 @@ case "${1:-}" in
         ;;
     niah)
         shift
-        NIAH_LOC="/home/sandeep/dev/sandwich/sandwich-cpp/tests/test_niah_retrieval.py"
+        NIAH_LOC="/home/sandeep/dev/sandwich/sandwich-engine/tests/test_niah_retrieval.py"
+        if [ ! -f "${NIAH_LOC}" ]; then
+            NIAH_LOC="${SCRIPT_DIR}/tests/test_niah_retrieval.py"
+        fi
         if [ -f "${NIAH_LOC}" ]; then
             exec python3 "${NIAH_LOC}" "$@"
         else

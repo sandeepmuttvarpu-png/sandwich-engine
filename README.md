@@ -189,7 +189,7 @@ Here is exactly how **Sandwich.cpp** changes the game:
 Yeet this straight into your terminal. It checks your GPU, auto-detects CUDA vs. AVX2-VNNI CPU, grabs the prebuilt binary, binds your P-cores, installs the unified `sandwich` dispatcher into `~/.local/bin`, and dips:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/sandeepmuttvarpu-png/Sandwich-cpp/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/sandeepmuttvarpu-png/sandwich-engine/main/install.sh | bash
 ```
 
 *(Already cloned the repo? Just run `./install.sh`. If you're a masochist who actually wants to melt your CPU compiling from source, pass `./install.sh --build`.)*
