@@ -29,7 +29,7 @@ Key milestones achieved:
   ```
   [FATAL] ggml_compute_forward_get_rows: unsupported src0->type=45 (turbo4), dst->type=0 (f32), src0->name='CPU#cache_idx_k_l3 (view)#0'
   ```
-- **Root Cause:** In [`src/llama-memory-hybrid-idx.cpp`](file:///home/sandeep/dev/sandwich/sandwich-cpp/src/llama-memory-hybrid-idx.cpp) and [`src/llama-kv-cache-msa.cpp`](file:///home/sandeep/dev/sandwich/sandwich-cpp/src/llama-kv-cache-msa.cpp), the auxiliary Indexer cache (`cache_idx_k`) was inheriting `type_k` (`turbo4`). Unlike the main attention cache, the indexer is accessed via `ggml_get_rows` for sparse head clustering. TurboQuant's PolarQuant layout is designed for fused FlashAttention (`fattn`), causing `get_rows` to abort.
+- **Root Cause:** In [`src/llama-memory-hybrid-idx.cpp`](file:///home/sandeep/dev/sandwich/sandwich-engine/src/llama-memory-hybrid-idx.cpp) and [`src/llama-kv-cache-msa.cpp`](file:///home/sandeep/dev/sandwich/sandwich-engine/src/llama-kv-cache-msa.cpp), the auxiliary Indexer cache (`cache_idx_k`) was inheriting `type_k` (`turbo4`). Unlike the main attention cache, the indexer is accessed via `ggml_get_rows` for sparse head clustering. TurboQuant's PolarQuant layout is designed for fused FlashAttention (`fattn`), causing `get_rows` to abort.
 - **Fix:** Enforced `GGML_TYPE_F16` for the lightweight (~50MB) indexer KV cache while retaining `turbo4` for the multi-gigabyte primary KV cache.
 
 ### Bug B: The `-fitt` Target Free Margin Semantics
@@ -42,7 +42,7 @@ Key milestones achieved:
 ### Bug C: Multi-GPU Split Mode (`-sm row`) on Single GPU
 - **Symptom:** `error loading model: device CUDA0 does not support split buffers`.
 - **Root Cause:** `-sm row` is strictly for multi-GPU row-parallel weight splitting.
-- **Fix:** Removed `-sm row` emission for single-GPU profiles in [`src/dispatch/hardware_profiler.cpp`](file:///home/sandeep/dev/sandwich/sandwich-cpp/src/dispatch/hardware_profiler.cpp) and [`src/dispatch/tui_wizard.cpp`](file:///home/sandeep/dev/sandwich/sandwich-cpp/src/dispatch/tui_wizard.cpp).
+- **Fix:** Removed `-sm row` emission for single-GPU profiles in [`src/dispatch/hardware_profiler.cpp`](file:///home/sandeep/dev/sandwich/sandwich-engine/src/dispatch/hardware_profiler.cpp) and [`src/dispatch/tui_wizard.cpp`](file:///home/sandeep/dev/sandwich/sandwich-engine/src/dispatch/tui_wizard.cpp).
 
 ### Bug D: Speculative Drafter VRAM OOM
 - **Symptom:** `cudaMalloc failed: out of memory (allocating 3836.91 MiB on device 0)`.

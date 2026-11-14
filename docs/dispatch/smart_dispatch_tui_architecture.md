@@ -27,7 +27,7 @@ flowchart TD
 ## 2. Core Modules Implemented
 
 ### Module 1: HardwareProfiler
-* **Location:** [`src/dispatch/hardware_profiler.hpp`](file:///home/sandeep/dev/sandwich/sandwich-cpp/src/dispatch/hardware_profiler.hpp) & [`src/dispatch/hardware_profiler.cpp`](file:///home/sandeep/dev/sandwich/sandwich-cpp/src/dispatch/hardware_profiler.cpp)
+* **Location:** [`src/dispatch/hardware_profiler.hpp`](file:///home/sandeep/dev/sandwich/sandwich-engine/src/dispatch/hardware_profiler.hpp) & [`src/dispatch/hardware_profiler.cpp`](file:///home/sandeep/dev/sandwich/sandwich-engine/src/dispatch/hardware_profiler.cpp)
 * **First-Run Trigger:** Inspects `~/.config/sandwich/profile_exists.flag`. If absent or corrupted, executes full system topology scan and outputs `~/.config/sandwich/hardware_profile.json`.
 * **Hardware Detection Capabilities:**
   * **CPU Topology:** Reads `/proc/cpuinfo` and `/sys/devices/system/cpu/cpu*/topology/thread_siblings_list`. Accurately isolates physical Intel P-cores (6 cores with hyperthreads) from E-cores (4 single-threaded Gracemont cores), pinning execution threads strictly to **6 P-cores** to prevent context switching latency stalls.
@@ -69,7 +69,7 @@ flowchart TD
 ---
 
 ### Module 2: ModelScanner & Discovery Cache
-* **Location:** [`src/dispatch/model_scanner.hpp`](file:///home/sandeep/dev/sandwich/sandwich-cpp/src/dispatch/model_scanner.hpp) & [`src/dispatch/model_scanner.cpp`](file:///home/sandeep/dev/sandwich/sandwich-cpp/src/dispatch/model_scanner.cpp)
+* **Location:** [`src/dispatch/model_scanner.hpp`](file:///home/sandeep/dev/sandwich/sandwich-engine/src/dispatch/model_scanner.hpp) & [`src/dispatch/model_scanner.cpp`](file:///home/sandeep/dev/sandwich/sandwich-engine/src/dispatch/model_scanner.cpp)
 * **Scan Strategy:** Traverses `~/ai-models/`, `~/models/`, and `~/.cache/huggingface/hub` for `.gguf` binaries.
 * **Persistent Cache:** Serializes discovery to `~/.config/sandwich/model_cache.json`.
 * **Zero-Latency Async Rescan:** If the cache is `< 24 hours` old, loads instantly (< 5ms). If older, loads the cached catalog for instant UI rendering while spawning a detached background thread (`std::thread`) to refresh the catalog asynchronously without UI stutter.
@@ -80,7 +80,7 @@ flowchart TD
 ---
 
 ### Module 3: Interactive TUI Wizard
-* **Location:** [`src/dispatch/tui_wizard.hpp`](file:///home/sandeep/dev/sandwich/sandwich-cpp/src/dispatch/tui_wizard.hpp) & [`src/dispatch/tui_wizard.cpp`](file:///home/sandeep/dev/sandwich/sandwich-cpp/src/dispatch/tui_wizard.cpp)
+* **Location:** [`src/dispatch/tui_wizard.hpp`](file:///home/sandeep/dev/sandwich/sandwich-engine/src/dispatch/tui_wizard.hpp) & [`src/dispatch/tui_wizard.cpp`](file:///home/sandeep/dev/sandwich/sandwich-engine/src/dispatch/tui_wizard.cpp)
 * **Design Philosophy:** Raw ANSI escape sequences and POSIX `termios` raw mode; zero external GUI or ncurses dependencies.
 * **Input Polling:** 25ms non-blocking polling via `poll(STDIN_FILENO)`, guaranteeing `< 100ms` keystroke latency.
 * **Signal Resilience:** Destructor and global POSIX signal handlers (`SIGINT`, `SIGTERM`) restore the original terminal state (`\033[?1049l\033[?25h\033[0m`), preventing cursor or terminal corruption on exit or interrupt.
@@ -95,8 +95,8 @@ flowchart TD
 ---
 
 ### Module 4: Intelligent Router
-* **Location:** [`src/dispatch/router.hpp`](file:///home/sandeep/dev/sandwich/sandwich-cpp/src/dispatch/router.hpp) & [`src/dispatch/router.cpp`](file:///home/sandeep/dev/sandwich/sandwich-cpp/src/dispatch/router.cpp)
-* **Entry Point:** [`src/dispatch/main.cpp`](file:///home/sandeep/dev/sandwich/sandwich-cpp/src/dispatch/main.cpp) $\rightarrow$ binary [`sandwich`](file:///home/sandeep/dev/sandwich/sandwich-cpp/build/bin/sandwich).
+* **Location:** [`src/dispatch/router.hpp`](file:///home/sandeep/dev/sandwich/sandwich-engine/src/dispatch/router.hpp) & [`src/dispatch/router.cpp`](file:///home/sandeep/dev/sandwich/sandwich-engine/src/dispatch/router.cpp)
+* **Entry Point:** [`src/dispatch/main.cpp`](file:///home/sandeep/dev/sandwich/sandwich-engine/src/dispatch/main.cpp) $\rightarrow$ binary [`sandwich`](file:///home/sandeep/dev/sandwich/sandwich-engine/build/bin/sandwich).
 * **CLI Routing Table:**
   | Argument Pattern | Action |
   | :--- | :--- |
@@ -110,5 +110,5 @@ flowchart TD
 ---
 
 ## 3. JSON Schemas Created
-1. **Hardware Profile Schema:** [`src/dispatch/schemas/hardware_profile.schema.json`](file:///home/sandeep/dev/sandwich/sandwich-cpp/src/dispatch/schemas/hardware_profile.schema.json)
-2. **Model Cache Schema:** [`src/dispatch/schemas/model_cache.schema.json`](file:///home/sandeep/dev/sandwich/sandwich-cpp/src/dispatch/schemas/model_cache.schema.json)
+1. **Hardware Profile Schema:** [`src/dispatch/schemas/hardware_profile.schema.json`](file:///home/sandeep/dev/sandwich/sandwich-engine/src/dispatch/schemas/hardware_profile.schema.json)
+2. **Model Cache Schema:** [`src/dispatch/schemas/model_cache.schema.json`](file:///home/sandeep/dev/sandwich/sandwich-engine/src/dispatch/schemas/model_cache.schema.json)
