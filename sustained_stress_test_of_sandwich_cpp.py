@@ -18,9 +18,10 @@ import re
 import json
 import threading
 
-BIN_DIR = "/home/sandeep/dev/sandwich/sandwich-cpp/build/bin"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+BIN_DIR = os.path.join(BASE_DIR, "build", "bin")
 CLI_BIN = os.path.join(BIN_DIR, "llama-cli")
-PROMPTS_DIR = "/home/sandeep/dev/sandwich/sandwich-cpp/prompts"
+PROMPTS_DIR = os.path.join(BASE_DIR, "prompts")
 HISTORICAL_JSON = "/home/sandeep/dev/turboquant_results.json"
 RESULTS_JSON = "/home/sandeep/dev/sustained_stress_test_results.json"
 FINAL_MD = "/home/sandeep/dev/the-mds/sustained_stress_test_of_sandwich_cpp.md"
