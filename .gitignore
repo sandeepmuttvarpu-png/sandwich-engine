@@ -188,5 +188,5 @@ Thumbs.db
 
 # Local test outputs and temporary logs
 *.log
-/local_test_output/
+!/docs/audit/*.log
 

@@ -1,6 +1,16 @@
 # Sandwich.cpp Technique Catalog
 
-This catalog indexes the formal techniques incorporated into the **Sandwich.cpp** bare-metal inference engine.
+This catalog indexes the formal 74 techniques incorporated into the **Sandwich.cpp** bare-metal inference engine.
+
+> [!IMPORTANT]
+> **AUDIT CLOSE-OUT & CONFIDENCE METRICS**
+> - **Authoritative Baseline Score:** **45.05 / 74 = 0.609** (Close-Out Ceiling: **0.616** / Physical Single-Node Ceiling: **0.915**).
+> - **Retractions & Falsifications Documented in Audit:**
+>   - **Technique #26 (VRAM-Pinned Drafter):** Falsified / Contradicted (0.45). Router unconditionally enforces `-ngld 0` pinning drafter into host DDR5.
+>   - **Technique #55 (Polar-Lloyd Non-Linear Quantization):** Contradicted (0.45) due to CPU scalar fallback precision collapse.
+>   - **Technique #75 (Dedicated Host RAM L2 Cache):** Hazard Veto (0.00). Co-allocating 12.5GB with Tier-2 WARM pool triggers 25GB allocation on 24GB host (immediate OOM kill).
+>   - **Technique #79 (Sequence-Parallel Flash-Decoding):** Demoted to Defective (0.50) due to partial denominator drift ($\exp(m_p - m_{\text{global}}) / L_{\text{global}}$).
+>   - **Telemetry Multiplier:** Hardcoded synthetic multiplier `0.2637` permanently retracted from `llama-context.cpp` in favor of raw atomic counters.
 
 | # | Technique Name | Status | Confidence Score | Category / Focus |
 |---|----------------|:------:|:----------------:|-------------------|
