@@ -1,0 +1,23 @@
+=== COMPUTE-SANITIZER TOOL: RACECHECK (PID: 415277) ===
+MODEL: Qwen3.6-35B-A3B MoE
+COMMAND: compute-sanitizer --tool racecheck /home/sandeep/dev/sandwich/sandwich-engine/build/bin/llama-cli -m /home/sandeep/ai-models/moe/Qwen3.6-35B-A3B-MTP-GGUF/Qwen3.6-35B-A3B-UD-IQ3_XXS.gguf -ngl 4 -ctk turbo4 -ctv turbo4 -fa -n 1 -p Hi -st --load-mode none
+EXIT CODE: 0
+
+========= COMPUTE-SANITIZER
+
+=======================================================
+🥪 [Project Sandwich] MoE Cache Runtime Telemetry
+   Whole-Model Total Evaluations  :        120 (100.00% coverage)
+   GPU-Resident Evaluations (CUDA):        120
+   Host-Resident Evaluations      :          0
+   Host-Resident Hot Hits         :          0 (0.00%)
+   Host-Resident Cold Misses      :          0 (100.00%)
+   --- Window 1: Prompt Prefill Phase ---
+   Prefill GPU CUDA Evals         :        120
+   Prefill Host Invocations       :          0
+   Prefill Host Hot Hits          :          0 (0.00%)
+   Prefill Host Cold Misses       :          0 (100.00%)
+   Hot-Pack Hit Rate (Host-Resident Layers 13..40):       0.00%
+=======================================================
+
+========= RACECHECK SUMMARY: 0 hazards displayed (0 errors, 0 warnings)

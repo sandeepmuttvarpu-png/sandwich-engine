@@ -14,8 +14,8 @@ import re
 import math
 import hashlib
 
-AUDIT_DIR = "/home/sandeep/dev/sandwich/audit-20261112-131000"
-REPO_ROOT = "/home/sandeep/dev/sandwich/sandwich-cpp"
+AUDIT_DIR = os.path.abspath(os.path.dirname(__file__))
+REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
 
 class LedgerValidator:
     def __init__(self, target_version="v4.9"):

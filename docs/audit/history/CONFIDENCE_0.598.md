@@ -114,9 +114,9 @@ $$\text{Aggregate Confidence Score} = \mathbf{0.598} \quad \left(\frac{44.25}{74
 2. **#80 (GPUDirect Storage io_uring Engine):**
    - Demoted from 1.00 to **0.75 PARTIAL** ($T_1=0.30, T_{2a}=0.25, T_{2b}=0.10, T_3=0.10$). Diary claimed 16.73 GB/s GDS throughput; measured uncached NVMe line rate via io_uring O_DIRECT is 2.51–3.16 GB/s.
 3. **#55 (EXPDEC Fused Dot Kernel):**
-   - Demoted from 1.00 to **0.50 CONTRADICTED / HOST-CPU ONLY** ($T_1=0.30, T_{2a}=0.00, T_{2b}=0.10, T_3=0.10$). Source inspection proves `fused_expdec_dot` in [`src/ds4_engram_io.hpp:169`](file:///home/sandeep/dev/sandwich/sandwich-cpp/src/ds4_engram_io.hpp#L169) is a CPU scalar C++ helper; no CUDA kernel exists in `ggml-cuda`.
+   - Demoted from 1.00 to **0.50 CONTRADICTED / HOST-CPU ONLY** ($T_1=0.30, T_{2a}=0.00, T_{2b}=0.10, T_3=0.10$). Source inspection proves `fused_expdec_dot` in [`src/ds4_engram_io.hpp:169`](file:///home/sandeep/dev/sandwich/sandwich-engine/src/ds4_engram_io.hpp#L169) is a CPU scalar C++ helper; no CUDA kernel exists in `ggml-cuda`.
 4. **#19 (Dynamically Repacked Contiguous GPU Buffers):**
-   - Symbol reconciled to `llama_model_base::repack_moe_expert_cache()` in [`src/llama-model.cpp:2287`](file:///home/sandeep/dev/sandwich/sandwich-cpp/src/llama-model.cpp#L2287) and [`src/llama-context.cpp:3588`](file:///home/sandeep/dev/sandwich/sandwich-cpp/src/llama-context.cpp#L3588). Verified live: `Re-packed 28 layers into VRAM in 140 ms (pre-tuning hit rate: 10.16%)`. Scored **0.90 PROVEN**.
+   - Symbol reconciled to `llama_model_base::repack_moe_expert_cache()` in [`src/llama-model.cpp:2287`](file:///home/sandeep/dev/sandwich/sandwich-engine/src/llama-model.cpp#L2287) and [`src/llama-context.cpp:3588`](file:///home/sandeep/dev/sandwich/sandwich-engine/src/llama-context.cpp#L3588). Verified live: `Re-packed 28 layers into VRAM in 140 ms (pre-tuning hit rate: 10.16%)`. Scored **0.90 PROVEN**.
 
 ---
 
