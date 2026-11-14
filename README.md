@@ -1,7 +1,7 @@
 # 🥪 Sandwich.cpp
 
 > ### *"Bro really thought an 8GB laptop GPU couldn't run 120B models at 128k context... skill issue fr fr 💀🔥"*
-> **The next-generation, high-performance standalone C++/CUDA inference engine built on top of the ggml/llama core foundation that lets budget gaming laptops mog enterprise datacenters.**
+> **The next-generation, high-performance standalone C++/CUDA inference engine derived from [llama.cpp](https://github.com/ggerganov/llama.cpp) that lets budget gaming laptops mog enterprise datacenters.**
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![CUDA: 12.0+ / 13.4](https://img.shields.io/badge/CUDA-12.0%2B%20%7C%2013.4-green.svg)](https://developer.nvidia.com/cuda-toolkit)

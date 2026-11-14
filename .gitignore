@@ -154,3 +154,23 @@ a.out.*
 
 AGENTS.local.md
 .pi/SYSTEM.md
+
+# Build outputs and variants
+/build/
+/build-*/
+/cmake-build-*/
+
+# Model weights
+*.safetensors
+/ai-models/
+
+# External references and temporary projects
+/refs/
+
+# Node / Python environments and caches
+node_modules/
+.venv/
+venv/
+__pycache__/
+*.pyc
+.cache/
