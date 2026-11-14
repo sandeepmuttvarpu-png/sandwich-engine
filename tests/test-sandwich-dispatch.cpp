@@ -362,18 +362,18 @@ static void test_flash_decoding_scheduler() {
     size_t head_dim = 128;
     std::vector<PartialAttentionReduction> partials;
 
-    // Chunk 0: max logit 2.0, sum 10.0, unnormalized output = 1.0f * 10.0 = 10.0f
+    // Chunk 0: max logit 2.0, sum 10.0, pre-normalized output ō_0 = 1.0f
     PartialAttentionReduction r0;
     r0.max_logit = 2.0f;
     r0.sum_exp = 10.0f;
-    r0.accum_out.assign(head_dim, 10.0f);
+    r0.accum_out.assign(head_dim, 1.0f);
     partials.push_back(r0);
 
-    // Chunk 1: max logit 5.0 (dominant chunk!), sum 20.0, unnormalized output = 3.0f * 20.0 = 60.0f
+    // Chunk 1: max logit 5.0 (dominant chunk!), sum 20.0, pre-normalized output ō_1 = 3.0f
     PartialAttentionReduction r1;
     r1.max_logit = 5.0f;
     r1.sum_exp = 20.0f;
-    r1.accum_out.assign(head_dim, 60.0f);
+    r1.accum_out.assign(head_dim, 3.0f);
     partials.push_back(r1);
 
     std::vector<float> merged = FlashDecodingScheduler::merge_partial_reductions(partials, head_dim);

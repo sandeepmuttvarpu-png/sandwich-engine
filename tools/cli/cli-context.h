@@ -14,12 +14,23 @@
 struct cli_timings {
     double prompt_per_second    = 0.0;
     double predicted_per_second = 0.0;
+    double load_ms              = 0.0;
+    double init_ms              = 0.0;
+    double prompt_ms            = 0.0;
+    double predicted_ms         = 0.0;
+    double teardown_ms          = 0.0;
+    double total_ms             = 0.0;
 };
 
 struct cli_context_impl;
 
 struct cli_context {
     common_params params;
+
+    int64_t t_load_start_us = 0;
+    int64_t t_load_end_us   = 0;
+    int64_t t_init_start_us = 0;
+    int64_t t_init_end_us   = 0;
 
     cli_client client;                // always initialized
     std::optional<cli_server> server; // only set when no --server-base is given

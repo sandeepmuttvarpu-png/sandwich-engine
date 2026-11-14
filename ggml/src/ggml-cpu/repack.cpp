@@ -17,6 +17,7 @@
 #include <cstdio>  // for GGML_ASSERT
 
 #include "repack.h"
+#include "sandwich-telemetry.h"
 
 #if defined(__GNUC__)
 #pragma GCC diagnostic ignored "-Woverlength-strings"
@@ -4849,6 +4850,11 @@ template <typename BLOC_TYPE, int64_t INTER_SIZE, int64_t NB_COLS, ggml_type PAR
             // initialize matrix_row_counts
             memset(matrix_row_counts, 0, n_as * sizeof(int64_t));
 
+            const bool track_telemetry = (dst->op_params[0] == 1 && dst->op_params[1] == 1);
+            uint64_t hot_hits_count = 0;
+            uint64_t cold_miss_count = 0;
+            const int32_t il = dst->op_params[2];
+
             // group rows by src0 matrix
             for (int32_t iid1 = 0; iid1 < ids->ne[1]; ++iid1) {
                 for (int32_t id = 0; id < n_ids; ++id) {
@@ -4859,11 +4865,27 @@ template <typename BLOC_TYPE, int64_t INTER_SIZE, int64_t NB_COLS, ggml_type PAR
 
                     if (i02 == -1) {
                         memset((char *) dst->data + id*nb1 + iid1*nb2, 0, ne0*sizeof(float));
+                        if (track_telemetry) {
+                            hot_hits_count++;
+                        }
                         continue;
                     }
 
                     MMID_MATRIX_ROW(i02, matrix_row_counts[i02]) = { id, iid1 };
                     matrix_row_counts[i02] += 1;
+                    if (track_telemetry) {
+                        cold_miss_count++;
+                        sandwich_telemetry_record_expert(il, i02);
+                    }
+                }
+            }
+
+            if (track_telemetry) {
+                if (hot_hits_count > 0) {
+                    sandwich_telemetry_record_hits(hot_hits_count);
+                }
+                if (cold_miss_count > 0) {
+                    sandwich_telemetry_record_misses(cold_miss_count);
                 }
             }
         }

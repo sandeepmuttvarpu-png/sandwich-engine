@@ -957,7 +957,7 @@ struct llama_moe_cache::impl {
             if (expert_bytes > 0) {
                 tier_engine.slot_stride = (expert_bytes + 4095) & ~((size_t)4095); // 4KB aligned
 
-                size_t target_cap = warm_ram_bytes > 0 ? warm_ram_bytes : 20ULL * 1024 * 1024 * 1024;
+                size_t target_cap = warm_ram_bytes > 0 ? warm_ram_bytes : 12ULL * 1024 * 1024 * 1024;
                 void * mem = nullptr;
                 while (target_cap >= 512ULL * 1024 * 1024) {
                     int ret = posix_memalign(&mem, 2 * 1024 * 1024, target_cap);

@@ -2267,7 +2267,7 @@ llm_graph_result * llama_context::process_ubatch(const llama_ubatch & ubatch, ll
         //LLAMA_LOG_INFO("graph set inputs time: %.3f ms\n", (ggml_time_us() - t_start_us)/1000.0);
     }
 
-    const auto status = graph_compute(res->get_gf(), ubatch.n_tokens > 1);
+    const auto status = graph_compute(res->get_gf(), ubatch.n_tokens > 1, ubatch.n_tokens);
     if (status != GGML_STATUS_SUCCESS) {
         LLAMA_LOG_ERROR("%s: failed to compute graph, compute status: %d\n", __func__, status);
         ret = status;
@@ -3535,7 +3535,8 @@ void llama_context::sched_graph_realloc(ggml_backend_sched_t sched, ggml_cgraph 
 
 ggml_status llama_context::graph_compute(
             ggml_cgraph * gf,
-                   bool   batched) {
+                   bool   batched,
+                int64_t   n_tokens) {
     int n_threads        = batched ? cparams.n_threads_batch : cparams.n_threads;
     ggml_threadpool_t tp = batched ? threadpool_batch        : threadpool;
 
@@ -3555,6 +3556,9 @@ ggml_status llama_context::graph_compute(
     copy_experts.reset();
 
     ggml_moe_prefetch_new_epoch();
+
+    // Set telemetry phase: prefill (n_tokens > 1) vs decode (n_tokens == 1)
+    sandwich_telemetry_set_phase(n_tokens > 1 ? SANDWICH_PHASE_PREFILL : SANDWICH_PHASE_DECODE);
 
     auto status = ggml_backend_sched_graph_compute_async(sched.get(), gf);
     if (status != GGML_STATUS_SUCCESS) {
@@ -3587,9 +3591,9 @@ ggml_status llama_context::graph_compute(
                 const int64_t t_start = ggml_time_us();
                 const_cast<llama_model &>(model).repack_moe_expert_cache(live_freq);
                 const int64_t t_duration_ms = (ggml_time_us() - t_start) / 1000;
-                fprintf(stderr, "\n🥪 [Project Sandwich] Online Warm-Up Auto-Tuning: Re-packed %zu layers into VRAM in %lld ms (pre-tuning hit rate: %.2f%%)!\n\n",
-                        live_freq.size(), (long long) t_duration_ms, stats.hit_rate_pct);
-                sandwich_telemetry_reset();
+                fprintf(stderr, "\n🥪 [Project Sandwich] Online Warm-Up Auto-Tuning: Re-packed %zu layers into VRAM in %lld ms (pre-tuning hit rate: %.2f%% [%" PRIu64 " hits / %" PRIu64 " total])!\n\n",
+                        live_freq.size(), (long long) t_duration_ms, stats.hit_rate_pct, stats.hot_hits, stats.total_evals);
+                sandwich_telemetry_reset_post_repack();
                 m_warmup_repacked = true;
             }
         }

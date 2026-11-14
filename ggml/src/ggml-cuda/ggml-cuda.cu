@@ -1,6 +1,7 @@
 #include "ggml-cuda.h"
 #include "ggml-impl.h"
 #include "ggml-backend-impl.h"
+#include "sandwich-telemetry.h"
 
 #include "ggml-cuda/allreduce.cuh"
 #include "ggml-cuda/common.cuh"
@@ -2363,6 +2364,22 @@ static void ggml_cuda_mul_mat_id(ggml_backend_cuda_context & ctx, ggml_tensor * 
     const ggml_tensor * src0 = dst->src[0];
     const ggml_tensor * src1 = dst->src[1];
     const ggml_tensor * ids  = dst->src[2];
+
+    // Sandwich GPU Telemetry: record GPU expert evaluations for GPU-resident layers (layers 0..12, op_params[0] == 0)
+    if (dst->op_params[1] == 1 && dst->op_params[0] == 0) {
+        const int64_t n_calls = ids->ne[0] * ids->ne[1];
+#ifdef USE_CUDA_GRAPH
+        if (ctx.capturing_graph) {
+            ctx.capturing_graph->n_moe_evals += n_calls;
+        } else {
+            sandwich_telemetry_record_gpu_calls(dst->op_params[2], (uint64_t)n_calls);
+        }
+#else
+        sandwich_telemetry_record_gpu_calls(dst->op_params[2], (uint64_t)n_calls);
+#endif
+    } else {
+        // fprintf(stderr, "DEBUG mul_mat_id with op_params[1]=%d\n", dst->op_params[1]);
+    }
 
     GGML_ASSERT(src1->type == GGML_TYPE_F32);
     GGML_ASSERT(dst->type  == GGML_TYPE_F32);
@@ -4955,6 +4972,12 @@ static void ggml_cuda_graph_evaluate_and_capture(ggml_backend_cuda_context * cud
         // Only perform the graph execution if CUDA graphs are not enabled, or we are capturing the graph.
         // With the use of CUDA graphs, the execution will be performed by the graph launch.
         if (!use_cuda_graph || cuda_graph_update_required) {
+#ifdef USE_CUDA_GRAPH
+            if (use_cuda_graph && cuda_graph_update_required && graph) {
+                graph->n_moe_evals = 0;
+                cuda_ctx->capturing_graph = graph;
+            }
+#endif
             [[maybe_unused]] int prev_i = 0;
 
             if (stream_ctx.concurrent_events.size() > 0) {
@@ -5121,6 +5144,7 @@ static void ggml_cuda_graph_evaluate_and_capture(ggml_backend_cuda_context * cud
             }
             graph->instances.resize(n_chunks);
             graph_evaluated_or_captured = true; // CUDA graph has been captured
+            cuda_ctx->capturing_graph = nullptr;
 
             std::lock_guard<std::mutex> lock(ggml_cuda_lock);
             if (ggml_cuda_lock_counter.fetch_sub(1, std::memory_order_relaxed) == 1) {
@@ -5135,6 +5159,9 @@ static void ggml_cuda_graph_evaluate_and_capture(ggml_backend_cuda_context * cud
         // the chunks were launched during capture, otherwise launch them here
         for (cudaGraphExec_t instance : graph->instances) {
             CUDA_CHECK(cudaGraphLaunch(instance, cuda_ctx->stream()));
+        }
+        if (graph->n_moe_evals > 0) {
+            sandwich_telemetry_record_gpu_calls(-1, graph->n_moe_evals);
         }
 #else
         GGML_UNUSED(graph_key);

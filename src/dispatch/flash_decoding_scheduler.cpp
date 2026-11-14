@@ -72,6 +72,7 @@ std::vector<float> FlashDecodingScheduler::merge_partial_reductions(
     // Step 2: Compute global denominator with exponential re-scaling
     float global_denom = 0.0f;
     for (const auto & p : partials) {
+        if (p.accum_out.size() != head_dim) continue;
         float rescale = std::exp(p.max_logit - global_max);
         global_denom += p.sum_exp * rescale;
     }
@@ -80,10 +81,10 @@ std::vector<float> FlashDecodingScheduler::merge_partial_reductions(
         return final_out;
     }
 
-    // Step 3: Weighted sum of partial output vectors
+    // Step 3: Weighted sum of partial output vectors: Σ(α_c · l_c / L) · ō_c
     for (const auto & p : partials) {
         if (p.accum_out.size() != head_dim) continue;
-        float factor = std::exp(p.max_logit - global_max) / global_denom;
+        float factor = (std::exp(p.max_logit - global_max) * p.sum_exp) / global_denom;
         for (size_t d = 0; d < head_dim; ++d) {
             final_out[d] += p.accum_out[d] * factor;
         }

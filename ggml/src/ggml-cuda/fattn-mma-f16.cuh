@@ -2386,11 +2386,13 @@ static __global__ void flash_attn_ext_f16(
 
     const int stride_Q1   = nb01 / sizeof(float2);
     const int stride_Q2   = nb02 / sizeof(float2);
+    constexpr bool is_turbo_k = (type_K == GGML_TYPE_TURBO4_0 || type_K == GGML_TYPE_TURBO3_0 || type_K == GGML_TYPE_TURBO2_0);
+    constexpr bool is_turbo_v = (type_V == GGML_TYPE_TURBO4_0 || type_V == GGML_TYPE_TURBO3_0 || type_V == GGML_TYPE_TURBO2_0);
     // A quantized K/V is addressed in bytes, an F16 one in half2.
-    const int stride_K    = ggml_cuda_fattn_mma_quant_type(type_K) ? nb11 : nb11 / sizeof(half2);
+    const int stride_K    = (ggml_cuda_fattn_mma_quant_type(type_K) || is_turbo_k) ? nb11 : nb11 / sizeof(half2);
     const int stride_mask = nb31 / sizeof(half);
 
-    const int stride_V = V_is_K_view ? stride_K : (ggml_cuda_fattn_mma_quant_type(type_V) ? nb21 : nb21 / sizeof(half2));
+    const int stride_V = V_is_K_view ? stride_K : ((ggml_cuda_fattn_mma_quant_type(type_V) || is_turbo_v) ? nb21 : nb21 / sizeof(half2));
 
     const int iter_k     = (ne11      + (nbatch_fa - 1)) / nbatch_fa;
     const int iter_j     = (ne01.z    + (ncols1    - 1)) / ncols1;

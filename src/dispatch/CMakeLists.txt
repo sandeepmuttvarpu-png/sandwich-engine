@@ -11,7 +11,6 @@ add_library(${TARGET} STATIC
     paged_block_allocator.cpp
     flash_decoding_scheduler.cpp
     gpudirect_storage.cpp
-    tui_wizard.cpp
     router.cpp
 )
 

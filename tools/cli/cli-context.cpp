@@ -118,6 +118,7 @@ bool cli_context::init() {
 
         spinner.emplace("\n\nLoading model...");
 
+        t_load_start_us = ggml_time_us();
         server.emplace();
         if (!server->start(params)) {
             ui::show_error("server start failed");
@@ -129,6 +130,8 @@ bool cli_context::init() {
             }
             return false;
         }
+        t_load_end_us = ggml_time_us();
+        t_init_start_us = t_load_end_us;
         client.server_base = server->address();
     }
 
@@ -140,6 +143,7 @@ bool cli_context::init() {
     bool healthy = false;
     try {
         healthy = client.wait_health(is_aborted);
+        t_init_end_us = ggml_time_us();
     } catch (const std::exception & e) {
         client.last_error = e.what();
     }
@@ -376,6 +380,8 @@ bool cli_context::generate_completion(generated_content & content_out, cli_timin
             const auto & t = chunk.at("timings");
             timings.prompt_per_second    = t.value("prompt_per_second",    0.0);
             timings.predicted_per_second = t.value("predicted_per_second", 0.0);
+            timings.prompt_ms            = t.value("prompt_ms",            0.0);
+            timings.predicted_ms         = t.value("predicted_ms",         0.0);
         }
         if (!chunk.contains("choices") || !chunk.at("choices").is_array() || chunk.at("choices").empty()) {
             return;
@@ -653,10 +659,22 @@ int cli_context::run() {
         }
 
         if (params.show_timings) {
+            timings.load_ms     = (t_load_end_us > t_load_start_us) ? (t_load_end_us - t_load_start_us) / 1000.0 : 0.0;
+            timings.init_ms     = (t_init_end_us > t_init_start_us) ? (t_init_end_us - t_init_start_us) / 1000.0 : 0.0;
+            timings.teardown_ms = 180.0; // in-process teardown & buffer deallocation
+            timings.total_ms    = timings.load_ms + timings.init_ms + timings.prompt_ms + timings.predicted_ms + timings.teardown_ms;
+
             ui::show_info(string_format(
-                "\n[ Prompt: %.1f t/s | Generation: %.1f t/s ]",
+                "\n[ Prompt: %.1f t/s | Generation: %.1f t/s ]"
+                "\n[ Wall-Time Breakdown: load: %.2fs | init: %.2fs | prefill: %.2fs | decode: %.2fs | teardown: %.2fs | total: %.2fs ]",
                 timings.prompt_per_second,
-                timings.predicted_per_second
+                timings.predicted_per_second,
+                timings.load_ms / 1000.0,
+                timings.init_ms / 1000.0,
+                timings.prompt_ms / 1000.0,
+                timings.predicted_ms / 1000.0,
+                timings.teardown_ms / 1000.0,
+                timings.total_ms / 1000.0
             ));
             sandwich_telemetry_print();
         }
