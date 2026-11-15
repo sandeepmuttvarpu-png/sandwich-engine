@@ -290,7 +290,13 @@ llama_build(test-fusion.cpp)
 llama_build_and_test(test-chat-peg-parser.cpp peg-parser/simple-tokenize.cpp  LABEL behavior)
 llama_build_and_test(test-jinja.cpp  LABEL behavior)
 llama_test(test-jinja  NAME test-jinja-py  ARGS -py  LABEL "python behavior")
-llama_test_cmd(python3
+if (EXISTS "${PROJECT_SOURCE_DIR}/.venv/bin/python3")
+    set(PYTHON_FP8_TEST_CMD "${PROJECT_SOURCE_DIR}/.venv/bin/python3")
+else()
+    set(PYTHON_FP8_TEST_CMD python3)
+endif()
+
+llama_test_cmd(${PYTHON_FP8_TEST_CMD}
     NAME test-conversion-fp8
     LABEL "python behavior"
     WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
