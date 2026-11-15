@@ -7,6 +7,10 @@ cmake_minimum_required(VERSION 3.14...3.28) # for add_link_options and implicit 
 project(sandwich.cpp VERSION 0.9.0 LANGUAGES C CXX)
 include(CheckIncludeFileCXX)
 
+# Enforce C++20 standard globally
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
 ### Sandwich.cpp Engine versioning
 set(SANDWICH_VERSION_MAJOR 0)
 set(SANDWICH_VERSION_MINOR 9)
