@@ -508,7 +508,7 @@
       "t2_cite": "N/A",
       "t3_telemetry": "1 split KV cache instance",
       "reachability_class": "REACHABLE-ON-THIS-STACK",
-      "notes": "Routes KV attention purely through GPU VRAM while model weights reside in host DDR5."
+      "notes": "Routes KV attention purely through GPU VRAM while model weights reside in host DDR5. [Workaround Limitation: Fast path disabled by commit 46c37169f; currently routes via dense fallback, see Issue #4]"
     },
     {
       "id": 30,
@@ -678,7 +678,7 @@
       "t2_cite": "sandwich --tune (exit 0)",
       "t3_telemetry": "16552 MB 70% physical RAM ceiling limit",
       "reachability_class": "REACHABLE-ON-THIS-STACK",
-      "notes": "Protects host system memory against swap thrashing."
+      "notes": "Protects host system memory against swap thrashing. [Workaround Limitation: Fast path disabled by commit 46c37169f; currently routes via dense fallback, see Issue #4]"
     },
     {
       "id": 40,
@@ -1239,7 +1239,7 @@
       "t2_cite": "test-sandwich-dispatch (exit 0)",
       "t3_telemetry": "474.30 t/s prefill rate with fused dequant GEMV",
       "reachability_class": "REACHABLE-ON-THIS-STACK",
-      "notes": "Dequantizes Turbo4 directly into Tensor Core registers during MMA dot-product pipeline."
+      "notes": "Dequantizes Turbo4 directly into Tensor Core registers during MMA dot-product pipeline. [Workaround Limitation: Fast path disabled by commit 46c37169f; currently routes via dense fallback, see Issue #4]"
     },
     {
       "id": 79,
@@ -1256,7 +1256,7 @@
       "t2_cite": "tests/test_flash_decoding_parity.py: PASS (exit 0)",
       "t3_telemetry": "4.80e-07 max abs error (100.0% cosine similarity >= 0.99999998 across 12 configs, 0.000 ms overhead)",
       "reachability_class": "REACHABLE-ON-THIS-STACK",
-      "notes": "Cycle 5 Reconciliation: Host scheduler sequence-split reduction over block-level device softmax verified. FP32 single-precision kernel parity verified across 12 configs (error <= 4.80e-07, cosine >= 0.99999998, 0.000 ms overhead)."
+      "notes": "Cycle 5 Reconciliation: Host scheduler sequence-split reduction over block-level device softmax verified. FP32 single-precision kernel parity verified across 12 configs (error <= 4.80e-07, cosine >= 0.99999998, 0.000 ms overhead). [Workaround Limitation: Fast path disabled by commit 46c37169f; currently routes via dense fallback, see Issue #4]"
     },
     {
       "id": 80,

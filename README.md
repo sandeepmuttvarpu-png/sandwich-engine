@@ -69,8 +69,9 @@ Traditional single-queue LRU caches suffer from catastrophic cache pollution whe
 ### 3. VRAM-Pinned Speculative Decoding (Technique #26)
 Speculative decoding typically bottlenecks over PCIe when both draft and target models contend for system memory. Sandwich Engine pins the speculative assistant (e.g., DFlash2) **100% in GPU VRAM** (`-ngld 99`). The drafter produces candidate verification trees at **180+ tok/s** in high-bandwidth memory while the host target model evaluates candidates in batched parallel passes.
 * **Empirical Validation:** 
-  * Host-Injected Drafter (`-ngld 0`): **23.24 ± 0.26 tok/s** (Note: exhibits an -8.3% decode regression from baseline 25.34 ± 0.48 tok/s due to dense-path fallback in commit `46c37169f`).
+  * Host-Injected Drafter (`-ngld 0`): **23.24 ± 0.26 tok/s** (Note: exhibits an -8.3% decode regression from baseline 25.34 ± 0.26 tok/s due to dense-path fallback in commit `46c37169f`).
   * VRAM-Pinned Drafter (`-ngld 99`): **28.62 ± 0.45 tok/s** (+23.1% net speedup over host-injected drafter, verified under interleaved $n=5$ ablation).
+  * **Workaround Limitation Notice:** Due to the Issue #1 crash workaround in commit `46c37169f`, Techniques #78 (PagedAttention), #29/#39 (Asymmetric Split-KV), and #79 (Flash-Decoding) execute on the dense MMA fallback path. The sparse FlashAttention fast path is temporarily disabled when `src[5]` is non-null until role disambiguation lands ([Issue #4](https://github.com/sandeepmuttvarpu-png/sandwich-engine/issues/4)).
 
 ### 4. TurboQuant Polar Lloyd-Max KV Cache Compression
 At extended context lengths (32k–128k), standard FP16 or quantized KV caches consume excessive memory and suffer from attention-sink degradation. Sandwich Engine incorporates **TurboQuant** (`turbo4`, `turbo3`, `turbo2`) utilizing:
