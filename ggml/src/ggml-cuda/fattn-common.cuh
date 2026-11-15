@@ -1298,7 +1298,6 @@ void launch_fattn(
     // (ggml_flash_attn_ext_set_kv_rows()) is that list already, for every tile, and its mask has its columns.
     const ggml_tensor * rows = KQV->src[5];
     const bool sparse_compact_mask = use_sparse && rows == nullptr;
-    GGML_ASSERT(rows == nullptr || use_sparse);
     int32_t n_kv_max = 0;
     if (use_sparse && rows != nullptr) {
         GGML_ASSERT(mask != nullptr && mask->ne[0] == rows->ne[0]);

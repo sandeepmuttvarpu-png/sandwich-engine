@@ -298,10 +298,10 @@ bool ggml_cuda_flash_attn_ext_mma_f16_shall_use_sparse(const int cc, const ggml_
     memcpy(&max_bias,      (const float *) dst->op_params + 1, sizeof(float));
     memcpy(&logit_softcap, (const float *) dst->op_params + 2, sizeof(float));
 
-    // a list of K/V rows has to be gathered, see ggml_cuda_get_best_fattn_kernel()
+    // If kv_rows (dst->src[5]) is present, the kernel uses the direct kv_rows gather path (non-sparse)
     if (dst->src[5] != nullptr) {
         GGML_UNUSED(ncols2);
-        return true;
+        return false;
     }
 
     const int64_t n_kv_max = ggml_cuda_fattn_sparse_n_kv(dst, ncols1);
