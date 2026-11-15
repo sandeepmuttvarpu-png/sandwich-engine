@@ -15,7 +15,7 @@ Thank you for your interest in contributing to **Sandwich.cpp**! This document p
 ## 2. Development Setup
 
 ### Prerequisites
-- Modern C++20 compiler (GCC 12+, Clang 16+, or MSVC 2022)
+- Modern C++17 compiler (GCC 12+, Clang 16+, or MSVC 2022)
 - CMake 3.14+
 - CUDA Toolkit 12.0+ (for NVIDIA GPU acceleration, with support for SM_120 Blackwell architectures)
 - `liburing` (for asynchronous NVMe kernel DMA streaming)
@@ -36,7 +36,7 @@ cmake --build build --config Release -j$(nproc) --target sandwich llama-cli
 
 ## 3. Coding Standards
 
-- **C++ Standard**: C++20 minimum. Prefer RAII, modern value semantics, and structured concurrency.
+- **C++ Standard**: C++17 required (matching upstream ggml core). Prefer RAII, modern value semantics, and structured concurrency.
 - **Naming Conventions**:
   - Types and Classes: `PascalCase` (e.g. `TUIWizard`, `MemoryWatermark`)
   - Functions and Methods: `snake_case` (e.g. `compute_forward`, `recompute_tiering`)

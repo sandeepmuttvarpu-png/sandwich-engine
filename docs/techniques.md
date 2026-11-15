@@ -7,10 +7,10 @@ This catalog indexes the formal 74 techniques incorporated into the **Sandwich.c
 > - **Authoritative Close-Out Score:** **45.60 / 74 = 0.616** (Close-Out Baseline).
 > - **Structural Ceilings:** **0.915** (Physical Single-Node Ceiling: 67.70 / 74) | **0.866** (Current-Models Ceiling: 64.05 / 74).
 > - **Resolved Engine Fixes & Promotions:**
->   - **Technique #26 (VRAM-Pinned Drafter):** Promoted to `PROVEN` (1.00) following router patch enabling dynamic VRAM drafter pinning (+23.2% decode speedup).
->   - **Technique #79 (Sequence-Parallel Flash-Decoding):** Promoted to `PROVEN` (1.00) following local chunk denominator fix (`p.sum_exp`), achieving fp32 numerical parity (max delta 4.80e-07).
+>   - **Technique #26 (VRAM-Pinned Drafter):** Promoted to `PARTIAL (VERIFIED PATCH)` (0.90) following router patch enabling dynamic VRAM drafter pinning (+23.2% decode speedup). Scored at 0.90 pending multi-GPU dynamic allocation and cross-platform validation under the evaluation rubric.
+>   - **Technique #79 (Sequence-Parallel Flash-Decoding):** Promoted to `PARTIAL (VERIFIED PATCH)` (0.90) following local chunk denominator fix (`p.sum_exp`), achieving fp32 numerical parity (max delta 4.80e-07). Scored at 0.90 pending multi-head cross-attention without KV paging (Issue #1 tracking).
 > - **Retractions & Hazards Documented in Audit:**
->   - **Technique #55 (Polar-Lloyd Non-Linear Quantization):** Contradicted (0.45) due to CPU scalar fallback precision collapse.
+>   - **Technique #55 (QSA_ROWS & EXPDEC Fused Shared-Memory Kernels):** Contradicted (0.45) due to absent CUDA kernel (implemented only as CPU scalar helper in `src/ds4_engram_io.hpp:42`), whereas diary claimed warp-shuffle/shared-memory GPU fusion.
 >   - **Technique #75 (Dedicated Host RAM L2 Cache):** Hazard Veto (0.00). Co-allocating 12.5GB with Tier-2 WARM pool triggers 25GB allocation on 24GB host (immediate OOM kill).
 >   - **Telemetry Multiplier:** Hardcoded synthetic multiplier `0.2637` permanently retracted from `llama-context.cpp` in favor of raw atomic counters.
 
@@ -41,7 +41,7 @@ This catalog indexes the formal 74 techniques incorporated into the **Sandwich.c
 | 23 | **System-Wide Model Benchmarking Harness & Dynamic Drafter Footprint Sizing** | `PARTIAL` | 0.50 | Inference Engine |
 | 24 | **EAGLE3 / P-EAGLE Speculative Tree Decoding (`--spec-tree`)** | `PARTIAL` | 0.50 | Inference Engine |
 | 25 | **[P2] 2MB Transparent HugePages (THP) Buffer Alignment (Technique #25)** | `PARTIAL` | 0.65 | Inference Engine |
-| 26 | **[P3] VRAM-Pinned Drafter & Spec-Tree Amortization (Technique #26)** | `PROVEN` | 1.00 | Inference Engine |
+| 26 | **[P3] VRAM-Pinned Drafter & Spec-Tree Amortization (Technique #26)** | `PARTIAL (VERIFIED PATCH)` | 0.90 | Inference Engine |
 | 27 | **Predictive Hardware-Aware Topology Solver & TurboQuant Auto-Router (Technique #27)** | `PARTIAL` | 0.65 | Inference Engine |
 | 28 | **[P1] Pipelined Double-Buffered Speculative Execution (Technique #28)** | `PARTIAL` | 0.50 | Inference Engine |
 | 29 | **[P3] Asymmetric Split-KV Engine: Pure VRAM KV Cache on CPU Models (Technique #29)** | `PARTIAL` | 0.50 | Inference Engine |
@@ -70,7 +70,7 @@ This catalog indexes the formal 74 techniques incorporated into the **Sandwich.c
 | 52 | **Static Graph Hot GEMM Substitution (`--cuda-graph-hot-gemm`) (Technique #52)** | `PARTIAL` | 0.50 | Inference Engine |
 | 53 | **Per-Layer Pinned Prefetch Scratchpads (`--prefetch-scratchpad`) (Technique #53)** | `PARTIAL` | 0.50 | Inference Engine |
 | 54 | **Message-Boundary Delta Caching (`--msg-cache`) (Technique #54)** | `PROVEN` | 1.00 | Inference Engine |
-| 55 | **Polar-Lloyd Non-Linear Quantization Mapper (`--polar-quant`) (Technique #55)** | `CONTRADICTED` | 0.45 | Inference Engine |
+| 55 | **QSA_ROWS & EXPDEC Fused Shared-Memory Kernels (`--fused-expdec`) (Technique #55)** | `CONTRADICTED` | 0.45 | Inference Engine |
 | 56 | **Speculative Batch Cascade Verification (`--spec-cascade`) (Technique #56)** | `PARTIAL` | 0.50 | Inference Engine |
 | 57 | **DeepSeek V4.1 Flash Native Engram Direct NVMe I/O (`--dsv41`) (Technique #57)** | `PROVEN` | 1.00 | Inference Engine |
 | 58 | **Hardware Profiler Calibration Lock (`--hw-lock`) (Technique #58)** | `PARTIAL` | 0.50 | Inference Engine |
@@ -88,5 +88,5 @@ This catalog indexes the formal 74 techniques incorporated into the **Sandwich.c
 | 76 | **Real-Time RAM Estimation & Chunked Prefill (`--prefill-chunk-size`) (Technique #76)** | `PROVEN` | 1.00 | Inference Engine |
 | 77 | **Heavy Hitter Oracle (H2O) Dynamic KV Cache Eviction (`--h2o`) (Technique #77)** | `PARTIAL` | 0.75 | Inference Engine |
 | 78 | **PagedAttention Dynamic Block Cache with Copy-on-Write (Technique #78)** | `PROVEN` | 1.00 | Inference Engine |
-| 79 | **Sequence-Parallel Flash-Decoding across GPU SMs (`--flash-decoding`) (Technique #79)** | `PROVEN` | 1.00 | Inference Engine |
+| 79 | **Sequence-Parallel Flash-Decoding across GPU SMs (`--flash-decoding`) (Technique #79)** | `PARTIAL (VERIFIED PATCH)` | 0.90 | Inference Engine |
 | 80 | **GPUDirect Storage (`cuFile`) Direct NVMe-to-VRAM DMA Engine (`--gds`) (Technique #80)** | `PARTIAL` | 0.75 | Inference Engine |
