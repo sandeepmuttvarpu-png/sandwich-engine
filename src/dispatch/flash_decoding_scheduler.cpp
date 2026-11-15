@@ -5,6 +5,10 @@
 #include <sstream>
 #include <iomanip>
 
+#if defined(__x86_64__) || defined(_M_X64)
+#include <immintrin.h>
+#endif
+
 namespace sandwich {
 namespace dispatch {
 
@@ -85,9 +89,23 @@ std::vector<float> FlashDecodingScheduler::merge_partial_reductions(
     for (const auto & p : partials) {
         if (p.accum_out.size() != head_dim) continue;
         float factor = (std::exp(p.max_logit - global_max) * p.sum_exp) / global_denom;
+#if defined(__AVX2__) && defined(__FMA__)
+        size_t d = 0;
+        const __m256 vfactor = _mm256_set1_ps(factor);
+        for (; d + 8 <= head_dim; d += 8) {
+            __m256 vout = _mm256_loadu_ps(&final_out[d]);
+            __m256 vacc = _mm256_loadu_ps(&p.accum_out[d]);
+            vout = _mm256_fmadd_ps(vacc, vfactor, vout);
+            _mm256_storeu_ps(&final_out[d], vout);
+        }
+        for (; d < head_dim; ++d) {
+            final_out[d] += p.accum_out[d] * factor;
+        }
+#else
         for (size_t d = 0; d < head_dim; ++d) {
             final_out[d] += p.accum_out[d] * factor;
         }
+#endif
     }
 
     return final_out;
