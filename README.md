@@ -128,7 +128,7 @@ Sandwich Engine enforces a rigorous 4-tier truth scoring methodology across its 
 * **CTest Verification Suite:** **73 passing out of 74 (98.6% pass rate, 0 skipped)**
   * *Test #16 (`test-tokenizers-ggml-vocabs`):* PASS (Verified passing across all 11 binary GGUF vocabulary models).
   * *Test #37 (`test-conversion-fp8`):* PASS (Verified passing across all 15 FP8 conversion and quantization tests).
-  * *Test #33 (`test-llama-context`):* FAILING (Crash eliminated; 144/145 pass serially under default FA; plamo3 NMSE divergence and -j4 concurrency races tracked in Issues #2, #3, #5, #6).
+  * *Test #33 (`test-llama-context`):* FAILING (Crash eliminated; 137/145 pass deterministically under default FlashAttention across both serial -j1 and parallel -j4; plamo3 NMSE divergence and state_load defects tracked in Issues #2, #4, #6, #7; Issues #3 and #5 closed as invalid).
 
 For complete audit ledgers, reproduction scripts, and tier breakdowns, refer to [docs/techniques.md](docs/techniques.md) and [docs/audit/](docs/audit/).
 

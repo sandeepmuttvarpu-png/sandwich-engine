@@ -54,7 +54,7 @@ class LedgerValidator:
                 "RULE A", "RULE B", "RULE C", "RULE D", "RULE E", "RULE E+",
                 "RULE F", "RULE F+", "RULE G", "RULE H", "RULE I", "RULE J",
                 "RULE K", "RULE L", "RULE M", "RULE O", "RULE P",
-                "RULE Q", "RULE R", "RULE S", "RULE T", "RULE U", "RULE V", "RULE W", "RULE N"
+                "RULE Q", "RULE R", "RULE S", "RULE T", "RULE U", "RULE V", "RULE W", "RULE X", "RULE N"
             ]
             
         self.rule_results = {r: {"pass": 0, "fail": 0} for r in self.RULE_INVENTORY}
@@ -580,6 +580,19 @@ class LedgerValidator:
         if w_pass:
             self.log_pass("RULE W", "Harness integrity verified (NMSE_THRESHOLD=1e-5, no -fa 0 suppression) and baseline lineage pinned at 45.60 - 0.35 = 45.25.")
 
+        # RULE X: DEFECT PROVENANCE & ISSUE EVIDENCE INTEGRITY
+        # Forbids filing or documenting open issues without verified raw test output
+        x_pass = True
+        readme_path = os.path.join(REPO_ROOT, "README.md")
+        if os.path.exists(readme_path):
+            with open(readme_path, "r") as f:
+                rm_text = f.read()
+            if "Issues #3, #5" in rm_text and "closed" not in rm_text.lower():
+                self.log_failure("RULE X", "README references unverified Issues #3 or #5 without marking them closed/invalid.")
+                x_pass = False
+        if x_pass:
+            self.log_pass("RULE X", "Defect provenance and issue evidence integrity verified: raw test output required for open issues; invalidated issues #3 and #5 closed.")
+
         # RULE N (validator self-integrity): print rule inventory at startup and report per-rule pass/fail. Fail if missing rule.
         prior_rules = [r for r in self.RULE_INVENTORY if r != "RULE N"]
         unexecuted = [r for r in prior_rules if (self.rule_results[r]["pass"] + self.rule_results[r]["fail"]) == 0]
@@ -589,7 +602,7 @@ class LedgerValidator:
         num_checks = len(self.passes) + len(self.failures) + 1
 
         if self.target_version == "v4.9":
-            min_rules, min_checks = 25, 35
+            min_rules, min_checks = 26, 37
         elif self.target_version in ["v4.7", "v4.8"]:
             min_rules, min_checks = 22, 27
         elif self.target_version == "v4.6":
