@@ -1,451 +1,246 @@
-# 🥪 Sandwich.cpp
+# Sandwich Engine (`sandwich.cpp`)
 
-> ### *"Bro really thought an 8GB laptop GPU couldn't run 120B models at 128k context... skill issue fr fr 💀🔥"*
-> **The next-generation, high-performance standalone C++/CUDA inference engine derived from [llama.cpp](https://github.com/ggerganov/llama.cpp) that lets budget gaming laptops mog enterprise datacenters.**
+> **High-Performance Heterogeneous Inference Runtime for Frontier Mixture-of-Experts (MoE) on Asymmetric Silicon.**  
+> *Derived from [llama.cpp](https://github.com/ggerganov/llama.cpp) under the MIT License.*
 
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![CUDA: 12.0+ / 13.4](https://img.shields.io/badge/CUDA-12.0%2B%20%7C%2013.4-green.svg)](https://developer.nvidia.com/cuda-toolkit)
-[![VRAM: 8GB Friendly](https://img.shields.io/badge/VRAM-8GB%20Friendly%20%F0%9F%92%AA-brightgreen)](#)
-[![Context: 128k Verified](https://img.shields.io/badge/Context-128k%20Verified%20%F0%9F%A7%A0-blueviolet)](#)
-[![Speed: Unhinged](https://img.shields.io/badge/Speed-35%2B%20tok%2Fs%20MoE-red)](#)
-[![Techniques: 80 Active](https://img.shields.io/badge/Techniques-80%20Active%20%E2%9A%A1-orange)](#)
-[![Whitepaper: v7.0](https://img.shields.io/badge/Whitepaper-v7.0%20(arXiv)-success)](docs/whitepaper.md)
-[![No Cap: Verified](https://img.shields.io/badge/Cap%3A-Zero%20%F0%9F%A7%A2-blue)](#)
-
----
-
-## 💀 The Lore (Why did we cook this?)
-
-Picture this: You just bought a budget gaming laptop with an **RTX 5050 Mobile (8GB VRAM)**, 24GB DDR5 RAM, and an Intel hybrid CPU. You download a shiny **35B MoE** or **70B Dense** model hoping to run local agentic coding, build RAG pipelines, or digest a 100k token codebase...
-
-And what happens?
-* **Vanilla llama.cpp:** hits you with **3.4 tokens/second**. Bro, the heat death of the universe will arrive before it finishes drafting a single unit test. If you push context past 16k, it throws a terrifying `CUDA error: out of memory` and dies. Absolute slideshow behavior. 📉
-* **LM Studio:** Takes 5 business days to open, spawns 5 Chromium helper processes chewing **773 MB of RAM** before loading a single weight, and immediately explodes on any context beyond 8k. 🤡
-* **Ollama:** Just standing in the corner running opaque black-box defaults with zero control over your hardware, PCIe bus, or P-cores.
-* **vLLM / TGI:** *"Bro just rent an 8x H100 SXM node for $32/hour lol."* No. We have rent to pay.
-
-We said: **NAH, WE’D WIN.**
-
-We architected **Sandwich.cpp** as an independent, standalone high-performance inference engine built on top of the ggml foundation, ripping out PCIe serialization bubbles and fusing **80 relentless hardware & algorithmic techniques**:
-1. **Phase 12 3-Tier Hierarchical MoE Engine** (HOT VRAM $\to$ WARM DDR5 THP $\to$ COLD NVMe `io_uring` DMA).
-2. **2Q & Ghost-Cache Replacement Policy** (probation queues that obliterate one-hit wonder cache thrashing).
-3. **The 70% RAM Rule & Asymmetric Split-KV Engine** (eliminates 15ms PCIe ping-pong stalls on giant dense models).
-4. **TurboQuant Polar Lloyd-Max KV Compression** (`turbo4`, `turbo3`, `turbo2` for 128k context with 0% decay).
-5. **EAGLE3 Speculative Multi-Branch Tree Decoding** with adaptive PID controller.
-6. **Radix-Tree Persistent Prefix Caching & Message Boundary Delta Snapping** (Techniques #45 & #60: sub-0.05s TTFT on multi-turn agent turns).
-7. **Era 7: The Strata Assimilation & DeepSeek V4.1 Flash Support** (Prefill Head Aliasing #55, KVA Recurrent Prefill #56, Disjoint Peer Guard #57, Batched DMA #58, Zero-Copy Exchange Pointer Rotation #59, Fused EXPDEC #61, Elastic VRAM API #62, and Native Engram Direct NVMe I/O with 5-Expert Faster Mode #63).
-8. **Intel Raptor Lake P-Core Affinity** and a strict **900 MB Wayland Compositor Safety Guard** (7,100 MB ceiling).
-9. **Era 15 & 16 Architectural Additions:** Heavy Hitter Oracle (H2O) dynamic KV eviction (#67), PagedAttention zero-fragmentation block tables with $\mathcal{O}(1)$ Copy-on-Write (#78), Sequence-Parallel Flash-Decoding across all 32 GPU SMs (#79), and GPUDirect Storage (`cuFile`) direct NVMe-to-VRAM DMA streaming (#80).
-
-The result? Your 8GB laptop runs **Nemotron 30B MoE at 35.35 tok/s**, generates **GLM-4.7-Flash at 22.3 tok/s flat across 128k context**, boots **GPT-OSS-120B (59 GB on disk) with 100% stability**, and runs **DeepSeek V4.1 Flash (GSQ_RCO) natively off SSD**. Built different. No cap. 🧢🚫
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![CUDA: 12.0+ / 12.8 / 13.x](https://img.shields.io/badge/CUDA-12.0%2B%20%7C%2012.8-green.svg)](https://developer.nvidia.com/cuda-toolkit)
+[![C++ Standard: C++17](https://img.shields.io/badge/C%2B%2B-17-blue.svg)](CMakeLists.txt)
+[![CTest: 72/74 Passing](https://img.shields.io/badge/CTest-72%2F74%20(97.3%25)-brightgreen)](docs/audit/)
+[![Parity: Bit-Identical Verified](https://img.shields.io/badge/Parity-Bit--Identical%20(SHA256)-success)](docs/audit/)
+[![Audit Score: 0.616 / 0.915](https://img.shields.io/badge/Audited%20Score-0.616%20%7C%20Ceiling%200.915-orange)](docs/techniques.md)
+[![Hardware Target: Consumer Asymmetric Silicon](https://img.shields.io/badge/Hardware-VRAM%20%2B%20DDR5%20%2B%20NVMe-purple)](#)
 
 ---
 
-## 🥊 The Engine Showdown Matrix (Who is cooked?)
+## Executive Summary
 
-| Engine | Vibe / Personality | 30B MoE Speed | 120B on 8GB Laptop? | 128k Context? | PCIe Optimization | Memory Footprint (Idle) |
-| :--- | :--- | :---: | :---: | :---: | :---: | :---: |
-| **LM Studio** 🐢 | Bloatware final boss. 5 Electron helper processes crying in RAM. | 17.3 t/s | 💀 Immediate Crash | ❌ OOM at 16k | None (naive copy) | 773 MB (RSS) 🐘 |
-| **Vanilla llama.cpp** 👴 | Respect the grandfather, but bro is allergic to PCIe bandwidth & MoE cache locality. | 4.2 t/s | ⚰️ Dead on arrival | ⚠️ Severe OOM Risk | Ping-pong bubbles | 210 MB |
-| **Ollama** 📦 | "It just works" until you want to change 1 parameter and realize you're trapped in Docker vibes. | 14.1 t/s | ❌ No chance | ❌ Crashes silently | Default offload | 450 MB |
-| **vLLM / TGI** 💸 | *"Just spend $30,000 on server nodes bro."* Cloud-first elitists. | N/A (Laptop RIP) | 💀 Needs 4x A100 | Server-only | Server-focused | 2,400+ MB |
-| **ik_llama** 🗿 | Gigachad assembly wizard. Survives on black coffee and hand-tuned AVX-512 kernels. Respect. | Fast CPU | ⚠️ Needs 128GB RAM | ⚠️ CPU bound | Manual tuning | 180 MB |
-| **🥪 Sandwich.cpp** 🚀 | **Caffeinated zoomer engine. Stuffs 35B–120B in 8GB VRAM and runs 128k with flatline speed.** | **35.35 t/s** 🥇 | **✅ 39/45 PASS** 🤯 | **✅ 128k Verified** 🏆 | **Zero-Copy DMA & Split-KV** | **170 MB (Clean)** 🧼 |
+State-of-the-art open-weights models increasingly adopt **Mixture-of-Experts (MoE)** architectures (e.g., Qwen 35B-A3B with 256 experts, DeepSeek V3/V4, Nemotron MoE) to maximize reasoning capacity while bounding active FLOPs. However, deploying these models on consumer workstations presents a fundamental memory bottleneck:
+* **Enterprise Inference Engines (vLLM, TensorRT-LLM):** Architected strictly for multi-GPU unified HBM clusters (SXM / NVLink). On single consumer GPUs, they fail to boot or exhaust VRAM immediately.
+* **Standard Offloading Engines (vanilla llama.cpp):** Rely on rigid, layer-by-layer offloading (`-ngl`). When memory is partitioned across PCIe, intermediate activations repeatedly traverse the host-device bus, introducing latency bubbles that degrade throughput to 2–4 tokens/second.
+
+**Sandwich Engine** is an independent, bare-metal C++17/CUDA inference engine engineered specifically for **heterogeneous, asymmetric computing environments** (e.g., a single 8–16 GB GPU paired with 24–64 GB system DDR5 and high-speed NVMe storage). By decoupling compute-dense attention kernels from parameter-dense MoE feed-forward networks, Sandwich Engine eliminates PCIe serialization stalls and achieves near-linear scaling on consumer silicon.
 
 ---
 
-## 🆚 What is Different Between Ours and Others? (The Deep Dive)
-
-Most inference engines treat consumer workstations like downgraded cloud servers. When you run a 30B+ model on an 8GB laptop, they either try to cram everything into VRAM (and crash), or dump everything onto CPU DDR5 (and crawl at 1 token/sec), or split layers down the middle and waste 70% of execution time bouncing intermediate activations over the PCIe bus.
-
-Here is exactly how **Sandwich.cpp** changes the game:
-
-### 1. 3-Tier MoE Memory Hierarchy vs. Naive 1-Tier Staging
-* **Others:** MoE weights must either fit 100% in VRAM, or sit 100% in system RAM. If you split them, cold experts stall the entire GPU pipeline while waiting for synchronous disk or RAM copies.
-* **Sandwich.cpp (Technique #40):** Deploys a **3-Tier Storage Hierarchy**:
-  * **Tier 1 (HOT - GPU VRAM @ 288 GB/s):** Permanent residence for all router gates ($W_{\text{gate}}$), all shared experts (`ffn_*_shexp`), and the top active routed expert slots.
-  * **Tier 2 (WARM - Host DDR5 RAM @ 50 GB/s):** A dedicated 10–12 GB Transparent HugePages (THP) buffer holding warm experts managed by an $O(1)$ LRU engine.
-  * **Tier 3 (COLD - NVMe SSD @ 7 GB/s):** Direct asynchronous Linux `io_uring` DMA (`GGML_USE_IO_URING`) streaming cold experts straight from the GGUF file descriptor into RAM.
-  * **Lookahead Pipelining:** While Layer $L$ evaluates attention and GEMM on GPU, the prefetcher fetches Layer $L+1$ cold experts over NVMe. Cold disk latency (~2.85 ms) is **100% hidden behind GPU computation**!
-
-### 2. 2Q & Ghost-Cache Replacement vs. Naive LRU Thrashing
-* **Others:** Traditional caches use single-queue LRU. When an MoE model activates 4 transient "one-hit wonder" experts during an obscure token, standard LRU immediately kicks out your core math and coding experts. Next token, you hit a catastrophic cache miss storm.
-* **Sandwich.cpp (Technique #41):** Implements a **2Q (Two-Queue) + Ghost-Cache architecture**:
-  * **$A_{1\text{in}}$ (Probation Queue - 25% slots):** All new experts enter probation first. One-hit wonders cycle through and get evicted without touching proven experts.
-  * **$A_m$ (Main Frequent Queue - 75% slots):** Only experts that hit twice earn promotion into the VIP frequent club.
-  * **$A_{1\text{out}}$ (Ghost Cache Metadata):** Zero-weight hash table (~8 KB) tracking recently evicted expert IDs. If an evicted expert is summoned again, it registers a Ghost Hit and immediately re-enters $A_m$.
-  * **Receipts:** On `GPT-OSS-120B`, quarantined **4,117 transient noise activations** and logged **747 ghost hits**, sustaining 1.5 t/s with zero cache thrashing.
-
-### 3. The 70% RAM Rule & Asymmetric Split-KV vs. The PCIe Ping-Pong Trap
-* **Others:** On a 70B dense model, vanilla tools offload ~14 layers to GPU and 26 layers to CPU. For every single token, activations cross the PCIe bus twice per layer boundary (GPU $\to$ CPU $\to$ GPU). The 15ms bus latency completely wipes out the GPU's compute advantage.
-* **Sandwich.cpp (Technique #42):** Automatically triggers the **70% RAM Rule** when host RAM holds $\ge 70\%$ of weights:
-  * **100% CPU Weight Pinning:** Pins target weights contiguously in DDR5 RAM to eradicate all PCIe ping-pong stalls.
-  * **Pure VRAM Asymmetric Split-KV (`--split-kv`):** Reclaims 100% of GPU VRAM for the **FlashAttention Tensor Core Engine** and **TurboQuant KV Cache**. Even though weights run on CPU, attention runs on 192 GB/s GDDR6 VRAM.
-  * **100% VRAM Speculative Drafter:** Offloads an aligned 1B assistant model (e.g. Llama-3.2-1B) into leftover VRAM. The drafter generates candidate trees at **180+ t/s** in GPU memory, while the CPU target verifies the batch in parallel.
-
-### 4. TurboQuant & Turbo-KVarN Unified Hybrid vs. Exponential KV Degradation
-* **Others:** At 64k–128k context, FP16 or standard Q8/Q4 KV caches consume 14GB–30GB of memory, causing OOM or dropping generation speeds by 60–80%. Furthermore, discrete quantization causes token norm drift that triggers recursive attention-sink collapse during extended Chain-of-Thought reasoning.
-* **Sandwich.cpp (Techniques #9, #29, #38, #48):** Fuses **TurboQuant Polar Lloyd-Max Quantization** with **KVarN Closed-Form Dual-Axis Variance Normalization**:
-  * Compresses KV tensors down to 4-bit (`turbo4`, 75% saved), 3-bit (`turbo3`, 81.25% saved), or 2-bit (`turbo2`, 87.5% saved).
-  * Direct fused register-level MMA FlashAttention (`--turbo-mma`) dequantizes tiles on-the-fly inside Tensor Cores.
-  * **KVarN Unit-Variance Calibration (Technique #48):** Re-calibrates token norms on-the-fly via warp butterfly shuffles ($\|\hat{\mathbf{v}}\|_2 \equiv \|\mathbf{v}\|_2$), entirely eliminating attention-sink scale collapse and reasoning drift across 128k context windows.
-  * **Decay Invariance:** Delivers nearly **0% speed degradation** from 10% context fill (13k tokens) all the way to 100% context fill (128k tokens)!
-
-### 5. Radix-Tree Prefix Caching (RadixAttention) vs. Redundant Prefill Tax
-* **Others:** Every multi-turn agent interaction (Cursor, Claude Code, OpenCode) re-evaluates the entire prompt prefix from token 0, inducing severe Time-To-First-Token (TTFT) latency spikes.
-* **Sandwich.cpp (Technique #45):** Deploys a **Dynamic Radix-Tree Prefix Cache (RadixAttention)**:
-  * Indexes prompt KV token states in an $O(L)$ radix tree.
-  * Reuses matched prefixes instantly with zero re-computation, slashing TTFT by **$200\times$** (down to 0.05 seconds).
-  * Seamlessly coordinates with host RAM caching (`-cram`) and idle slot retention (`--cache-idle-slots`).
-
-### 6. Frontier Manifold Acceleration: Latent FlashMLA & KV Outlier Channelling
-* **Sandwich.cpp (Techniques #50, #51, #52):**
-  * **Latent FlashMLA (Technique #52):** Directly executes compressed Multi-Head Latent Attention projections on Tensor Cores for DeepSeek architectures, eliminating $7\times$ memory bandwidth overhead.
-  * **Asymmetric KV Outlier Channelling (Technique #50):** Channels sensitive keys to `turbo4` while compressing less sensitive values to `turbo2`, squeezing KV footprint to 2.75 bits/token.
-  * **Chunked Context Prefill (Technique #51):** Ping-pong activation staging caps transient prefill VRAM under 350MB at 128k context.
-
-### 7. Era 8: Dynamic YaRN, Attention Sinks & Unrotated KV (Techniques #64–#66)
-* **Dynamic YaRN Auto-Frequency Scaling (Technique #64):** Automatically queries GGUF `n_ctx_train` and dynamically tunes rotary frequency scaling factors on-the-fly, enabling zero-tuning $128\text{k}$ context on any RoPE architecture without manual flag calculation or perplexity blowout.
-* **Universal Attention Sink Guard (Technique #65):** Permanently preserves the first 4 sequence tokens in KV cache across streaming and sliding eviction regimes, guaranteeing Softmax mathematical stability.
-* **Unrotated KV Staging (Technique #66):** Eliminates $O(N)$ full-cell loops with $O(1)$ range lookups and bypasses graph rotation passes on polar KV states, keeping sequence shifts sub-millisecond fast.
-* **Empirical Live Validation:** Verified on RTX 5050 Mobile (8GB VRAM) running **GPT-OSS-120B (59 GB MoE)** smoothly within 4,732 MB VRAM across 3 tiers, and **Qwen 35B-A3B** at **18.9 tok/s** with 40 layers repacked in 206 ms.
-  * **Dynamic Multi-Drafter Arbitration (`--spec-select`):** Arbitrates dynamically between multiple `--spec-type` candidates (e.g. `ngram-simple,draft-mtp`) per sequence and step using decayed Bayesian position priors, shadow draft tracking, and $E[\text{tokens}]/t_{\text{step}}$ utility maximization.
-
-### 8. Era 9: Peer-to-Peer Heterogeneous VRAM Pooling & Polar Cluster Mesh (Techniques #67–#72)
-* **Heterogeneous Distributed VRAM Pooling (Technique #67):** Aggregates local consumer GPUs (e.g. RTX 5050 Mobile 8GB) with remote peer machines over low-latency interconnects, dynamically forming an expanded virtual VRAM pool.
-* **Asymmetric Heterogeneous Topology Solver (Technique #68):** Solves layer allocation based on device compute and link bandwidth, placing latency-critical early layers and router gating on the local node and offloading deeper blocks to remote peers.
-* **Zero-Copy Thunderbolt 4 / USB4 DMA & RoCE Transport (Technique #69):** Leverages PCIe direct memory access over high-speed links alongside inter-device Split-KV activation masking.
-* **Distributed 2-Bit Walsh-Hadamard Polar Network Compression (Technique #70):** Flattens activation outlier distributions via in-place butterfly Hadamard transformations into standard spherical normals, packing them into 2-bit Lloyd-Max centroids with $16\times$ compression from FP32 ($8\times$ from FP16) and $>0.71$ directional manifold cosine fidelity.
-* **Cross-Node Speculative Verification Pipeline (Technique #71):** Pipelined speculative verification where the local lightweight node streams speculative candidate drafts to peer verification nodes concurrently with layer activations.
-* **Dynamic Zero-Crash Failover with Hot Re-partitioning (Technique #72):** Detects peer heartbeat loss and instantaneously hot-swaps layers back into local 3-tier MoE offload without crashing the session.
-
----
-
-## 🧪 Architecture Blueprint: The 3-Tier Hierarchy & Asymmetric Engine
+## Key Architectural Innovations
 
 ```
-                             Your Budget Workstation Silicon
-                  (RTX 5050 Mobile 8GB GDDR6 + Intel Core i7 24GB DDR5)
+                                Consumer Asymmetric Silicon
+               (e.g., NVIDIA RTX 8GB–16GB VRAM + Host 24GB–64GB DDR5 + NVMe)
  ┌─────────────────────────────────────────────────────────────────────────────┐
- │                      TIER 1: HOT VRAM (GDDR6 @ 288 GB/s)                     │
- │  • Permanent Router Gates (W_gate) & Shared Experts (ffn_*_shexp) Pinned     │
- │  • 2Q Active MoE Slab (Am Frequent 75% | A1in Probation 25% | Ghost Cache)   │
+ │                      TIER 1: COMPUTE & HOT SLAB (VRAM @ ~288+ GB/s)         │
+ │  • Router Gating ($W_{\text{gate}}$) & Shared Experts permanently pinned     │
+ │  • 2Q Active MoE Slab ($A_m$ Frequent 75% | $A_{1\text{in}}$ Probation 25%)   │
  │  • Fused TurboQuant MMA FlashAttention (turbo4 / turbo3 / turbo2)           │
- │  • Speculative Drafter Pinned 100% in VRAM (Drafts candidates @ 180+ t/s)    │
- │  • Strict 900MB Wayland / Hyprland Compositor Guard (Zero Desktop Stutter)   │
+ │  • VRAM-Pinned Speculative Drafter (e.g., DFlash2) drafting at 180+ tok/s    │
+ │  • 7,100 MB Compositor Safety Guard (Prevents GUI desktop display crashes)   │
  └──────────────────────────────────────┬──────────────────────────────────────┘
-                                        │ ▲ Zero-Copy Pinned DMA Ring Buffer
-                                        ▼ │ (cudaHostRegister @ 28 GB/s)
+                                        │ ▲ Pinned DMA Ring Buffer
+                                        │ │ (`cudaHostRegister` Zero-Copy)
  ┌──────────────────────────────────────┴──────────────────────────────────────┐
- │                      TIER 2: WARM RAM (Host DDR5 @ 50 GB/s)                  │
- │  • 10-12 GB Dedicated 2MB Transparent HugePages (THP) Pool                   │
- │  • JIT In-Memory Q2_K CPU Layer Down-Quantization (Sidecar Cached)          │
- │  • Raptor Lake P-Core Worker Affinity (pthread_setaffinity_np on Cores 0-5) │
- │  • Host KV Overflow Buffer for 128k Context Scaling (-nkvo)                  │
+ │                      TIER 2: WARM WORKING SET (Host DDR5 @ ~50–90 GB/s)     │
+ │  • 10–14 GB Dedicated Memory Pool backed by 2MB Transparent HugePages (THP)  │
+ │  • Raptor Lake / Core P-Core Thread Affinity (`pthread_setaffinity_np`)      │
+ │  • Asymmetric Split-KV Cache Overflow Buffer for 128k Context Scaling       │
  └──────────────────────────────────────┬──────────────────────────────────────┘
-                                        │ ▲ Linux io_uring Asynchronous DMA
-                                        ▼ │ (Direct SSD-to-RAM @ 7,000 MB/s)
+                                        │ ▲ Linux io_uring / GPUDirect Storage
+                                        │ │ (Direct Async NVMe-to-RAM DMA)
  ┌──────────────────────────────────────┴──────────────────────────────────────┐
- │                      TIER 3: COLD STORAGE (PCIe 4.0 NVMe SSD)                │
- │  • Immutable GGUF Model File on Disk (Direct File Descriptor Streaming)     │
- │  • Multi-Layer Lookahead Prefetcher (Predicts Layer L+1 while L computes)   │
- │  • Zero-Writeback Memory Recycling (madvise(MADV_DONTNEED) instant purge)    │
+ │                      TIER 3: COLD STORAGE (PCIe Gen4/Gen5 NVMe SSD)          │
+ │  • Direct GGUF Memory-Mapped Descriptor Streaming                           │
+ │  • Multi-Layer Lookahead Prefetch Engine (Overlaps Layer $L+1$ fetch)       │
+ │  • Instant Page Recycling via `madvise(MADV_DONTNEED)`                       │
  └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
----
+### 1. Three-Tier Hierarchical MoE Memory Architecture
+Rather than requiring entire models to reside symmetrically in a single pool, Sandwich Engine implements an automated 3-tier hierarchy:
+* **Tier 1 (HOT — GPU VRAM):** Hosts latency-critical routing gates, shared experts (`ffn_*_shexp`), active 2Q expert slabs, and the entire speculative drafter model.
+* **Tier 2 (WARM — Host DDR5):** A dedicated Transparent HugePages (THP) pool holding frequently activated warm experts, eliminating TLB miss latency.
+* **Tier 3 (COLD — NVMe SSD):** Direct asynchronous Linux `io_uring` and GPUDirect Storage (`cuFile`) streaming for transient cold experts, completely overlapping disk fetch with preceding GPU attention computations.
 
-## 📊 The 128k Ultra-Context Endurance Report
+### 2. 2Q & Ghost-Cache Replacement Policy
+Traditional single-queue LRU caches suffer from catastrophic cache pollution when processing outlier tokens that activate transient "one-hit wonder" experts. Sandwich Engine implements a **Two-Queue (2Q) + Ghost-Cache** algorithm:
+* **Probation Queue ($A_{1\text{in}}$):** Newly activated experts enter probation (25% capacity). Transient experts are evicted without displacing proven routing paths.
+* **Frequent Queue ($A_m$):** Experts that hit repeatedly earn promotion to the frequent cache (75% capacity).
+* **Ghost Cache ($A_{1\text{out}}$):** Zero-weight metadata hash table tracking recently evicted IDs to immediately restore returning experts to $A_m$.
 
-*Extract from our comprehensive stress test report ([Endurance Report `docs/sustained-stress-test.md`](docs/sustained-stress-test.md)) across 6 context tiers (4k, 8k, 16k, 32k, 64k, 128k) and 4 fill regimes (10%, 50%, 75%, 100% context fill) on consumer silicon:*
+### 3. VRAM-Pinned Speculative Decoding (Technique #26)
+Speculative decoding typically bottlenecks over PCIe when both draft and target models contend for system memory. Sandwich Engine pins the speculative assistant (e.g., DFlash2) **100% in GPU VRAM** (`-ngld 99`). The drafter produces candidate verification trees at **180+ tok/s** in high-bandwidth memory while the host target model evaluates candidates in batched parallel passes.
+* **Empirical Validation:** Demonstrated a **+23.2% net decode speedup** (21.98 $\to$ 27.08 tok/s, $p < 0.001$) under rigorous interleaved $n=5$ ablation on Qwen3.6-35B-A3B.
 
-### 1. Global Empirical Sweet-Spot Matrix
-
-| Model | Architecture & Parameter Class | Max Verified Context | Sweet-Spot Quant | Peak Speed | 128k Sustained Speed | Fill Decay Slope | Production CLI Recipe |
-| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---|
-| **`DeepSeek-Coder-V2-Lite`** | 16B MoE (2.4B active / 64 exp) | **128k (131k)** | `turbo4 / turbo2` | **16.3 t/s** | **15.8 t/s** | **-3.1%** | `--sandwich-auto -ctk turbo4 -ctv turbo4` |
-| **`Bonsai-27B`** | 27B Dense Hybrid (Q1_0 sub-2-bit) | **128k (131k)** | `turbo2` | **9.6 t/s** | **2.5 t/s** | **-19.4%** | `--sandwich-auto -ctk turbo2 -ctv turbo2 --split-kv` |
-| **`GLM-4.7-Flash`** | 30B MoE (3B active / FlashMLA) | **128k (131k)** | `turbo2 -nkvo` | **22.3 t/s** | **22.0 t/s** | **-1.3% (FLAT)** | `--sandwich-auto -ctk turbo2 -ctv turbo2 -nkvo` |
-| **`Qwen3.6-35B-A3B`** | 35B MoE (3B active / 256 exp) | **128k (131k)** | `turbo4 / turbo2` | **34.8 t/s** | **19.1 t/s** | **-2.9% (FLAT)** | `--sandwich-auto -ctk turbo4 (<=32k) or -ctk turbo2 -nkvo` |
-| **`Nemotron-30B-A3B`** | 30B MoE (3B active / 128 exp) | **128k (131k)** | `turbo4 / turbo3` | **35.1 t/s** | **33.8 t/s** | **-3.7% (FLAT)** | `--sandwich-auto -ctk turbo4 (<=32k) or -ctk turbo3 -nkvo` |
-| **`Qwen3.8-27B`** | 27B Dense Hybrid + DFlash2 | **128k (131k)** | `turbo2` | **6.2 t/s** | **2.7 t/s** | **-19.4%** | `--sandwich-auto -ctk turbo2 -nkvo --split-kv` |
-| **`Muse-Glimmer-30B`** | 30B Dense Hybrid + DFlash2 | **128k (131k)** | `turbo2` | **6.4 t/s** | **2.4 t/s** | **-19.4%** | `--sandwich-auto -ctk turbo2 -ctv turbo2 -nkvo` |
-| **`Gemma-4-31B-it`** | 31B Dense ($d_{\text{head}}=256$) + MTP | **128k (131k)** | `turbo2` | **6.3 t/s** | **1.9 t/s** | **-19.4%** | `--sandwich-auto -ctk turbo2 -ctv turbo2 -nkvo` |
-| **`Command-R-35B`** | 35B Enterprise Dense (RAG engine) | **128k (131k)** | `turbo2` | **3.8 t/s** | **2.5 t/s** | **-7.9%** | `--sandwich-auto -ctk turbo2 -ctv turbo2 --split-kv` |
-| **`Llama-3.3-70B-Instruct`** | 70B Dense Giant (80 layers) | **128k (131k)** | `turbo2` | **1.84 t/s** | **1.08 t/s** | **-5.6%** | `--sandwich-auto -ctk turbo2 --split-kv -md Llama-1B.gguf` |
-| **`GPT-OSS-120B`** | **117B MoE (12B active / 128 exp)** | **128k (131k)** | `turbo2` | **1.52 t/s** | **1.02 t/s** | **-7.9%** | `--moe-3tier --moe-2q --moe-warm-ram-mb 12288 -ctk turbo2` |
-| **`Qwen3.8-Flash-Next`** | **125B MoE (10B active / 512 exp)** | **32k (128k)** | `turbo4 / turbo4` | **2.4 t/s** | **0.30 t/s** | **FLAT** | `--sandwich-auto -fitt 1200 -ctk turbo4 -ctv turbo4` |
-
-> 💡 **Notice the MoE Flatline Curves:** Fine-grained MoE models (**GLM-4.7-Flash**, **Qwen 35B**, **Nemotron 30B**) experience virtually **ZERO decoding slowdown** between 13k context and 128k context (1.3% to 3.7% decay). You get full 128k book-length context at the same speed as a 4k short chat!
+### 4. TurboQuant Polar Lloyd-Max KV Cache Compression
+At extended context lengths (32k–128k), standard FP16 or quantized KV caches consume excessive memory and suffer from attention-sink degradation. Sandwich Engine incorporates **TurboQuant** (`turbo4`, `turbo3`, `turbo2`) utilizing:
+* Polar spherical Lloyd-Max quantization centroids.
+* Closed-form dual-axis variance normalization in `set-rows.cu` to eliminate long-horizon Chain-of-Thought reasoning drift.
+* Asymmetric Split-KV (`--split-kv`), placing the entire attention KV cache into GPU VRAM even when 100% of model weights run on host CPU.
 
 ---
 
-## 🚀 The Lazy Person's Guide (How to Install & Run in 5 Seconds)
+## Competitive Architecture Matrix
 
-> ### *"Bro I am NOT reading 500 lines of CMake warnings just to chat with an AI."* 💀  
-> Say less. We cooked up an installer so effortless even your friend who uses Windows could run it without crying. 😭🔥
+| Dimension | Enterprise Engines (vLLM / TGI) | Standard llama.cpp | Consumer Frontends (Ollama / LM Studio) | **Sandwich Engine (`sandwich.cpp`)** |
+| :--- | :---: | :---: | :---: | :---: |
+| **Primary Target** | Multi-GPU Datacenter (A100/H100) | Portable CPU/GPU Baseline | Desktop GUI Wrappers | **Asymmetric Consumer Workstations** |
+| **MoE Memory Hierarchy** | Monolithic VRAM Allocation | Naive Linear Layer Offload (`-ngl`) | Unmodified llama.cpp Backends | **3-Tier Dynamic MoE (VRAM $\to$ DDR5 $\to$ NVMe)** |
+| **PCIe Transfer Latency** | Assumes NVLink / High Bandwidth | Ping-Pong Serialization Stalls | Inherited Serialization Stalls | **Asymmetric Split-KV & Lookahead DMA** |
+| **MoE Cache Policy** | Static Allocation | Single-Queue LRU | Single-Queue LRU | **2Q Probation + Ghost Cache** |
+| **Speculative Architecture** | Server-Level Batch Speculation | Standard Assistant Drafter | Default Off / Limited | **VRAM-Pinned Multi-Candidate Spec-Trees** |
+| **Context Memory Efficiency** | PagedAttention (FP16/FP8) | Standard Q8_0 / Q4_0 KV | Standard Q8_0 / Q4_0 KV | **TurboQuant Polar 2-Bit/4-Bit + PagedAttention** |
+| **Idle Memory Footprint** | 2,400+ MB | ~210 MB | 450–800+ MB (Chromium / Helper) | **<180 MB Clean Native Runtime** |
 
-### 1. The Literal One-Liner (No Compiler Needed)
-Yeet this straight into your terminal. It checks your GPU, auto-detects CUDA vs. AVX2-VNNI CPU, grabs the prebuilt binary, binds your P-cores, installs the unified `sandwich` dispatcher into `~/.local/bin`, and dips:
+---
 
+## Empirical Benchmark Performance
+
+*Evaluated on consumer workstation hardware: NVIDIA GPU (8 GB GDDR6), 24 GB DDR5-5200 host RAM, PCIe 4.0 NVMe SSD.*
+
+### 1. Extended Context Sustained Generation (128k Tokens)
+
+| Model Architecture | Parameters (Total / Active) | Verified Context | KV Quant Recipe | Peak Throughput | 128k Sustained Throughput | Context Degradation | Production CLI Recipe |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :--- |
+| **`GLM-4.7-Flash`** | 30B MoE (3B / FlashMLA) | **128k** | `turbo2 -nkvo` | **22.3 tok/s** | **22.0 tok/s** | **-1.3% (Flat)** | `--sandwich-auto -ctk turbo2 -ctv turbo2 -nkvo` |
+| **`Nemotron-30B-A3B`** | 30B MoE (3B / 128 exp) | **128k** | `turbo4 / turbo3` | **35.1 tok/s** | **33.8 tok/s** | **-3.7% (Flat)** | `--sandwich-auto -ctk turbo4 -ctv turbo3 -nkvo` |
+| **`Qwen3.6-35B-A3B`** | 35B MoE (3B / 256 exp) | **128k** | `turbo4 / turbo2` | **34.8 tok/s** | **19.1 tok/s** | **-2.9%** | `--sandwich-auto -ctk turbo4 -ctv turbo2 -nkvo` |
+| **`DeepSeek-Coder-V2`** | 16B MoE (2.4B / 64 exp) | **128k** | `turbo4 / turbo2` | **16.3 tok/s** | **15.8 tok/s** | **-3.1%** | `--sandwich-auto -ctk turbo4 -ctv turbo4` |
+| **`GPT-OSS-120B`** | 117B MoE (12B / 128 exp) | **128k** | `turbo2` | **1.52 tok/s** | **1.02 tok/s** | **-7.9%** | `--moe-3tier --moe-2q --moe-warm-ram-mb 12288 -ctk turbo2` |
+
+> **Architectural Note:** Fine-grained MoE topologies demonstrate near-zero generation throughput decay across 128k token context windows when paired with TurboQuant variance-normalized attention keys and host-side KV overflow buffers (`-nkvo`).
+
+### 2. Migration & Parity Verification
+* **Bit-Identical Verification:** 100% token stream identity against upstream baseline (`llama.cpp`) validated on Qwen3.6-35B-A3B across canonical 3,782 prompt / 63 decode token workloads:
+  * Full Output SHA256: `77e2b15be215db920cd2bb86ece4bea713f42954e302c2e396bb26239f12d74b`
+  * Pure Token Text SHA256: `481b2a7aea43731e77979bca6631cfac9d32bd42d023d63c91552b245931a6aa`
+  * Execution Status: Clean exit (Exit Code 0).
+
+---
+
+## Formal Engineering Audit & Verification
+
+Sandwich Engine enforces a rigorous 4-tier truth scoring methodology across its catalog of 74 techniques, governed by automated ledger verification (`docs/audit/validate_ledger.py`):
+* **Authoritative Close-Out Score:** **45.60 / 74 (0.616)**
+* **Structural Single-Node Physical Ceiling:** **0.915** (67.70 / 74)
+* **Current Model Family Ceiling:** **0.866** (64.05 / 74)
+* **CTest Verification Suite:** **72 passing out of 74 (97.3% pass rate, 0 skipped)**
+  * *Test #16 (`test-tokenizers-ggml-vocabs`):* Verified passing across all 11 binary GGUF vocabulary models.
+  * *Test #33 (`test-llama-context`):* Known upstream CUDA sparse-indexing vs. paged KV-rows interaction ([Issue #1](https://github.com/sandeepmuttvarpu-png/sandwich-engine/issues/1)).
+  * *Test #37 (`test-conversion-fp8`):* Python environment dependency check (`torch`).
+
+For complete audit ledgers, reproduction scripts, and tier breakdowns, refer to [docs/techniques.md](docs/techniques.md) and [docs/audit/](docs/audit/).
+
+---
+
+## Quick Start & Installation
+
+### Option 1: Automated Deployment Script
 ```bash
 curl -fsSL https://raw.githubusercontent.com/sandeepmuttvarpu-png/sandwich-engine/main/install.sh | bash
 ```
+The installer automatically:
+1. Detects host architecture (CUDA compute capability, AVX2-VNNI support).
+2. Verifies system memory limits and configures P-core thread binding.
+3. Installs `sandwich`, `sandwich-cli`, and `sandwich-server` into `~/.local/bin`.
 
-*(Already cloned the repo? Just run `./install.sh`. If you're a masochist who actually wants to melt your CPU compiling from source, pass `./install.sh --build`.)*
-
----
-
-### 2. The Unified `sandwich` CLI (Literally 1 command to rule them all)
-
-The installer puts a turbocharged `sandwich` dispatcher straight into your `$PATH`. You don't have to remember 45 cryptic flags at 3 AM anymore:
-
-| Command | What it actually does (No Cap) | The Vibe |
-| :--- | :--- | :--- |
-| **`sandwich`** (no args) | Launches the **Smart-Dispatch & Auto-Tuning Interactive TUI Wizard** (raw ANSI, zero-lag model picker, drafter pairing, live VRAM meter). | Interactive bare-metal Wizard |
-| **`sandwich --tune`** | Performs a 1-second bare-metal sweep of CPU P-cores, RAM 70% rule, and Wayland VRAM Guard. | Instant hardware diagnostic |
-| **`sandwich --scan-models`** | Scans local filesystem for GGUF models and speculative drafters into persistent high-speed JSON cache. | Asset catalog refresh |
-| **`sandwich run -m model.gguf`** | Fires up local inference with `--sandwich-auto`. Auto-detects MoE vs. Dense, solves VRAM slabs, and blasts tokens at 35+ t/s. | Quick chat / testing |
-| **`sandwich serve -m model.gguf`** | Spawns an OpenAI-compatible REST API & streaming SSE server on `:8080`. | Drop-in for any frontend |
-| **`sandwich agent -m model.gguf`** | **The Coding Agent Supercharger.** Launches on `:8081` with 64k context, `turbo4`, and Technique #45 Radix-Tree prefix cache (0.05s TTFT!). | Cursor, Claude Code, OpenCode |
-| **`sandwich status`** | Displays live GPU VRAM, DDR5 usage, and whether your laptop is currently catching fire. | System Telemetry HUD |
-| **`sandwich bench`** | Executes the full 128k sustained stress test across your hardware. | Benchmark flexing |
-| **`sandwich niah`** | Runs the Needle-In-A-Haystack retrieval benchmark to mathematically prove your KV cache hasn't lost its mind. | Science & Receipts |
-
-*Prefer the raw binaries? `sandwich-cli` and `sandwich-server` are also installed directly into your PATH.*
-
----
-
-### 3. Connect to Your Favorite Coding Agents (Cursor, OpenWebUI, Continue)
-
-Sandwich speaks native OpenAI `/v1/chat/completions` with streaming Server-Sent Events (SSE). You can plug it into your daily driver tools in under 30 seconds:
-
+### Option 2: Build from Source (C++17 & CMake)
 ```bash
-# Launch the agent server (auto 64k context + Radix-tree prefix cache)
-sandwich agent -m ~/ai-models/Qwen3.6-35B-A3B.gguf
+git clone https://github.com/sandeepmuttvarpu-png/sandwich-engine.git
+cd sandwich-engine
+cmake -B build -DGGML_CUDA=ON -DCMAKE_BUILD_TYPE=Release
+cmake --build build --config Release -j$(nproc)
 ```
 
-* **Cursor IDE:** Point your OpenAI Base URL to `http://localhost:8081/v1` (Model: `sandwich`).
-* **Continue.dev:** Drop `http://localhost:8081/v1` into your `~/.continue/config.json`.
-* **OpenWebUI & LibreChat:** Set OpenAI API URL to `http://localhost:8081/v1` with API key `sandwich`.
+---
 
-👉 **Need copy-paste config snippets? Peep the complete [Client Integrations Guide (`docs/integrations.md`)](docs/integrations.md)!**
+## Unified Command-Line Interface (`sandwich`)
+
+The runtime provides a high-level dispatcher for seamless operational control:
+
+```bash
+# Launch interactive TUI model selector & hardware tuner
+sandwich
+
+# Execute local inference with automated hardware detection and tuning
+sandwich run -m /path/to/model.gguf
+
+# Start an OpenAI-compatible REST server (Port 8080)
+sandwich serve -m /path/to/model.gguf --port 8080
+
+# Launch optimized coding agent backend with 64k context and prefix caching (Port 8081)
+sandwich agent -m /path/to/model.gguf
+
+# View real-time VRAM, DDR5, and compute telemetry
+sandwich status
+
+# Execute the 128k sustained endurance benchmark suite
+sandwich bench
+```
+
+### Integration with Development Environments
+Sandwich Engine exposes an OpenAI-compliant `/v1/chat/completions` API supporting streaming Server-Sent Events (SSE):
+* **Cursor / VSCode Continue:** Configure base URL to `http://localhost:8081/v1`.
+* **LibreChat / OpenWebUI:** Point OpenAI API URL to `http://localhost:8080/v1` (API key: `sandwich`).
 
 ---
+
+## Core Configuration & CLI Flags
 
 <details>
-<summary><b>🎛️ The Master Spellbook: Complete CLI Flags & Parameters (72 Active Techniques)</b></summary>
+<summary><b>Expand Complete Parameter & Optimization Flags</b></summary>
 
-*`--sandwich-auto` tunes all of this dynamically. But if you're a nocturnal systems hacker who loves tweaking parameters manually, here is your definitive field guide (see the full [Flags Reference (`docs/flags.md`)](docs/flags.md) and [Engineering Diary (`docs/engineering-diary.md`)](docs/engineering-diary.md)):*
+### 1. Autopilot & Hardware Safety
+| Flag | Description | Default |
+| :--- | :--- | :---: |
+| `--sandwich-auto` | Automatically orchestrates VRAM allocation, 70% RAM rule, drafter pairing, and thread affinity. | `false` |
+| `--vram-guard LIMIT` | Establishes an absolute VRAM allocation ceiling (e.g., `7100M`) to prevent OS compositor crashes. | `7100M` |
+| `--sandwich-pcore-threads N` | Binds compute threads strictly to $N$ physical performance cores on hybrid CPUs. | All P-cores |
+| `--thp-align` | Enforces 2MB Transparent HugePages alignment with `madvise(MADV_HUGEPAGE)` to minimize TLB miss penalties. | Auto |
 
-### 1. 🥪 Sandwich Special Flags (Core Engine)
+### 2. Mixture-of-Experts (MoE) 3-Tier Management
+| Flag | Description | Default |
+| :--- | :--- | :---: |
+| `--moe-3tier` | Enables three-tier memory offloading (VRAM $\to$ Host DDR5 $\to$ NVMe SSD). | Auto |
+| `--moe-warm-ram-mb N` | Dedicated Host RAM budget (MiB) for Tier 2 warm expert staging. | `12288` |
+| `--moe-2q` | Enables Two-Queue (2Q) probation and ghost-cache replacement to eliminate cache thrashing. | Auto |
+| `--sched-async-cpu` | Overlaps CPU cold-expert evaluation with concurrent GPU hot-expert computation. | Auto |
 
-| Flag | Arg | What it actually does (No Cap) | Default |
-| :--- | :---: | :--- | :---: |
-| `--sandwich-auto` | None | **The Master Autopilot.** Scans system VRAM/RAM, detects MoE vs. Dense topologies, solves the 70% RAM Rule, pins P-cores, selects drafter pairing, activates TurboQuant, and sets the Wayland safety guard. | `false` |
-| `--sandwich-moe-cache-mb` | `N` (MiB) | Explicitly overrides the size of the GPU VRAM expert slab for MoE models (e.g. `4633` for 4.6 GB). | Auto-budgeted |
-| `--sandwich-pcore-threads` | `N` | Binds compute threads strictly to `N` physical P-cores on Intel hybrid CPUs (Alder/Raptor Lake). E-cores are banished. | `6` (all P-cores) |
-| `--no-extra-bufts` | None | **The Anti-Skill-Issue Guard.** Prohibits `-rtr` (row repacking) from allocating host CPU memory that destroys GPU VRAM staging in hybrid mode. | `true` |
-| `--vram-guard` | `LIMIT` | Explicit VRAM allocation ceiling (e.g. `7100M`, `8G`, `6144M`, or `none`/`uncapped`). Guards Wayland/X11 compositors. | Auto (`7100M`) |
-| `--no-vram-guard` | None | Remove the VRAM ceiling guardrail entirely and allocate up to 100% of physical device VRAM. | `false` |
+### 3. Speculative Decoding & Tree Search
+| Flag | Description | Default |
+| :--- | :--- | :---: |
+| `-md, --model-draft PATH` | Path to speculative draft model (e.g., DFlash2 head or aligned compact model). | Optional |
+| `-ngld, --gpu-layers-draft N` | Number of draft model layers offloaded to VRAM (`99` = fully pinned in VRAM). | `99` |
+| `--spec-tree` | Evaluates multi-candidate speculative trees in a single target forward pass. | Auto |
+| `--spec-tree-depth N` | Maximum exploration depth for candidate speculative trees. | `3` |
+| `--spec-tree-width N` | Maximum branching width per node for speculative candidate exploration. | `2` |
 
----
-
-### 2. ⚡ Mixture-of-Experts (MoE) & 3-Tier Cache Flags
-
-| Flag | Arg | What it actually does | Default |
-| :--- | :---: | :--- | :---: |
-| `--moe-3tier` | None | **[Technique #40] 3-Tier Hierarchical MoE Engine.** Activates HOT VRAM $\to$ WARM DDR5 THP $\to$ COLD NVMe `io_uring` DMA. Runs 120B MoE on 8GB laptops! | `true` (in auto) |
-| `--no-moe-3tier` | None | Disables 3-tier memory engine and falls back to naive 2-tier LRU staging. | `false` |
-| `--moe-warm-ram-mb` | `N` (MiB) | Tier 2 WARM DDR5 RAM pool budget in MiB backed by 2MB Transparent HugePages (e.g. `12288` for 12 GiB). | `12288` |
-| `--moe-2q` | None | **[Technique #41] 2Q & Ghost-Cache Replacement.** $A_{1\text{in}}$ (25% probation) + $A_m$ (75% frequent LRU) + $A_{1\text{out}}$ (Ghost Cache metadata). Obliterates cache pollution! | `true` (in auto) |
-| `--no-moe-2q` | None | Reverts to naive single-queue LRU (not recommended for large MoEs). | `false` |
-| `--moe-cache-slots` | `N` | Number of hot expert slabs kept permanently resident in GPU VRAM per layer. | Auto (`24-32`) |
-| `--moe-cache-size` | `BYTES` | Total byte size of BeeLlama's dynamic $O(1)$ LRU VRAM expert cache slab. | `0` (off) |
-| `--moe-cache-profile` | `.csv` | Routing profile CSV (from `llama-moe-trace`) used to pre-pack most active experts into VRAM. | Auto-discovered |
-| `--moe-prefetch-threads` | `N` | Number of background worker threads that prefetch next-layer weights (`madvise(MADV_WILLNEED)`). | `2` |
-| `--moe-hot-only` | None | **Gas Only.** Completely skips CPU cold experts and runs VRAM hot experts only for 90+ t/s speculative drafting. | `false` |
-| `--sched-async-cpu` | None | **[Technique #39] Async CPU Worker.** Overlaps CPU cold expert compute with GPU hot expert execution on an asynchronous worker pool. | Auto (`--sandwich-auto`) |
-
----
-
-### 3. 🚀 Speculative Decoding & Tree Exploration Flags
-
-| Flag | Arg | What it actually does | Default |
-| :--- | :---: | :--- | :---: |
-| `-md`, `--model-draft` | `PATH` | Path to assistant draft GGUF (small 1B drafter, DFlash2 head, or MTP assistant). | Auto-detected |
-| `--draft-max`, `-dft-n` | `N` | Maximum candidate tokens drafted per iteration (usually 3 to 8). | `5` |
-| `--draft-min`, `-dft-p` | `FLOAT` | Minimum cumulative probability threshold for draft token acceptance. | `0.75` |
-| `-ngld`, `--gpu-layers-draft` | `N` | Number of GPU layers offloaded for the draft model (`99` = 100% in VRAM). | `-1` (all) |
-| `--spec-tree` | None | **[Technique #24] EAGLE3 Speculative Trees.** Evaluates multi-candidate trees in a single target forward pass using 2D causal masks (+65% speedup!). | Auto (Dense) |
-| `--no-spec-tree` | None | Disables speculative tree decoding and forces linear candidate verification. | `false` |
-| `--spec-tree-depth` | `N` (1-8) | Maximum depth $D$ of the speculative candidate tree. | `3` |
-| `--spec-tree-width` | `N` (1-8) | Maximum branching width $W$ per node for candidate exploration. | `2` |
-| `--spec-pipe` | None | **[Technique #28] Pipelined Double-Buffered Speculation.** Overlaps GPU drafting of tree $K+1$ with CPU verification of tree $K$. | Auto (`--sandwich-auto`) |
-| `--logits-topk` | `N` | **[Technique #34] GPU Top-K Reduction.** Compacts logits to top-$K$ on GPU, cutting PCIe transfer volume by 99.9%. | `64` (in spec) |
-
----
-
-### 4. 💾 TurboQuant & KV Cache Compression Flags
-
-| Flag | Arg | What it actually does | Default |
-| :--- | :---: | :--- | :---: |
-| `-ctk` / `-ctv` | `TYPE` | **TurboQuant Polar Compression.**<br>• `turbo4`: 4-bit (75% VRAM saved, Tensor Core speed).<br>• `turbo3`: 3-bit (81.25% saved, host RAM offload via `-nkvo`).<br>• `turbo2`: 2-bit (87.5% saved, eliminates RAM bus choke at 128k). | `turbo4` (in auto) |
-| `-fa`, `--flash-attn` | `on\|off` | Enables Flash Attention. Accelerates compute and slashes activation memory. | `on` |
-| `-fanq`, `--flash-attn-native-quants` | None | **[Technique #33] Fused Quant FlashAttention.** Fuses dequantization directly inside MMA Tensor Cores (saves 1.25 GB VRAM). | Auto (`--sandwich-auto`) |
-| `--turbo-mma` | None | **[Technique #35] Fused Turbo MMA Attention.** Directly loads PolarQuant tiles into Tensor Core registers without global memory staging. | Auto (`--sandwich-auto`) |
-| `--split-kv`, `--kv-vram` | None | **[Techniques #29 & #39] Asymmetric Split-KV.** Forces KV cache & attention into GPU VRAM even when 100% of weights run on CPU! | Auto (`--sandwich-auto`) |
-| `-nkvo`, `--no-kv-offload` | None | Forces KV cache into host system DDR5 RAM instead of GPU VRAM (critical for 128k on massive MoEs). | `0` (in VRAM) |
-| `-cram`, `--cache-ram` | `N` (MiB) | Host RAM buffer for persistent prompt prefix caching (e.g. `4096` = 4GB instant prefix reuse). | `4096` (in auto) |
-| `--cache-idle-slots` | None | Saves idle slots to prompt cache for zero-latency multi-turn agent turns. | `enabled` |
-| `--sink-tokens`, `--attn-sinks` | `N` | Permanently anchors tokens 0..3 to maintain stable perplexity during sliding-window context shifts. | `4` |
-| `--context-shift` | None | Enables sliding-window context eviction for infinite generation beyond context bounds. | `enabled` |
-
----
-
-### 5. 🛡️ Phase 8 Performance & Memory Tuning (Techniques #25 – #30)
-
-| Flag | Arg | What it actually does (No Cap) | Default |
-| :--- | :---: | :--- | :---: |
-| `--thp-align` | None | **[Technique #25] 2MB Transparent HugePages.** Aligns CPU tensors to 2MB boundaries with `madvise(MADV_HUGEPAGE)`. Deletes 12–18% TLB latency. | Auto (`--sandwich-auto`) |
-| `--vnni`, `--avx-vnni` | None | **[Technique #30] AVX2-VNNI P-Core Vectorization.** Quadruples dot-product throughput on Raptor Lake P-cores using native `_mm256_dpbusd_epi32`. | Auto (`--sandwich-auto`) |
-
----
-
-### 6. ⚙️ Compute, Layer Offload & Hardware Pinning
-
-| Flag | Arg | What it actually does | Default |
-| :--- | :---: | :--- | :---: |
-| `-m`, `--model` | `PATH` | Path to your GGUF model file. The only argument that's actually mandatory. | Required |
-| `-ngl`, `--n-gpu-layers` | `N` | How many layers to offload into GPU VRAM (`99` = everything, `0` = CPU only). | Auto-calculated |
-| `-t`, `--threads` | `N` | CPU threads during token generation (automatically pinned to Raptor Lake P-cores). | `6` |
-| `-tb`, `--threads-batch` | `N` | CPU threads during prompt prefill batching. | `6` |
-| `-c`, `--ctx-size` | `N` | Context window size in tokens (`0` = read max from GGUF, e.g. 65536 or 131072). | `0` |
-| `-b`, `--batch-size` | `N` | Logical batch size for prompt processing. | `2048` |
-| `-ub`, `--ubatch-size` | `N` | Physical micro-batch size for GPU execution tiles (keeps VRAM spikes from crashing Wayland). | `512` |
-| `-sm`, `--split-mode` | `none\|layer` | Multi-GPU tensor splitting mode. | `layer` |
-
----
-
-### 7. 🌐 HTTP Server & Agent Integration (`sandwich-server` / `llama-server`)
-
-| Flag | Arg | What it actually does | Default |
-| :--- | :---: | :--- | :---: |
-| `--host` | `IP` | Network IP to listen on (`0.0.0.0` for LAN access, `127.0.0.1` for local only). | `127.0.0.1` |
-| `--port` | `PORT` | The port your coding agents connect to (default `8080`, OpenCode likes `8081`). | `8080` |
-| `--path` | `DIR` | Where the static Web UI lives (the chat interface with context gauges). | `tools/server/public` |
-| `--timeout` | `SEC` | Network timeout in seconds before dropping long-running connections. | `600` |
-| `-np`, `--parallel` | `N` | Number of concurrent slots for continuous batching (lets multiple agents chat simultaneously). | `1` (or `4` in auto) |
-
----
-
-### 8. 🎯 Sampling & Generation Flags (The Vibe Sliders)
-
-| Flag | Arg | What it actually does | Default |
-| :--- | :---: | :--- | :---: |
-| `-temp`, `--temp` | `FLOAT` | `0.0` = cold-blooded deterministic math robot. `0.8` = creative coder. `1.5` = chaos mode. | `0.8` |
-| `--top-p` | `FLOAT` | Nucleus sampling cutoff. Drops low-probability trash words. | `0.9` |
-| `--top-k` | `N` | Top-K cutoff. Limits candidate words to top N options (`40` is sweet spot). | `40` |
-| `--min-p` | `FLOAT` | Minimum token probability relative to top token. Highly recommended at `0.05`. | `0.05` |
-| `--repeat-penalty` | `FLOAT` | Slaps the model if it starts repeating itself (`1.1` is mild). | `1.0` |
-| `-n`, `--predict` | `N` | Max tokens to generate (`-1` = until EOS token, `-2` = fill the entire context). | `-1` |
-
----
-
-### 9. 🔬 Frontier Architecture & Acceleration Flags (Techniques #41 – #48)
-
-| Flag | Arg | What it actually does | Default |
-| :--- | :---: | :--- | :---: |
-| `--radix-cache` | None | **[Technique #41] Radix-Tree Persistent Prefix Caching (RadixAttention).** Sub-millisecond prompt KV reuse on multi-turn conversations; slashes TTFT by $200\times$. | Auto (`--sandwich-auto`) |
-| `--radix-cache-tokens` | `N` | Maximum number of prompt prefix tokens cached in the dynamic Radix Tree (e.g. `65536`). | `65536` |
-| `--native-mtp` | None | **[Technique #43] Zero-Memory Native MTP Speculative Rollout.** Directly binds to base model Multi-Token Prediction heads for 0MB speculative drafting. | `false` |
-| `--asym-kv-squeeze` | None | **[Technique #44] Asymmetric KV Outlier Channelling.** Quantizes sensitive attention keys to `turbo4` and values to `turbo2` for an extreme 2.75 bits/tok squeeze. | `false` |
-| `--chunked-prefill` | None | **[Technique #45] Chunked Context Prefill & Ping-Pong Activation Staging.** Caps transient prefill VRAM spikes to $<350$ MB even at 128k context. | Auto (`ctx >= 32k`) |
-| `--latent-mla`, `--flash-mla` | None | **[Technique #46] Latent FlashMLA Direct Tensor Core MMA.** Fuses uncompressed MLA manifold projections directly into Tensor Core MMA instructions. | Auto (MLA models) |
-| `--spec-select` | None | **[Technique #47] Dynamic Multi-Drafter Arbitration & Bayesian Shadow Learning.** Arbitrates across multiple drafters (`--spec-type`) to maximize expected token yield per step. | Auto (`--sandwich-auto`) |
-| `--turboquant-varn` | None | **[Technique #48] Closed-Form Dual-Axis Variance Normalization.** Normalizes unit variance in closed form in `set-rows.cu`, eliminating long-horizon 10k+ CoT reasoning drift with 0 tail pool overhead. | Auto (`ctx >= 8192`) |
-| `--no-turboquant-varn` | None | Disables TurboQuant closed-form dual-axis variance normalization. | `false` |
-
----
-
-### 10. 🥪 Era 7: Strata Assimilation & DeepSeek V4.1 Flags (Techniques #49 – #57)
-
-| Flag | Arg | What it actually does | Default |
-| :--- | :---: | :--- | :---: |
-| `--prefill-head-alias` | None | **[Technique #49] Prefill Head Aliasing.** Borrows output head VRAM during prompt prefill, freeing 1.5–2.2 GB of effective device memory. | `true` |
-| `--kva-prefill` | None | **[Technique #50] KVA Late-Layer Recurrence Prefill.** Skips late MoE layers during deep 32k+ prefill using recurrent attention state projections (+35% to +50% speedup). | Auto (`ctx >= 32k`) |
-| `--kva-start-layer` | `N` | Starting layer index for KVA recurrent prefill bypass (`-1` = auto layer 30+). | `-1` |
-| `--moe-disjoint-guard` | None | **[Technique #51] Disjoint Peer Cache Guard.** Enforces bitmask ownership checks, eliminating duplicate expert slots across VRAM and DDR5 peer tiers. | `true` |
-| `--dma-batch` | None | **[Technique #52] Batched DMA Engine.** Coalesces expert uploads via `cudaMemcpyBatchAsync` on CUDA 13.4+, cutting PCIe dispatch overhead by 40%. | `true` |
-| `--moe-exchange-rot` | None | **[Technique #53] Exchange Buffer Pointer Rotation.** Swaps virtual host buffer slot descriptors, eliminating DDR5 memcpy during Tier 2 promotions. | `true` |
-| `--msg-cache` | None | **[Technique #54] Message-Boundary Delta Caching.** Snaps prompt prefix matching to ChatML/DeepSeek message boundaries, preventing partial-message drift and enabling fast multi-turn agent edits. | `true` |
-| `--fused-expdec` | None | **[Technique #55] QSA_ROWS & EXPDEC Fused Kernels.** Shared-memory unquantized dot product for IQ1_M / IQ2_XXS / GSQ_RCO representations. | `true` |
-| `--elastic-vram` | None | **[Technique #56] Dynamic Elastic VRAM Resizing Endpoint.** Enables live `GET /v1/vram` and `POST /v1/vram` REST endpoints dynamically adjusting cache budgets with a strict 7,100 MB Wayland guard. | `true` |
-| `--dsv41` | None | **[Technique #57] DeepSeek V4.1 Flash Native Engine.** Activates GSQ_RCO sub-2-bit MoE architecture and direct NVMe Engram memory table reader. | `false` |
-| `--dsv41-experts` | `N` | Number of routed experts per word for DeepSeek V4.1 (`5` for faster mode $\le 16$ GB VRAM, `6` for standard). | `5` |
-| `--dsv41-engram` | `PATH` | Path to external 111 GB DeepSeek V4.1 Engram n-gram memory table GGUF file on NVMe SSD. | Auto |
-
----
-
-### 11. 🧠 Era 8: Dynamic Context & Polar Quantization Flags (Techniques #58 – #60)
-
-| Flag | Arg | What it actually does | Default |
-| :--- | :---: | :--- | :---: |
-| `--yarn-auto`, `--dynamic-yarn` | None | **[Technique #58] Dynamic YaRN Auto-Frequency Scaling.** Automatically scales rotary position embeddings via YaRN when requested context exceeds training length ($128\text{k}$ zero-tuning universal scaling). | `true` |
-| `--attn-sinks`, `--sink-tokens` | `N` | **[Technique #59] Universal Attention Sink Guard.** Permanently preserves initial attention sink tokens during context shifting, preventing streaming/multi-turn quality collapse. | `4` |
-| `--unrotated-kv` | None | **[Technique #60] Unrotated KV Staging.** Stores unrotated keys in KV cache with on-the-fly FlashAttention rotation, enabling $O(1)$ zero-copy sliding context shifts on quantized caches. | `true` |
-| `--turbo-varn`, `--turbo-vran` | None | Ergonomic alias for `--turboquant-varn` (Technique #48 closed-form dual-axis variance normalization). | Auto (`ctx >= 8192`) |
-| `--pin-cores` | `LIST` | Explicit physical P-core affinity mask (e.g. `0-5`) for worker threads on hybrid CPUs. | Auto P-cores |
-| `--kv-type` | `TYPE` | Explicit KV cache precision selector (`fp16`, `q8_0`, `q4_0`, `turbo4`, `turbo3`, `turbo2`). | Auto |
-
----
-
-### 12. 🌐 Era 9: Peer Clustering & Distributed Mesh Flags (Techniques #61 – #66)
-
-| Flag | Arg | What it actually does | Default |
-| :--- | :---: | :--- | :---: |
-| `--peer-nodes` | `ENDPOINTS` | **[Technique #61] Heterogeneous Peer Mesh Nodes.** Comma-separated list of peer IP:port endpoints (e.g. `10.0.0.2:8088,10.0.0.3:8088`). | None |
-| `--peer-dma` / `--no-peer-dma` | None | **[Technique #63] Zero-Copy Thunderbolt 4 / USB4 DMA.** Enables PCIe peer DMA bypassing TCP stack on direct cable links. | `false` (TCP) |
-| `--peer-split-kv` / `--no-peer-split-kv` | None | **[Technique #63] Inter-Device Split-KV.** Masks remote KV heads across peer nodes to minimize transmission overhead. | `true` |
-| `--peer-turbo-net` / `--no-peer-turbo-net` | None | **[Technique #64] 2-Bit Walsh-Hadamard Polar Net Quantization.** $8\times$ network activation compression via WHT butterfly rotation + Lloyd-Max centroids. | `true` |
-| `--peer-spec-pipe` / `--no-peer-spec-pipe` | None | **[Technique #65] Distributed Speculative Pipeline.** Pipelined candidate token verification across peer cluster nodes. | `true` |
-| `--peer-fallback` / `--no-peer-fallback` | None | **[Technique #66] Dynamic Zero-Crash Failover.** Instantly hot-swaps remote peer layers back to local 3-tier offload upon peer disconnect. | `true` |
-
----
-
-### 13. ⚡ Era 15 & 16: Dispatch Engine & Core Architectural Upgrades (Techniques #73 – #80)
-
-| Flag | Arg | What it actually does | Default |
-| :--- | :---: | :--- | :---: |
-| `--dynamic-watermark` | None | **[Technique #73] Dynamic Memory Watermarking.** Live tracking with HWM 85% / LWM 70% tripwires to prevent OOM events. | `true` |
-| `--asym-prefetch` | None | **[Technique #74] Asymmetric Parallel Prefetch.** Lookahead pinned DDR5 DMA staging for shared weights and upcoming MoE experts. | `true` |
-| `--ram-cache` | `MB` | **[Technique #75] Dedicated Host RAM L2 Caching Layer.** 2MB THP-aligned LRU cache budget in MiB. | `2048` |
-| `--prefill-chunk-size` | `N` | **[Technique #76] Chunked Prefill Dynamic Scheduling.** Optimizes prefill chunks (64–128 for MoE, 256–512 for dense). | `128` |
-| `--h2o` | None | **[Technique #67 KV] Heavy Hitter Oracle (H2O) Dynamic KV Eviction.** Preserves sinks and heavy hitters, saving 7+ GB VRAM. | `false` |
-| `--h2o-budget` | `N` | Total active KV cache budget (sink + heavy hitters + window) in tokens. | `2048` |
-| `--h2o-heavy-hitters` | `N` | Number of dynamic heavy hitter tokens to retain. | `1024` |
-| `--flash-decoding` | None | **[Technique #79] Sequence-Parallel Flash-Decoding.** Splits KV into 256-tok chunks to saturate all 32 GPU SMs during decode. | `true` |
-| `--flash-decoding-chunk-size` | `N` | Sequence-Parallel Flash-Decoding partition chunk size in tokens. | `256` |
-| `--gds`, `--gpudirect-storage` | None | **[Technique #80] GPUDirect Storage (cuFile) Direct DMA Engine.** Direct NVMe-to-VRAM streaming with io_uring fallback. | `true` |
-| `--gds-batch-size` | `N` | GPUDirect Storage concurrent DMA transfer batch size. | `16` |
+### 4. Attention & Quantized KV Compression
+| Flag | Description | Default |
+| :--- | :--- | :---: |
+| `-ctk, -ctv TYPE` | Selects KV cache compression format: `turbo4` (4-bit), `turbo3` (3-bit), `turbo2` (2-bit). | `turbo4` |
+| `--split-kv` | Pins attention KV cache strictly to GPU VRAM even when model weights run on host CPU. | Auto |
+| `-nkvo` | Routes KV cache overflow into host DDR5 RAM for ultra-long context scaling. | `0` (VRAM) |
+| `-fa, --flash-attn` | Enables hardware-accelerated FlashAttention. | `on` |
+| `--radix-cache` | Enables Radix-Tree persistent prefix caching for instant multi-turn prompt evaluation. | Auto |
 
 </details>
 
 ---
 
-## 👑 Shouts Out to the Real Ones
+## Architectural Provenance & Legal Compliance
 
-Sandwich.cpp stands on the shoulders of absolute open-source gigachads:
-* **`ggerganov`:** The father of `llama.cpp`. Without him we'd all still be paying cloud providers $500/month.
-* **`Niko1221` (`Strata`):** The MoE caching & high-throughput systems pioneer behind Strata, disjoint peer caches, and exchange rotation.
-* **`Piggidragon`:** The CUDA wizard behind Quantized-Native MMA FlashAttention and zero-allocation shared-memory staging.
-* **`thecodacus`:** The MoE routing pioneer who proved that naive cold-expert transfers over PCIe are a scam.
-* **`TheTom`:** The TurboQuant pioneer who made 4-bit, 3-bit, and 2-bit polar spherical KV cache physics actually work.
-* **`ikawrakow` (`ik_llama`):** Hand-written assembly master. Absolute legend.
-* **`Justine Tunney` (`llamafile`):** Making binaries portable across the multiverse.
+* **Base Project:** Derived from [ggml-org/llama.cpp](https://github.com/ggml-org/llama.cpp) at merge-base commit [`3837bf0bc`](https://github.com/ggml-org/llama.cpp/commit/3837bf0bc).
+* **License:** Licensed under the [MIT License](LICENSE).
+* **Copyright:** Copyright (c) Georgi Gerganov and contributors. Copyright (c) Sandwich Engine contributors.
+* **Documentation of Derivation:** Full derivation details, upstream tracking, and technique audit ledgers are documented in [NOTICE.md](NOTICE.md) and [UPSTREAM.md](UPSTREAM.md).
 
 ---
 
-## 📄 License
+## Acknowledgments & Research Foundations
 
-MIT License. Do whatever you want with it, just don't tell your mom how many hours you spent optimizing CUDA kernels. 🥪✨
+Sandwich Engine builds upon foundational research and engineering contributions across the open-source systems community:
+* **Georgi Gerganov & llama.cpp Contributors:** Architecture of the foundational `ggml` tensor runtime and portable inference core.
+* **Thecodacus:** Heterogeneous MoE routing patterns and cache split mechanics.
+* **Niko1221 (`Strata`):** Hierarchical MoE cache research and exchange buffer pointer rotation patterns.
+* **Piggidragon:** Fused Quantized-Native MMA FlashAttention kernels.
+* **TheTom:** Theoretical foundations of Polar Lloyd-Max spherical quantization for KV caches.
+* **Dao-AILab:** Foundational FlashAttention and Flash-Decoding algorithms.
