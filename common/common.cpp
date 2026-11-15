@@ -3441,6 +3441,7 @@ common_batch::common_batch(llama_context * ctx) : batch(llama_batch_ext_init(ctx
 
 void common_batch::clear() {
     tokens.clear();
+    is_prompt = false;
 }
 
 int32_t common_batch::add(llama_token id, llama_pos pos, llama_seq_id seq_id, bool output) {
@@ -3523,6 +3524,7 @@ llama_batch_ext * common_batch::get_sub_batch(int32_t off, int32_t n) {
 
     llama_batch_ext * res = batch.get();
     llama_batch_ext_clear(res);
+    llama_batch_ext_set_is_prompt(res, is_prompt);
 
     for (int32_t i = off; i < off + n; ++i) {
         const token & t = tokens[i];
@@ -3618,6 +3620,7 @@ bool common_prompt_batch_decode(
         // is the reason for this logic.
         llama_tokens prefix_tokens(all_tokens.begin() + offset, all_tokens.begin() + offset + n_tokens_before_last);
         common_batch batch_prefix = common_batch_get_one(ctx, prefix_tokens);
+        batch_prefix.is_prompt = true;
         if (llama_process(ctx, LLAMA_PROCESS_TYPE_DECODE, batch_prefix.get())) {
             COM_ERR("%s", "failed to eval\n");
             return false;
@@ -3628,6 +3631,7 @@ bool common_prompt_batch_decode(
         COM_INF("saved session before last token to %s, n_new = %zu\n", state_path.data(), all_tokens.size());
 
         common_batch batch_last(ctx);
+        batch_last.is_prompt = true;
         batch_last.add(all_tokens.back(), n_past, 0, true);
 
         if (llama_process(ctx, LLAMA_PROCESS_TYPE_DECODE, batch_last.get())) {
@@ -3638,6 +3642,7 @@ bool common_prompt_batch_decode(
     } else {
         llama_tokens new_tokens(all_tokens.begin() + offset, all_tokens.begin() + offset + n_new);
         common_batch batch = common_batch_get_one(ctx, new_tokens);
+        batch.is_prompt = true;
         if (llama_process(ctx, LLAMA_PROCESS_TYPE_DECODE, batch.get())) {
             COM_ERR("%s", "failed to eval\n");
             return false;

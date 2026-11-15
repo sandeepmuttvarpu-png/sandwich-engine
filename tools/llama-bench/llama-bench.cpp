@@ -2223,6 +2223,7 @@ static bool test_prompt(llama_context * ctx, int n_prompt, int n_batch, int n_th
             tokens[i] = std::rand() % n_vocab;
         }
         common_batch batch = common_batch_get_one(ctx, tokens.data(), n_tokens);
+        batch.is_prompt = true;
         int res = llama_process(ctx, LLAMA_PROCESS_TYPE_DECODE, batch.get());
         if (res != 0) {
             fprintf(stderr, "%s: failed to decode prompt batch, res = %d\n", __func__, res);

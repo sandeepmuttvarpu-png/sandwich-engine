@@ -2280,6 +2280,7 @@ llm_graph_result * llama_context::process_ubatch(const llama_ubatch & ubatch, ll
 }
 
 int llama_context::encode(const llama_batch_ext & batch_inp) {
+    m_is_prompt = true;
     if (batch_inp.tokens.empty()) {
         LLAMA_LOG_ERROR("%s: n_tokens == 0\n", __func__);
         return -1;
@@ -2528,6 +2529,7 @@ static bool needs_raw_logits(const llama_ubatch & ubatch, const std::map<llama_s
 }
 
 int llama_context::decode(const llama_batch_ext & batch_inp) {
+    m_is_prompt = batch_inp.is_prompt;
     if (!memory) {
         LLAMA_LOG_DEBUG("%s: cannot decode batches with this context (calling encode() instead)\n", __func__);
         return encode(batch_inp);
@@ -3557,8 +3559,8 @@ ggml_status llama_context::graph_compute(
 
     ggml_moe_prefetch_new_epoch();
 
-    // Set telemetry phase: prefill (n_tokens > 1) vs decode (n_tokens == 1)
-    sandwich_telemetry_set_phase(n_tokens > 1 ? SANDWICH_PHASE_PREFILL : SANDWICH_PHASE_DECODE);
+    // Set telemetry phase: explicitly controlled by batch / context state
+    sandwich_telemetry_set_phase(m_is_prompt ? SANDWICH_PHASE_PREFILL : SANDWICH_PHASE_DECODE);
 
     auto status = ggml_backend_sched_graph_compute_async(sched.get(), gf);
     if (status != GGML_STATUS_SUCCESS) {
@@ -5600,6 +5602,7 @@ int llama_context::encode(const llama_batch & batch_inp) {
 }
 
 int llama_context::decode(const llama_batch & batch_inp) {
+    m_is_prompt = (batch_inp.n_tokens > 1);
     llama_batch_compat compat(this, batch_inp);
     return decode(*compat.batch_ext);
 }

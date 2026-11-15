@@ -1065,6 +1065,8 @@ extern "C" {
     LLAMA_API struct llama_batch_ext * llama_batch_ext_init (struct llama_context * ctx);
     LLAMA_API void                     llama_batch_ext_free (struct llama_batch_ext * batch);
     LLAMA_API void                     llama_batch_ext_clear(struct llama_batch_ext * batch);
+    LLAMA_API void                     llama_batch_ext_set_is_prompt(struct llama_batch_ext * batch, bool is_prompt);
+    LLAMA_API bool                     llama_batch_ext_get_is_prompt(const struct llama_batch_ext * batch);
 
     // Add an input token to the batch, with default values:
     //     id = LLAMA_TOKEN_NULL

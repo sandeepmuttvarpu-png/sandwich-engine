@@ -2565,6 +2565,19 @@ extern "C" {
             struct ggml_tensor * a,
             struct ggml_tensor * sinks);
 
+    enum ggml_fattn_src5_role {
+        GGML_FATTN_SRC5_ROLE_NONE         = 0,
+        GGML_FATTN_SRC5_ROLE_SPARSE_TILES = 1,
+        GGML_FATTN_SRC5_ROLE_KV_ROWS      = 2,
+    };
+
+    GGML_API void ggml_flash_attn_ext_set_src5_role(
+            struct ggml_tensor * a,
+            enum ggml_fattn_src5_role role);
+
+    GGML_API enum ggml_fattn_src5_role ggml_flash_attn_ext_get_src5_role(
+            const struct ggml_tensor * a);
+
     // TODO: needs to be adapted to ggml_flash_attn_ext
     GGML_API struct ggml_tensor * ggml_flash_attn_back(
            struct ggml_context * ctx,

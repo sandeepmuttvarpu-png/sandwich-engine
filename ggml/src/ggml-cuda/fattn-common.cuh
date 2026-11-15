@@ -1181,7 +1181,9 @@ void launch_fattn(
 
     const ggml_tensor * mask    = dst->src[3];
     const ggml_tensor * sinks   = dst->src[4];
-    const ggml_tensor * kv_rows = dst->src[5];
+    const enum ggml_fattn_src5_role src5_role = ggml_flash_attn_ext_get_src5_role(dst);
+    const bool is_kv_rows = (src5_role == GGML_FATTN_SRC5_ROLE_KV_ROWS);
+    const ggml_tensor * kv_rows = is_kv_rows ? dst->src[5] : nullptr;
 
     // with kv_rows the kernel iterates over the mask columns and reads K/V rows through kv_rows
     const int64_t n_kv_cols = kv_rows ? kv_rows->ne[0] : K->ne[1];
@@ -1296,7 +1298,7 @@ void launch_fattn(
     // K/V rows of the list are gathered: the mask is compacted along the lists, which are padded to whole tiles, and the
     // kernel reads it like a dense mask (see flash_attn_ext_f16_iter()). A list of K/V rows from the graph
     // (ggml_flash_attn_ext_set_kv_rows()) is that list already, for every tile, and its mask has its columns.
-    const ggml_tensor * rows = KQV->src[5];
+    const ggml_tensor * rows = (src5_role == GGML_FATTN_SRC5_ROLE_SPARSE_TILES) ? KQV->src[5] : nullptr;
     const bool sparse_compact_mask = use_sparse && rows == nullptr;
     int32_t n_kv_max = 0;
     if (use_sparse && rows != nullptr) {

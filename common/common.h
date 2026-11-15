@@ -1219,6 +1219,8 @@ struct common_batch {
     std::vector<token> tokens; // mirror of the entries, tokens[i] describes batch index i
     llama_batch_ext_ptr batch;
 
+    bool is_prompt = false;
+
     int32_t n_pos = 1; // positions per embedding entry, GGML_MROPE_SECTIONS for MROPE/IMROPE
 
     common_batch() = default;

@@ -5680,7 +5680,9 @@ struct ggml_tensor * ggml_flash_attn_ext(
         float                 scale,
         float                 max_bias,
         float                 logit_softcap) {
-    return ggml_flash_attn_ext_impl(ctx, q, k, v, mask, NULL, scale, max_bias, logit_softcap);
+    struct ggml_tensor * result = ggml_flash_attn_ext_impl(ctx, q, k, v, mask, NULL, scale, max_bias, logit_softcap);
+    ggml_flash_attn_ext_set_src5_role(result, GGML_FATTN_SRC5_ROLE_NONE);
+    return result;
 }
 
 struct ggml_tensor * ggml_flash_attn_ext_rows(
@@ -5693,7 +5695,9 @@ struct ggml_tensor * ggml_flash_attn_ext_rows(
         float                 scale,
         float                 max_bias,
         float                 logit_softcap) {
-    return ggml_flash_attn_ext_impl(ctx, q, k, v, mask, kv_rows, scale, max_bias, logit_softcap);
+    struct ggml_tensor * result = ggml_flash_attn_ext_impl(ctx, q, k, v, mask, kv_rows, scale, max_bias, logit_softcap);
+    ggml_flash_attn_ext_set_src5_role(result, kv_rows ? GGML_FATTN_SRC5_ROLE_KV_ROWS : GGML_FATTN_SRC5_ROLE_NONE);
+    return result;
 }
 
 
@@ -5747,6 +5751,21 @@ void ggml_flash_attn_ext_add_sinks(
     GGML_ASSERT(sinks->type == GGML_TYPE_F32);
 
     a->src[4] = sinks;
+}
+
+void ggml_flash_attn_ext_set_src5_role(
+        struct ggml_tensor * a,
+        enum ggml_fattn_src5_role role) {
+    GGML_ASSERT(a->op == GGML_OP_FLASH_ATTN_EXT);
+
+    ggml_set_op_params_i32(a, 6, (int32_t) role);
+}
+
+enum ggml_fattn_src5_role ggml_flash_attn_ext_get_src5_role(
+        const struct ggml_tensor * a) {
+    GGML_ASSERT(a->op == GGML_OP_FLASH_ATTN_EXT);
+
+    return (enum ggml_fattn_src5_role) ggml_get_op_params_i32(a, 6);
 }
 
 // ggml_flash_attn_back

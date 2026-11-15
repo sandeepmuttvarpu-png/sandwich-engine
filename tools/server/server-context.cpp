@@ -248,6 +248,7 @@ struct server_batch {
         GGML_ASSERT(n_tokens > 0 && off + n_tokens <= size());
 
         view.clear();
+        view.is_prompt = tokens[off].is_prompt;
         for (int32_t i = off; i < off + n_tokens; i++) {
             const auto & t = tokens[i];
             if (t.i_embd >= 0) {

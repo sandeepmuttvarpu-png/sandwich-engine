@@ -139,6 +139,17 @@ void sandwich_telemetry_reset_post_repack(void) {
 void sandwich_telemetry_reset(void) {
     g_hot_hits.store(0, std::memory_order_relaxed);
     g_cold_misses.store(0, std::memory_order_relaxed);
+    g_decode_hot_hits.store(0, std::memory_order_relaxed);
+    g_decode_cold_misses.store(0, std::memory_order_relaxed);
+    g_gpu_calls_decode.store(0, std::memory_order_relaxed);
+    // Prefill counters (g_prefill_hot_hits, g_prefill_cold_misses, g_gpu_calls_prefill)
+    // and cumulative totals (g_cum_hot_hits, g_cum_cold_misses) are preserved across
+    // internal context resets so whole-session telemetry accurately captures prompt prefill.
+}
+
+void sandwich_telemetry_reset_all(void) {
+    g_hot_hits.store(0, std::memory_order_relaxed);
+    g_cold_misses.store(0, std::memory_order_relaxed);
     g_prefill_hot_hits.store(0, std::memory_order_relaxed);
     g_prefill_cold_misses.store(0, std::memory_order_relaxed);
     g_decode_hot_hits.store(0, std::memory_order_relaxed);

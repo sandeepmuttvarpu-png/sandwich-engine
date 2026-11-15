@@ -298,8 +298,10 @@ bool ggml_cuda_flash_attn_ext_mma_f16_shall_use_sparse(const int cc, const ggml_
     memcpy(&max_bias,      (const float *) dst->op_params + 1, sizeof(float));
     memcpy(&logit_softcap, (const float *) dst->op_params + 2, sizeof(float));
 
-    // If kv_rows (dst->src[5]) is present, the kernel uses the direct kv_rows gather path (non-sparse)
-    if (dst->src[5] != nullptr) {
+    const enum ggml_fattn_src5_role src5_role = ggml_flash_attn_ext_get_src5_role(dst);
+
+    // If multi-seq kv_rows is present, the kernel uses the direct kv_rows gather path (non-sparse)
+    if (dst->src[5] != nullptr && src5_role == GGML_FATTN_SRC5_ROLE_KV_ROWS) {
         GGML_UNUSED(ncols2);
         return false;
     }
@@ -309,10 +311,14 @@ bool ggml_cuda_flash_attn_ext_mma_f16_shall_use_sparse(const int cc, const ggml_
     // the dense kernel handles up to 64/ncols2 queries per K/V pass, the single-query gather has to beat that
     const int64_t n_gather = (ncols1 == 1 ? std::min<int64_t>(Q->ne[1], 64/ncols2) : 1) * n_kv_max;
 
+    const bool mask_matches = (src5_role == GGML_FATTN_SRC5_ROLE_SPARSE_TILES) ?
+        (mask != nullptr && dst->src[5] != nullptr && mask->ne[0] == dst->src[5]->ne[0]) :
+        (mask != nullptr && mask->ne[0] == K->ne[1]);
+
     return GGML_CUDA_CC_IS_NVIDIA(cc) && turing_mma_available(cc) &&
         mask != nullptr && n_kv_max > 0 && max_bias == 0.0f && logit_softcap == 0.0f &&
-        mask->ne[0] == K->ne[1] && mask->ne[1] >= Q->ne[1] && mask->ne[2] == 1 &&
-        K->ne[1] >= std::max<int64_t>(4096, 2*n_gather);
+        mask_matches && mask->ne[1] >= Q->ne[1] && mask->ne[2] == 1 &&
+        (dst->src[5] != nullptr ? true : K->ne[1] >= std::max<int64_t>(4096, 2*n_gather));
 #endif // !defined(GGML_USE_HIP) && !defined(GGML_USE_MUSA)
 }
 

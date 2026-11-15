@@ -111,6 +111,8 @@ struct llama_batch_ext {
     // must be either n_embd_inp or n_embd_inp_enc; encode/decode verify it against the graph input
     size_t n_embd = 0;
 
+    bool is_prompt = false;
+
     struct token {
         llama_token  id = LLAMA_TOKEN_NULL;
         bool         has_embd = false; // whether embd_off is set

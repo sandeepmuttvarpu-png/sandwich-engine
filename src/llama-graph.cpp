@@ -3209,9 +3209,12 @@ ggml_tensor * llm_graph_context::build_attn_mha(
         if (kv_rows) {
             cur = ggml_flash_attn_ext_rows(ctx0, q, k, v, kq_mask, kv_rows, kq_scale, hparams.f_max_alibi_bias,
                                            hparams.attn_soft_cap ? hparams.f_attn_logit_softcapping : 0.0f);
+            const bool is_sparse_tiles = (kv_rows->ne[1] <= 1 && kq_mask != nullptr && kq_mask->ne[0] == kv_rows->ne[0]);
+            ggml_flash_attn_ext_set_src5_role(cur, is_sparse_tiles ? GGML_FATTN_SRC5_ROLE_SPARSE_TILES : GGML_FATTN_SRC5_ROLE_KV_ROWS);
         } else {
             cur = ggml_flash_attn_ext(ctx0, q, k, v, kq_mask, kq_scale, hparams.f_max_alibi_bias,
                                       hparams.attn_soft_cap ? hparams.f_attn_logit_softcapping : 0.0f);
+            ggml_flash_attn_ext_set_src5_role(cur, GGML_FATTN_SRC5_ROLE_NONE);
         }
         res->add_fused_node({kv_rows ? LLM_FUSED_OP_FLASH_ATTN_KV_ROWS : LLM_FUSED_OP_FLASH_ATTN, cur, il});
 

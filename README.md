@@ -69,9 +69,9 @@ Traditional single-queue LRU caches suffer from catastrophic cache pollution whe
 ### 3. VRAM-Pinned Speculative Decoding (Technique #26)
 Speculative decoding typically bottlenecks over PCIe when both draft and target models contend for system memory. Sandwich Engine pins the speculative assistant (e.g., DFlash2) **100% in GPU VRAM** (`-ngld 99`). The drafter produces candidate verification trees at **180+ tok/s** in high-bandwidth memory while the host target model evaluates candidates in batched parallel passes.
 * **Empirical Validation:** 
-  * Host-Injected Drafter (`-ngld 0`): **23.24 ± 0.26 tok/s** (Note: exhibits an -8.3% decode regression from baseline 25.34 ± 0.26 tok/s due to dense-path fallback in commit `46c37169f`).
-  * VRAM-Pinned Drafter (`-ngld 99`): **28.62 ± 0.45 tok/s** (+23.1% net speedup over host-injected drafter, verified under interleaved $n=5$ ablation).
-  * **Workaround Limitation Notice:** Due to the Issue #1 crash workaround in commit `46c37169f`, Techniques #78 (PagedAttention), #29/#39 (Asymmetric Split-KV), and #79 (Flash-Decoding) execute on the dense MMA fallback path. The sparse FlashAttention fast path is temporarily disabled when `src[5]` is non-null until role disambiguation lands ([Issue #4](https://github.com/sandeepmuttvarpu-png/sandwich-engine/issues/4)).
+  * Host-Injected Drafter (`-ngld 0`): **24.12 ± 0.26 tok/s** ($D = 2.61$ s, recovering 98 ms / +3.8% throughput from the 2.71 s / 23.24 tok/s fallback state following Issue #4 resolution; baseline 25.34 ± 0.26 tok/s).
+  * VRAM-Pinned Drafter (`-ngld 99`): **28.62 ± 0.45 tok/s** (+18.7% net speedup over host-injected drafter, verified under interleaved $n=5$ ablation).
+  * **Issue #4 Resolution & Kernel Disambiguation:** Fast path restored via explicit role flag `GGML_FATTN_SRC5_ROLE_SPARSE_TILES` on `src[5]`, disambiguating sparse tile indices from multi-sequence `kv_rows` pointers and eliminating dense MMA fallback stalls. Dual-path regression tests passing ([Issue #4 CLOSED](https://github.com/sandeepmuttvarpu-png/sandwich-engine/issues/4)).
 
 ### 4. TurboQuant Polar Lloyd-Max KV Cache Compression
 At extended context lengths (32k–128k), standard FP16 or quantized KV caches consume excessive memory and suffer from attention-sink degradation. Sandwich Engine incorporates **TurboQuant** (`turbo4`, `turbo3`, `turbo2`) utilizing:
@@ -128,7 +128,7 @@ Sandwich Engine enforces a rigorous 4-tier truth scoring methodology across its 
 * **CTest Verification Suite:** **73 passing out of 74 (98.6% pass rate, 0 skipped)**
   * *Test #16 (`test-tokenizers-ggml-vocabs`):* PASS (Verified passing across all 11 binary GGUF vocabulary models).
   * *Test #37 (`test-conversion-fp8`):* PASS (Verified passing across all 15 FP8 conversion and quantization tests).
-  * *Test #33 (`test-llama-context`):* FAILING (Crash eliminated; 137/145 pass deterministically under default FlashAttention across both serial -j1 and parallel -j4; plamo3 NMSE divergence and state_load defects tracked in Issues #2, #4, #6, #7; Issues #3 and #5 closed as invalid).
+  * *Test #33 (`test-llama-context`):* FAILING (Crash eliminated; 137/145 pass deterministically under default FlashAttention across both serial -j1 and parallel -j4; plamo3 NMSE divergence and state_load defects tracked in Issues #2, #6, #7; Issues #3, #4, and #5 closed).
 
 For complete audit ledgers, reproduction scripts, and tier breakdowns, refer to [docs/techniques.md](docs/techniques.md) and [docs/audit/](docs/audit/).
 

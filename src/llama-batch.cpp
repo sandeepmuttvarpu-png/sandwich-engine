@@ -1246,6 +1246,7 @@ void llama_batch_ext::clear() {
     embd  .clear();
     state .clear();
     n_embd = 0;
+    is_prompt = false;
 }
 
 int32_t llama_batch_ext::add_token(llama_seq_id seq_id) {
@@ -1444,6 +1445,14 @@ void llama_batch_ext_clear(llama_batch_ext * batch) {
     batch->clear();
 }
 
+void llama_batch_ext_set_is_prompt(llama_batch_ext * batch, bool is_prompt) {
+    batch->is_prompt = is_prompt;
+}
+
+bool llama_batch_ext_get_is_prompt(const llama_batch_ext * batch) {
+    return batch->is_prompt;
+}
+
 int32_t llama_batch_ext_add(llama_batch_ext * batch, llama_seq_id seq_id) {
     return batch->add_token(seq_id);
 }
@@ -1517,6 +1526,7 @@ bool llama_batch_ext_set_decision_order(llama_batch_ext * batch, int32_t idx, ll
 
 void llama_batch_compat::init(llama_batch_ext & dst, const llama_batch & batch_inp, size_t n_embd_row) {
     llama_batch_ext * batch_ext = &dst;
+    dst.is_prompt = (batch_inp.n_tokens > 1);
 
     if (n_embd_row == 0) {
         n_embd_row = batch_ext->n_embd_inp;

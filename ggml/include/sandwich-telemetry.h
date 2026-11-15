@@ -57,6 +57,7 @@ GGML_API void sandwich_telemetry_record_expert(int32_t il, int32_t expert_id);
 
 GGML_API sandwich_telemetry_stats_t sandwich_telemetry_get_stats(void);
 GGML_API void sandwich_telemetry_reset(void);
+GGML_API void sandwich_telemetry_reset_all(void);
 GGML_API void sandwich_telemetry_reset_post_repack(void);
 GGML_API void sandwich_telemetry_print(void);
 
