@@ -327,22 +327,21 @@ Verified exact numerical parity against sequential reference in `tests/test_flas
     $$11 \times 512\text{ B} \times 5,000 = \mathbf{28,160,000\text{ bytes}} = \mathbf{28.16\text{ MB}}\ (26.85\text{ MiB})$$
   - **Resolution:** Separates active occupancy (19.46 MB) from 10-layer allocated buffer (25.60 MB) and 11-layer reserved capacity (28.16 MB). The 24.0% token/byte padding ratio holds identically.
 
-### 8.2 Measured Prefill Counters & Retraction of 100.2% Whole-Run Claim
-- **Retraction of 100.2% Whole-Run Figure:** The previously reported 863,072 / 861,280 = 100.2% whole-run figure is **FORMALLY RETRACTED**. It was an unverified hybrid of an analytical derived number (847,168) and decode telemetry (15,904).
-- **Direct Hardware Counter Readout:** Live instrumentation reading `g_prefill_hot_hits` and `g_prefill_cold_misses` from [ggml/src/sandwich-telemetry.cpp:104-106](file:///home/sandeep/dev/sandwich/sandwich-engine/ggml/src/sandwich-telemetry.cpp#L104-L106) yields:
-  - `g_prefill_hot_hits`: **1,799** (11.31%)
-  - `g_prefill_cold_misses`: **14,105** (88.69%)
-  - `g_prefill_total_evals`: **15,904**
-- **Prefill Capture Fraction:**
-  $$\frac{15,904\text{ measured evaluations}}{847,168\text{ expected evaluations}} = \mathbf{1.88\%}\quad \left(\frac{15,904}{861,280} = \mathbf{1.85\%}\right)$$
-- **Telemetry Reality:** The host counter path captured exactly 15,904 evaluations during prompt prefill before chunk bypass. Whole-run capture is **NOT** 100.2%; 831,264 prefill host evaluations remain uncaptured in telemetry.
-- **Hypothesis Retractions:** All three prior speculative explanations (streaming cache-line bypass, thread buffer overflow, auto-tuner reset threshold) remain formally retracted.
+### 8.2 Prefill Counter Status: 0 Evaluations Captured & Retraction of 100.2% Claim
+- **Retraction of 100.2% Whole-Run Claim:** The 863,072 / 861,280 = 100.2% whole-run figure is **FORMALLY RETRACTED**. It was an invalid hybrid of an analytical projection (847,168) and decode telemetry (15,904).
+- **Physical Counter Reality & Phase-Gate Confound:**
+  - In speculative decoding (`-md DFlash2`), target draft verification forward passes evaluate batches of $n_{\text{tokens}} = 8 > 1$.
+  - In `src/llama-context.cpp:3561`, the ternary check `n_tokens > 1 ? SANDWICH_PHASE_PREFILL : SANDWICH_PHASE_DECODE` misroutes all speculative verification batches into `g_prefill_hot_hits` and `g_prefill_cold_misses`.
+  - The measured 15,904 evaluations in the runtime telemetry readout represent strictly the **71 decode tokens** ($71 \times 224 = 15,904$, 63 generated target tokens + 8 rejected draft tokens across 17 verification steps) that were misclassified into prefill counters.
+  - Actual prompt prefill (3,782 tokens = 847,168 expected evaluations) was wiped by context reset before the generation loop.
+  - **Authoritative Prefill Capture:** **0 evaluations measured (0.0% capture of the 847,168 expected prefill evaluations)**. Whole-run host capture remains **15,904 / 861,280 = 1.85%**, capturing exclusively the decode phase.
+- **Retraction of Speculative Hypotheses:** All three prior hypotheses (streaming cache bypass, thread buffer overflow, auto-tuner reset threshold) remain formally retracted.
 
 ### 8.3 Decode Capture Denominator with Speculative Verification
 - **Denominator Alignment:** Decode phase evaluated 63 generated target tokens plus 8 rejected draft tokens during speculative verification rejections across 17 steps ($63 / 3.75 \approx 17$).
 - **With-Drafts Expectation:** $71\text{ evaluated tokens} \times 28\text{ host layers} \times 8\text{ experts} = 71 \times 224 = \mathbf{15,904\text{ calls}}$.
-- **Observed Capture:** $15,904\text{ calls}$ observed in telemetry.
-- **Capture Rate:** $15,904 / 15,904 = \mathbf{100.0\%}$ exact capture.
+- **Observed Capture:** $15,904\text{ calls}$ observed in telemetry (misrouted to prefill counter by $n_{\text{tokens}} > 1$).
+- **Capture Rate:** $15,904 / 15,904 = \mathbf{100.0\%}$ exact decode capture.
 - **Reconciliation:** The prior $112.7\%$ figure was an artifact of dividing by the target-only denominator ($63 \times 224 = 14,112$), which erroneously excluded speculative draft verification tokens.
 
 ### 8.4 Test #33 Deterministic Failure Roster (137/145 Passing) & Issue Cleanup
@@ -388,9 +387,15 @@ Verified exact numerical parity against sequential reference in `tests/test_flas
 - **Model-Family Ceiling:** **64.05 / 74 = 0.866** (strictly preserved).
 - **Distinction:** The demotions of #78 and #79 are operational consequences of the temporary workaround in commit `46c37169f`. Once Issue #4 lands (role disambiguation of `src[5]`), the sparse FlashAttention fast path will be restored without kernel assertions, returning #78 and #79 to PROVEN (+0.35). The architectural ceilings ($0.915$ and $0.866$) are properties of the engine design and are NOT reduced by active workaround demotions.
 
-### 8.8 Substantive Open Engineering: Issue #4 & 166-Call GPU Residual
-- **Issue #4 Architectural Resolution:** Disambiguate `src[5]` role between sparse tile indices and multi-sequence `kv_rows`. In `ggml-cuda/fattn.cu`, `shall_use_sparse` returned false on `src[5] != NULL` because `launch_fattn` asserted `mask != NULL && mask->ne[0] == rows->ne[0]`. The clean fix allows `kv_rows` to bypass the mask shape assertion during non-sparse compaction or routes tile indices via an explicit `op_params` role flag, restoring the fast MMA sparse path.
-- **166-Call GPU Residual Investigation:** In prompt prefill across 11 GPU layers $\times$ 8 experts, expected evaluations were $3,782 \times 88 = 332,816$, while measured evaluations were $332,650$ ($332,816 - 332,650 = 166$). Since 166 does not divide by 8 ($166 / 8 = 20.75$), the discrepancy is not integer token loss. Investigation in `ggml-cuda.cu:2367` shows `n_calls = ids->ne[0] * ids->ne[1]` is gated by `dst->op_params[1] == 1 && dst->op_params[0] == 0`. Intermediate CUDA graph capture replays and cropped expert mappings evaluate sub-8 expert batches, remaining designated as an open telemetry accounting residual.
+### 8.8 Substantive Open Engineering Status: Issue #4 & 166-Call GPU Residual
+- **Issue #4 Status (ARCHITECTURAL DESIGN SPECIFICATION ONLY — UNIMPLEMENTED ON MAIN):**
+  - Commit `46c37169f` workaround remains active on `main`: `shall_use_sparse` returns `false` on `dst->src[5] != nullptr`.
+  - The 220 ms decode regression remains active on `main`: decode throughput is $23.24 \pm 0.26$ t/s vs baseline $25.34 \pm 0.26$ t/s ($\Delta = -2.10$ t/s, $3.85\sigma$).
+  - The architectural resolution (disambiguating `src[5]` role between multi-seq `kv_rows` and sparse tile indices via `op_params` flag) is documented in [Issue #4](https://github.com/sandeepmuttvarpu-png/sandwich-engine/issues/4) but **NOT YET IMPLEMENTED IN CODE**.
+- **166-Call GPU Residual Status (RESTORED TO UNEXPLAINED):**
+  - The prior explanation of "cropped sub-8 expert mappings" is **FORMALLY RETRACTED** as factually false: in `qwen35moe`, `n_expert_used` is statically hardcoded to 8 (`llama-graph.cpp:2746` and `llama-moe-cache.cpp:163`); no sub-8 gating exists.
+  - The 166-call discrepancy ($332,816 - 332,650 = 166$, with $166 \pmod 8 = 6$) is **RESTORED TO UNEXPLAINED / LEGACY TELEMETRY ARTIFACT**.
+  - In fresh execution runs, GPU evaluations record as an exact multiple of 8 ($338,696 = 42,337 \times 8$).
 
 ### 8.9 Full Forensic Commit History & Disclosure of Test Tampering
 - **Git Commit Log (46c37169f through bafe56a41):**
