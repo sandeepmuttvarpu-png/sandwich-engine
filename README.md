@@ -68,7 +68,9 @@ Traditional single-queue LRU caches suffer from catastrophic cache pollution whe
 
 ### 3. VRAM-Pinned Speculative Decoding (Technique #26)
 Speculative decoding typically bottlenecks over PCIe when both draft and target models contend for system memory. Sandwich Engine pins the speculative assistant (e.g., DFlash2) **100% in GPU VRAM** (`-ngld 99`). The drafter produces candidate verification trees at **180+ tok/s** in high-bandwidth memory while the host target model evaluates candidates in batched parallel passes.
-* **Empirical Validation:** Demonstrated a **+23.2% net decode speedup** (21.98 $\to$ 27.08 tok/s, $p < 0.001$) under rigorous interleaved $n=5$ ablation on Qwen3.6-35B-A3B.
+* **Empirical Validation:** 
+  * Host-Injected Drafter (`-ngld 0`): **23.24 ± 0.26 tok/s** (Note: exhibits an -8.3% decode regression from baseline 25.34 ± 0.48 tok/s due to dense-path fallback in commit `46c37169f`).
+  * VRAM-Pinned Drafter (`-ngld 99`): **28.62 ± 0.45 tok/s** (+23.1% net speedup over host-injected drafter, verified under interleaved $n=5$ ablation).
 
 ### 4. TurboQuant Polar Lloyd-Max KV Cache Compression
 At extended context lengths (32k–128k), standard FP16 or quantized KV caches consume excessive memory and suffer from attention-sink degradation. Sandwich Engine incorporates **TurboQuant** (`turbo4`, `turbo3`, `turbo2`) utilizing:
@@ -122,10 +124,10 @@ Sandwich Engine enforces a rigorous 4-tier truth scoring methodology across its 
 * **Authoritative Close-Out Score:** **45.60 / 74 (0.616)**
 * **Structural Single-Node Physical Ceiling:** **0.915** (67.70 / 74)
 * **Current Model Family Ceiling:** **0.866** (64.05 / 74)
-* **CTest Verification Suite:** **74 passing out of 74 (100% pass rate, 0 skipped)**
-  * *Test #16 (`test-tokenizers-ggml-vocabs`):* Verified passing across all 11 binary GGUF vocabulary models.
-  * *Test #37 (`test-conversion-fp8`):* Verified passing across all 15 FP8 conversion and quantization tests.
-  * *Test #33 (`test-llama-context`):* Verified passing across all 145 synthetic model architectures.
+* **CTest Verification Suite:** **72 passing out of 74 (97.3% pass rate, 0 skipped)**
+  * *Test #16 (`test-tokenizers-ggml-vocabs`):* PASS (Verified passing across all 11 binary GGUF vocabulary models).
+  * *Test #33 (`test-llama-context`):* FAILING (Crash eliminated; 139/145 pass serially, 134/145 under `-j4`; 2 allocation failures, 4 NMSE deltas, tracked in Issue #1, Issue #2, Issue #3).
+  * *Test #37 (`test-conversion-fp8`):* FAILING (Python test harness missing `torch`/`safetensors` dependencies in CTest runner).
 
 For complete audit ledgers, reproduction scripts, and tier breakdowns, refer to [docs/techniques.md](docs/techniques.md) and [docs/audit/](docs/audit/).
 
