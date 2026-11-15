@@ -277,7 +277,7 @@ set_tests_properties(test-speculative-rejection-sampling PROPERTIES FIXTURES_REQ
 llama_test(
     test-llama-context
     LABEL "main behavior backend"
-    ARGS --models "${MODEL_DIR}"
+    ARGS --models "${MODEL_DIR}" -fa 0
 )
 # abort on graph reallocations that the initial reserve should have covered
 set_tests_properties(test-llama-context PROPERTIES

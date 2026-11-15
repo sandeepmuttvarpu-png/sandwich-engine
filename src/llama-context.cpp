@@ -705,7 +705,7 @@ llama_context::llama_context(
             }
         }
 
-        if (has_gpu_backend && (cparams.moe_cache_size > 0 || cparams.moe_3tier) && model.hparams.n_expert > 0) {
+        if (!model.no_alloc() && has_gpu_backend && (cparams.moe_cache_size > 0 || cparams.moe_3tier) && model.hparams.n_expert > 0) {
             size_t vram_cache_sz = cparams.moe_cache_size > 0 ? cparams.moe_cache_size : 256ULL * 1024 * 1024;
             moe_cache = std::make_unique<llama_moe_cache>(
                 model, backend_ptrs, backend_buft, vram_cache_sz,
