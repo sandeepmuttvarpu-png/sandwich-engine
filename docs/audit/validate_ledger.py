@@ -54,7 +54,7 @@ class LedgerValidator:
                 "RULE A", "RULE B", "RULE C", "RULE D", "RULE E", "RULE E+",
                 "RULE F", "RULE F+", "RULE G", "RULE H", "RULE I", "RULE J",
                 "RULE K", "RULE L", "RULE M", "RULE O", "RULE P",
-                "RULE Q", "RULE R", "RULE S", "RULE T", "RULE U", "RULE V", "RULE N"
+                "RULE Q", "RULE R", "RULE S", "RULE T", "RULE U", "RULE V", "RULE W", "RULE N"
             ]
             
         self.rule_results = {r: {"pass": 0, "fail": 0} for r in self.RULE_INVENTORY}
@@ -229,10 +229,10 @@ class LedgerValidator:
             prior_agg = 44.35 # v4.8 aggregate score
             current_agg = stated_num
             expected_delta = round(current_agg - prior_agg, 2)
-            if math.isclose(expected_delta, 0.70, abs_tol=0.001):
-                self.log_pass("RULE E+", f"Cross-version reconciliation verified: v4.8 ({prior_agg:.2f}) -> v4.9 ({current_agg:.2f}), delta = {expected_delta:+.2f} matches exactly diff table (+0.70 on #18).")
+            if math.isclose(expected_delta, 0.90, abs_tol=0.001):
+                self.log_pass("RULE E+", f"Cross-version reconciliation verified: v4.8 ({prior_agg:.2f}) -> v4.9 ({current_agg:.2f}), delta = {expected_delta:+.2f} matches exactly diff table (+0.55 on #9, +0.70 on #18, -0.20 on #78, -0.15 on #79).")
             else:
-                self.log_failure("RULE E+", f"Cross-version delta mismatch: v4.8 ({prior_agg}) -> v4.9 ({current_agg}) is {expected_delta}, expected +0.70.")
+                self.log_failure("RULE E+", f"Cross-version delta mismatch: v4.8 ({prior_agg}) -> v4.9 ({current_agg}) is {expected_delta}, expected +0.90.")
         else:
             self.log_pass("RULE E+", "Cross-version check passed for non-v4.5..v4.9 version.")
 
@@ -357,14 +357,22 @@ class LedgerValidator:
         if j_pass:
             self.log_pass("RULE J", f"All {len(proven_techniques)} PROVEN techniques satisfy T1, T2a, T2b, and T3 requirements.")
 
-        # RULE K: CLAIM-RECONCILIATION VETO: No technique may be PROVEN if its diary claim is falsified.
+        # RULE K: CLAIM-RECONCILIATION VETO: No technique may be PROVEN if its diary claim is falsified or fast path disabled.
+        rule_k_pass = True
         for t in techniques:
             tid = t["id"]
             if tid == 55 and t["status"] == "PROVEN":
                 self.log_failure("RULE K", f"Technique #55 cannot be PROVEN: Diary claims fused CUDA kernel; only CPU host reference in test-ds4-engram exists.")
+                rule_k_pass = False
             if tid == 40 and t["status"] == "PROVEN":
                 self.log_failure("RULE K", f"Technique #40 cannot be unreservedly PROVEN against dairy claim (claims up to 128k context and 0/100% depths; only 4k/32k at 25/50/75 tested).")
-        self.log_pass("RULE K", "Claim-reconciliation veto verified: #40 and #55 correctly demoted from PROVEN.")
+                rule_k_pass = False
+            notes = t.get("notes", "")
+            if "Workaround Limitation: Fast path disabled" in notes and t["status"] == "PROVEN":
+                self.log_failure("RULE K", f"Technique #{tid} cannot be PROVEN: Fast path disabled by workaround annotation.")
+                rule_k_pass = False
+        if rule_k_pass:
+            self.log_pass("RULE K", "Claim-reconciliation veto verified: #40, #55, and workaround-disabled techniques (#78, #79) correctly demoted from PROVEN.")
 
         # RULE L: Units declared on every telemetry field; hit counts must not be labeled MB. Rename 'Avoided PCIe Transfers' -> Hot-Pack Hit Rate.
         if conf_text:
@@ -540,6 +548,38 @@ class LedgerValidator:
             else:
                 self.log_failure("RULE V", "CONFIDENCE artifact fails to explicitly state 0.93 target is UNREACHABLE.")
 
+        # RULE W: HARNESS INTEGRITY & BASELINE LINEAGE PINNING
+        w_pass = True
+        test_util_path = os.path.join(REPO_ROOT, "tests", "llama-context", "test-util.cpp")
+        if os.path.exists(test_util_path):
+            with open(test_util_path, "r") as f:
+                tu_text = f.read()
+            if "const double NMSE_THRESHOLD = 1e-5;" not in tu_text:
+                self.log_failure("RULE W", "Test harness tampering detected: NMSE_THRESHOLD in tests/llama-context/test-util.cpp is not 1e-5.")
+                w_pass = False
+        else:
+            self.log_failure("RULE W", f"Cannot find {test_util_path}")
+            w_pass = False
+
+        cmake_tests_path = os.path.join(REPO_ROOT, "tests", "CMakeLists.txt")
+        if os.path.exists(cmake_tests_path):
+            with open(cmake_tests_path, "r") as f:
+                cm_text = f.read()
+            if "-fa 0" in cm_text:
+                self.log_failure("RULE W", "Test harness tampering detected: -fa 0 flag found in tests/CMakeLists.txt.")
+                w_pass = False
+        else:
+            self.log_failure("RULE W", f"Cannot find {cmake_tests_path}")
+            w_pass = False
+
+        # Baseline lineage pinning: 45.60 authoritative close-out minus 0.35 demotions == 45.25
+        if not math.isclose(stated_num, 45.25, abs_tol=0.001):
+            self.log_failure("RULE W", f"Baseline lineage violation: stated score {stated_num} != 45.25 (expected 45.60 - 0.35).")
+            w_pass = False
+
+        if w_pass:
+            self.log_pass("RULE W", "Harness integrity verified (NMSE_THRESHOLD=1e-5, no -fa 0 suppression) and baseline lineage pinned at 45.60 - 0.35 = 45.25.")
+
         # RULE N (validator self-integrity): print rule inventory at startup and report per-rule pass/fail. Fail if missing rule.
         prior_rules = [r for r in self.RULE_INVENTORY if r != "RULE N"]
         unexecuted = [r for r in prior_rules if (self.rule_results[r]["pass"] + self.rule_results[r]["fail"]) == 0]
@@ -549,7 +589,7 @@ class LedgerValidator:
         num_checks = len(self.passes) + len(self.failures) + 1
 
         if self.target_version == "v4.9":
-            min_rules, min_checks = 24, 34
+            min_rules, min_checks = 25, 35
         elif self.target_version in ["v4.7", "v4.8"]:
             min_rules, min_checks = 22, 27
         elif self.target_version == "v4.6":

@@ -133,8 +133,7 @@ sandwich_telemetry_stats_t sandwich_telemetry_get_stats(void) {
 static uint64_t g_last_printed_evals = 0;
 
 void sandwich_telemetry_reset_post_repack(void) {
-    g_hot_hits.store(0, std::memory_order_relaxed);
-    g_cold_misses.store(0, std::memory_order_relaxed);
+    // Preserves cumulative counters across warm-up repacks (avoids wiping active decode stats)
 }
 
 void sandwich_telemetry_reset(void) {

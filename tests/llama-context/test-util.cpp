@@ -12,7 +12,7 @@
 #include <limits>
 #include <stdexcept>
 
-const double NMSE_THRESHOLD = 0.05;
+const double NMSE_THRESHOLD = 1e-5;
 
 //
 // comparison

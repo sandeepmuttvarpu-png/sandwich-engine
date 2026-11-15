@@ -6,9 +6,9 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![CUDA: 12.0+ / 12.8 / 13.x](https://img.shields.io/badge/CUDA-12.0%2B%20%7C%2012.8-green.svg)](https://developer.nvidia.com/cuda-toolkit)
 [![C++ Standard: C++17](https://img.shields.io/badge/C%2B%2B-17-blue.svg)](CMakeLists.txt)
-[![CTest: 74/74 Passing](https://img.shields.io/badge/CTest-74%2F74%20(100%25)-brightgreen)](docs/audit/)
+[![CTest: 73/74 Passing](https://img.shields.io/badge/CTest-73%2F74%20(98.6%25)-brightgreen)](docs/audit/)
 [![Parity: Bit-Identical Verified](https://img.shields.io/badge/Parity-Bit--Identical%20(SHA256)-success)](docs/audit/)
-[![Audit Score: 0.616 / 0.915](https://img.shields.io/badge/Audited%20Score-0.616%20%7C%20Ceiling%200.915-orange)](docs/techniques.md)
+[![Audit Score: 0.611 / 0.915](https://img.shields.io/badge/Audited%20Score-0.611%20%7C%20Ceiling%200.915-orange)](docs/techniques.md)
 [![Hardware Target: Consumer Asymmetric Silicon](https://img.shields.io/badge/Hardware-VRAM%20%2B%20DDR5%20%2B%20NVMe-purple)](#)
 
 ---
@@ -122,13 +122,13 @@ At extended context lengths (32k–128k), standard FP16 or quantized KV caches c
 ## Formal Engineering Audit & Verification
 
 Sandwich Engine enforces a rigorous 4-tier truth scoring methodology across its catalog of 74 techniques, governed by automated ledger verification (`docs/audit/validate_ledger.py`):
-* **Authoritative Close-Out Score:** **45.60 / 74 (0.616)**
+* **Authoritative Close-Out Score:** **45.25 / 74 (0.611)**
 * **Structural Single-Node Physical Ceiling:** **0.915** (67.70 / 74)
 * **Current Model Family Ceiling:** **0.866** (64.05 / 74)
-* **CTest Verification Suite:** **72 passing out of 74 (97.3% pass rate, 0 skipped)**
+* **CTest Verification Suite:** **73 passing out of 74 (98.6% pass rate, 0 skipped)**
   * *Test #16 (`test-tokenizers-ggml-vocabs`):* PASS (Verified passing across all 11 binary GGUF vocabulary models).
-  * *Test #33 (`test-llama-context`):* FAILING (Crash eliminated; 139/145 pass serially, 134/145 under `-j4`; 2 allocation failures, 4 NMSE deltas, tracked in Issue #1, Issue #2, Issue #3).
-  * *Test #37 (`test-conversion-fp8`):* FAILING (Python test harness missing `torch`/`safetensors` dependencies in CTest runner).
+  * *Test #37 (`test-conversion-fp8`):* PASS (Verified passing across all 15 FP8 conversion and quantization tests).
+  * *Test #33 (`test-llama-context`):* FAILING (Crash eliminated; 144/145 pass serially under default FA; plamo3 NMSE divergence and -j4 concurrency races tracked in Issues #2, #3, #5, #6).
 
 For complete audit ledgers, reproduction scripts, and tier breakdowns, refer to [docs/techniques.md](docs/techniques.md) and [docs/audit/](docs/audit/).
 
