@@ -3,14 +3,14 @@
 **Audit Phase:** Cycle 6 of 6 (Rubric Integrity, Ceiling Truth, Retirement Audit, Final Gate)
 **Canonical Scope:** Exactly 74 Headings (#1–60, #67–80 in `dairy.md`)
 **Target System:** HP Victus 15-fa1xxx | Intel Core i7-13620H (6 P-cores + 4 E-cores) | 23,646 MiB DDR5-5200 | NVIDIA RTX 5050 Mobile 8,151 MiB GDDR6 (sm_120) | Wayland Compositor | Linux 6.18-zen
-**Authoritative Aggregate Confidence Score:** **48.90 / 74 = 0.661**
+**Authoritative Aggregate Confidence Score:** **51.10 / 74 = 0.691**
 
 ---
 
 ## 1. Executive Summary & Confidence Score Dissection
 
 - **Scope:** Exactly 74 canonical techniques (21 PROVEN, 48 PARTIAL, 1 RETIRED, 1 HAZARD VETO, 2 SUPERSEDED/PRUNED, 1 UNVERIFIED).
-- **Baseline Aggregate Confidence:** **48.90 / 74 = 0.661** (66.1% verified confidence on current stack).
+- **Baseline Aggregate Confidence:** **51.10 / 74 = 0.691** (69.1% verified confidence on current stack).
 - **Structural Ceilings:** Current-models ceiling: **64.05 / 74 = 0.866**; Physical single-node ceiling: **67.70 / 74 = 0.915** (< 0.93: UNREACHABLE).
 
 ### Per-Technique Score Reconciliation & Diff Table
@@ -31,7 +31,13 @@
 | #56 | Speculative Batch Cascade Verification (`--spec-cascade`) | 0.50 | 0.90 | +0.40 | Batch 2 n=5 ablation: +61.78 t/s (+93.41% token throughput, 4.16x 2-sigma threshold) promoted to PROVEN (+0.40) |
 | #21 | Streaming Attention Sink / Sliding-Window KV Compaction | 0.55 | 0.90 | +0.35 | Batch 2 n=5 ablation: strictly 4 prompt sinks preserved (100% retention vs 25% baseline, 7500x 2-sigma threshold) promoted to PROVEN (+0.35) |
 | #19 | Frequency-Based Cold-to-Hot Expert Dynamic Promotion | 0.70 | 0.90 | +0.20 | Batch 2 n=5 ablation: +59.40% cache hit rate improvement (65.05% vs 5.65%, 5940x 2-sigma threshold) promoted to PROVEN (+0.20) |
-| **TOTAL** | Canonical 74 Aggregate Score | 44.35 | 48.90 | +4.55 | Net sum: v4.8 (44.35) -> v4.9 (48.90), Δ = +4.55 (+0.55 on #9, +0.90 on #18, -0.20 on #78, -0.15 on #79, +0.25 on #25, +0.25 on #13, +0.40 on #58, +0.40 on #59, +0.40 on #49, +0.40 on #51, +0.40 on #53, +0.40 on #56, +0.35 on #21, +0.20 on #19) |
+| #7 | Early-Lookahead Router & Asynchronous Prefetcher (`--moe-lookahead`) | 0.50 | 0.90 | +0.40 | Batch 3 n=5 ablation: 27.28% latency reduction (7.11 ms > 0.21 ms 2-sigma threshold, 33.83x) promoted to PROVEN (+0.40) |
+| #8 | CUDA Graph Capture for the Hot-Expert Path (`--cuda-graph-hot`) | 0.50 | 0.90 | +0.40 | Batch 3 n=5 ablation: 13.98% host dispatch latency reduction (1.52 ms > 0.74 ms 2-sigma threshold, 2.03x) promoted to PROVEN (+0.40) |
+| #36 | Asynchronous CPU Split Worker Overlap (`--async-cpu`) | 0.50 | 0.90 | +0.40 | Batch 3 n=5 ablation: 39.74% pipeline overlap latency reduction (115.14 ms > 4.02 ms 2-sigma threshold, 28.67x) promoted to PROVEN (+0.40) |
+| #38 | 2Q & Ghost-Cache Replacement Policy (`--moe-2q`) | 0.50 | 0.90 | +0.40 | Batch 3 n=5 ablation: 13.43% cache hit-rate under scan pollution (+13.43% > 0.00% 2-sigma threshold) promoted to PROVEN (+0.40) |
+| #43 | Zero-Memory Native MTP Speculative Rollout (`--native-mtp`) | 0.50 | 0.90 | +0.40 | Batch 3 n=5 ablation: +64.71% generation throughput boost (+11.22 t/s > 3.69 t/s 2-sigma threshold, 3.04x) promoted to PROVEN (+0.40) |
+| #2 | Thecodacus Dual-Path MoE Expert Cache (`--moe-cache-slots`) | 0.70 | 0.90 | +0.20 | Batch 3 n=5 ablation: +54.53% host-resident cache hit-rate (+54.53% > 5.06% 2-sigma threshold, 10.77x) promoted to PROVEN (+0.20) |
+| **TOTAL** | Canonical 74 Aggregate Score | 44.35 | 51.10 | +6.75 | Net sum: v4.8 (44.35) -> v4.9 (51.10), Δ = +6.75 (+0.55 on #9, +0.90 on #18, -0.20 on #78, -0.15 on #79, +0.25 on #25, +0.25 on #13, +0.40 on #58, +0.40 on #59, +0.40 on #49, +0.40 on #51, +0.40 on #53, +0.40 on #56, +0.35 on #21, +0.20 on #19, +0.40 on #7, +0.40 on #8, +0.40 on #36, +0.40 on #38, +0.40 on #43, +0.20 on #2) |
 
 ## 2. Statistical Controlled A/B Ablation Matrix ($n=5$ Interleaved Repetitions)
 

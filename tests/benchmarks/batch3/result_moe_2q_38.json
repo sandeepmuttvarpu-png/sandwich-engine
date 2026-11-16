@@ -1,0 +1,28 @@
+{
+  "technique_id": 38,
+  "name": "2Q & Ghost-Cache Replacement Policy",
+  "flag": "--moe-2q",
+  "baseline_runs": [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+  ],
+  "test_runs": [
+    13.4286,
+    13.4286,
+    13.4286,
+    13.4286,
+    13.4286
+  ],
+  "baseline_mu": 0.0,
+  "baseline_sigma": 0.0,
+  "test_mu": 13.4286,
+  "test_sigma": 0.0,
+  "delta_hitrate": 13.4286,
+  "sigma_comb": 0.0,
+  "two_sigma_threshold": 0.0,
+  "verdict": "PROMOTED",
+  "timestamp": "2026-11-16T15:34:43Z"
+}

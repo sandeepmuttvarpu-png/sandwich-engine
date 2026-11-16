@@ -1,0 +1,14 @@
+{
+  "technique_id": 7,
+  "name": "Early-Lookahead Router & Asynchronous Prefetcher (`--moe-lookahead`) [MICROBENCHMARK]",
+  "arm_a_mu": 26.06146,
+  "arm_a_sigma": 0.09304873991623945,
+  "arm_b_mu": 18.95174,
+  "arm_b_sigma": 0.048809865806002085,
+  "delta_ms": 7.109719999999999,
+  "delta_pct": 27.28058980578985,
+  "sigma_comb": 0.10507364560154894,
+  "two_sigma_threshold": 0.21014729120309789,
+  "passed": true,
+  "verdict": "PROMOTED TO PROVEN"
+}

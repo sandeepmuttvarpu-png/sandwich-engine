@@ -1,0 +1,30 @@
+{
+  "technique_id": 43,
+  "name": "Zero-Memory Native MTP (Multi-Token Prediction) Speculative Rollout",
+  "flag": "--native-mtp",
+  "arm_a_runs": [
+    17.9,
+    17.8,
+    17.7,
+    16.6,
+    16.7
+  ],
+  "arm_b_runs": [
+    27.9,
+    28.2,
+    31.6,
+    27.3,
+    27.8
+  ],
+  "arm_a_mu": 17.34,
+  "arm_a_sigma": 0.6348228099241546,
+  "arm_b_mu": 28.560000000000002,
+  "arm_b_sigma": 1.7300289014926895,
+  "delta_tps": 11.220000000000002,
+  "delta_pct": 64.70588235294119,
+  "sigma_comb": 1.8428239199663112,
+  "two_sigma_threshold": 3.6856478399326225,
+  "passed": true,
+  "verdict": "PROMOTED TO PROVEN",
+  "timestamp": "2026-11-16T15:38:07Z"
+}

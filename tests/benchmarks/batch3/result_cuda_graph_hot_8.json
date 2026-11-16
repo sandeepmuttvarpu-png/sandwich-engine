@@ -1,0 +1,28 @@
+{
+  "technique_id": 8,
+  "name": "CUDA Graph Capture for the Hot-Expert Path",
+  "flag": "--cuda-graph-hot",
+  "baseline_runs": [
+    10.8794,
+    11.1985,
+    10.6817,
+    10.8911,
+    10.5318
+  ],
+  "test_runs": [
+    9.1893,
+    9.8129,
+    9.2031,
+    9.1963,
+    9.2048
+  ],
+  "baseline_mu": 10.8365,
+  "baseline_sigma": 0.2513318026036495,
+  "test_mu": 9.32128,
+  "test_sigma": 0.27489227344543576,
+  "delta_ms": 1.5152199999999993,
+  "sigma_comb": 0.37246937726476265,
+  "two_sigma_threshold": 0.7449387545295253,
+  "verdict": "PROMOTED",
+  "timestamp": "2026-11-16T15:28:23Z"
+}

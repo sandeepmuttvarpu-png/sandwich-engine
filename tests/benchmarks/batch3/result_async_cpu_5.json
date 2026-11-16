@@ -1,0 +1,14 @@
+{
+  "technique_id": 5,
+  "name": "Asynchronous CPU Cold-Expert Execution (`sched_async_cpu`) [MICROBENCHMARK]",
+  "arm_a_mu": 1.09566,
+  "arm_a_sigma": 0.09710686381507747,
+  "arm_b_mu": 0.9192600000000001,
+  "arm_b_sigma": 0.021841428524709633,
+  "delta_ms": 0.1764,
+  "delta_pct": 16.09988500082142,
+  "sigma_comb": 0.09953286391941106,
+  "two_sigma_threshold": 0.19906572783882212,
+  "passed": false,
+  "verdict": "KEPT PARTIAL (Inside Noise)"
+}

@@ -1,0 +1,29 @@
+{
+  "technique_id": 2,
+  "name": "Thecodacus Dual-Path MoE Expert Cache",
+  "flag": "--moe-cache-slots",
+  "arm_a_runs": [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+  ],
+  "arm_b_runs": [
+    53.4,
+    53.4,
+    59.06,
+    53.4,
+    53.4
+  ],
+  "arm_a_mu": 0.0,
+  "arm_a_sigma": 0.0,
+  "arm_b_mu": 54.532,
+  "arm_b_sigma": 2.5312289505297634,
+  "delta_hits": 54.532,
+  "sigma_comb": 2.5312289505297634,
+  "two_sigma_threshold": 5.062457901059527,
+  "passed": true,
+  "verdict": "PROMOTED TO PROVEN",
+  "timestamp": "2026-11-16T15:39:56Z"
+}
