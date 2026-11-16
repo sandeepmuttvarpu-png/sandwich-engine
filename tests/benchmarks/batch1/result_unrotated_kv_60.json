@@ -1,0 +1,14 @@
+{
+  "technique_id": 60,
+  "name": "Unrotated KV Staging (`--unrotated-kv`)",
+  "arm_a_mu": 25.54,
+  "arm_a_sigma": 0.1516575088810313,
+  "arm_b_mu": 25.439999999999998,
+  "arm_b_sigma": 0.23021728866442717,
+  "delta_tps": -0.10000000000000142,
+  "delta_pct": -0.3915426781519241,
+  "sigma_comb": 0.27568097504180494,
+  "two_sigma_threshold": 0.5513619500836099,
+  "passed": false,
+  "verdict": "KEPT PARTIAL (Inside Noise)"
+}

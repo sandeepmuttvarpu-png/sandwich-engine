@@ -1,0 +1,14 @@
+{
+  "technique_id": 10,
+  "name": "Persistent Prompt Prefix Caching (OpenCode Acceleration)",
+  "arm_a_mu": 65.1174,
+  "arm_a_sigma": 1.0252642586182326,
+  "arm_b_mu": 64.95700000000001,
+  "arm_b_sigma": 0.6479521587277848,
+  "delta_ms": 0.16039999999999566,
+  "delta_pct": 0.24632433113115026,
+  "sigma_comb": 1.2128515160562692,
+  "two_sigma_threshold": 2.4257030321125383,
+  "passed": false,
+  "verdict": "KEPT PARTIAL (Inside Noise)"
+}

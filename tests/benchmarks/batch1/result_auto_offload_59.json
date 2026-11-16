@@ -1,0 +1,14 @@
+{
+  "technique_id": 59,
+  "name": "Dynamic Layer Auto-Offload Tuner (`--auto-offload`)",
+  "arm_a_mu": 8.377438800000002,
+  "arm_a_sigma": 0.5532369421619457,
+  "arm_b_mu": 26.311458800000004,
+  "arm_b_sigma": 0.9013592070726855,
+  "delta_tps": 17.934020000000004,
+  "delta_pct": 214.0752135366241,
+  "sigma_comb": 1.057600838855284,
+  "two_sigma_threshold": 2.115201677710568,
+  "passed": true,
+  "verdict": "PROMOTED TO PROVEN"
+}

@@ -1,0 +1,14 @@
+{
+  "technique_id": 58,
+  "name": "Hardware Profiler Calibration Lock (`--hw-lock`)",
+  "arm_a_mu": 16.58654,
+  "arm_a_sigma": 0.8613976509139089,
+  "arm_b_mu": 0.021740000000000002,
+  "arm_b_sigma": 0.006541635881031593,
+  "delta_ms": 16.564799999999998,
+  "delta_pct": 99.86892986722968,
+  "sigma_comb": 0.8614224898387552,
+  "two_sigma_threshold": 1.7228449796775105,
+  "passed": true,
+  "verdict": "PROMOTED TO PROVEN"
+}

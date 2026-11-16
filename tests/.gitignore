@@ -3,6 +3,8 @@
 !snapshots/
 !fusion/
 !llama-context/
+!benchmarks/
+!benchmarks/**
 *.o
 ggml-common.h
 **/*.swp

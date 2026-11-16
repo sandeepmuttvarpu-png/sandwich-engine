@@ -1,0 +1,15 @@
+{
+  "technique_id": 18,
+  "name": "Live Cache Telemetry & Hit-Rate Counter HUD",
+  "arm_a_mu": 10.05208,
+  "arm_a_sigma": 5.6698756359377045,
+  "arm_b_mu": 118.74348,
+  "arm_b_sigma": 6.507596917987464,
+  "overhead_ms_10M": 108.6914,
+  "overhead_ns_per_event": 10.86914,
+  "overhead_us_per_token": 0.69562496,
+  "sigma_comb": 8.631124340084549,
+  "two_sigma_threshold": 17.262248680169098,
+  "passed": true,
+  "verdict": "PROMOTED TO PROVEN"
+}

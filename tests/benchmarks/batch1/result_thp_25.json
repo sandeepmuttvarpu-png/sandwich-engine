@@ -1,0 +1,14 @@
+{
+  "technique_id": 25,
+  "name": "[P2] 2MB Transparent HugePages (THP) Buffer Alignment",
+  "arm_a_mu": 141.84182,
+  "arm_a_sigma": 4.50160991835144,
+  "arm_b_mu": 82.56017999999999,
+  "arm_b_sigma": 4.4680394024672605,
+  "delta_ms": 59.281640000000024,
+  "delta_pct": 41.79419017607079,
+  "sigma_comb": 6.342544281201358,
+  "two_sigma_threshold": 12.685088562402717,
+  "passed": true,
+  "verdict": "PROMOTED TO PROVEN"
+}

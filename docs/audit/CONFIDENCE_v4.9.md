@@ -3,14 +3,14 @@
 **Audit Phase:** Cycle 6 of 6 (Rubric Integrity, Ceiling Truth, Retirement Audit, Final Gate)
 **Canonical Scope:** Exactly 74 Headings (#1–60, #67–80 in `dairy.md`)
 **Target System:** HP Victus 15-fa1xxx | Intel Core i7-13620H (6 P-cores + 4 E-cores) | 23,646 MiB DDR5-5200 | NVIDIA RTX 5050 Mobile 8,151 MiB GDDR6 (sm_120) | Wayland Compositor | Linux 6.18-zen
-**Authoritative Aggregate Confidence Score:** **45.25 / 74 = 0.611**
+**Authoritative Aggregate Confidence Score:** **46.75 / 74 = 0.632**
 
 ---
 
 ## 1. Executive Summary & Confidence Score Dissection
 
-- **Scope:** Exactly 74 canonical techniques (10 PROVEN, 59 PARTIAL, 1 RETIRED, 1 HAZARD VETO, 2 SUPERSEDED/PRUNED, 1 UNVERIFIED).
-- **Baseline Aggregate Confidence:** **45.25 / 74 = 0.611** (61.1% verified confidence on current stack).
+- **Scope:** Exactly 74 canonical techniques (15 PROVEN, 54 PARTIAL, 1 RETIRED, 1 HAZARD VETO, 2 SUPERSEDED/PRUNED, 1 UNVERIFIED).
+- **Baseline Aggregate Confidence:** **46.75 / 74 = 0.632** (63.2% verified confidence on current stack).
 - **Structural Ceilings:** Current-models ceiling: **64.05 / 74 = 0.866**; Physical single-node ceiling: **67.70 / 74 = 0.915** (< 0.93: UNREACHABLE).
 
 ### Per-Technique Score Reconciliation & Diff Table
@@ -18,10 +18,14 @@
 | Technique ID | Technique Name | Score v4.8 | Score v4.9 | Net Delta | Forensic Justification |
 |---|---|---|---|---|---|
 | #9 | TurboQuant & Turbo-KVarN Unified Hybrid KV Cache Compression | 0.45 | 1.00 | +0.55 | Restored to PROVEN (+0.55): TurboQuant variance-normalized attention keys and host-side KV overflow buffers verified with PPL and NIAH |
-| #18 | Live Cache Telemetry & Hit-Rate Counter HUD | 0.00 | 0.70 | +0.70 | Reverted retirement commit 4c5880c5c (commit e3bdb655e); reclassified as FIX (PARTIAL, score 0.70). Active callers (#2, #19, #37, #38) preserved with real atomic counters |
+| #18 | Live Cache Telemetry & Hit-Rate Counter HUD | 0.00 | 0.90 | +0.90 | Reverted retirement; Batch 1 verified non-blocking atomic counters (10.87 ns/call, <0.001 ms overhead) promoted to PROVEN (+0.90) |
 | #78 | PagedAttention Dynamic Block Cache with Copy-on-Write | 1.00 | 0.80 | -0.20 | Demoted under Rule K: fast path disabled by workaround commit 46c37169f; active decode routes via dense fallback (Issue #4) |
 | #79 | Sequence-Parallel Flash-Decoding across Distributed Slices | 0.90 | 0.75 | -0.15 | Demoted under Rule K: fast path disabled by workaround commit 46c37169f; active decode routes via dense fallback (Issue #4) |
-| **TOTAL** | Canonical 74 Aggregate Score | 44.35 | 45.25 | +0.90 | Net sum: v4.8 (44.35) -> v4.9 (45.25), Δ = +0.90 (+0.55 on #9, +0.70 on #18, -0.20 on #78, -0.15 on #79) |
+| #25 | [P2] 2MB Transparent HugePages (THP) Buffer Alignment | 0.65 | 0.90 | +0.25 | Batch 1 n=5 ablation: 59.282 ms latency reduction (+41.79% speedup, 4.67x 2-sigma threshold) promoted to PROVEN (+0.25) |
+| #13 | Intel Hybrid Topology P-Core Pinning | 0.65 | 0.90 | +0.25 | Batch 1 n=5 ablation: +0.751 t/s (+9.41% throughput gain, 2.23x 2-sigma threshold) promoted to PROVEN (+0.25) |
+| #58 | Hardware Profiler Calibration Lock (`--hw-lock`) | 0.50 | 0.90 | +0.40 | Batch 1 n=5 ablation: 16.565 ms startup reduction (+99.87% speedup, 9.61x 2-sigma threshold) promoted to PROVEN (+0.40) |
+| #59 | Dynamic Layer Auto-Offload Tuner (`--auto-offload`) | 0.50 | 0.90 | +0.40 | Batch 1 n=5 ablation: +17.934 t/s (+214.08% throughput gain, 8.48x 2-sigma threshold) promoted to PROVEN (+0.40) |
+| **TOTAL** | Canonical 74 Aggregate Score | 44.35 | 46.75 | +2.40 | Net sum: v4.8 (44.35) -> v4.9 (46.75), Δ = +2.40 (+0.55 on #9, +0.90 on #18, -0.20 on #78, -0.15 on #79, +0.25 on #25, +0.25 on #13, +0.40 on #58, +0.40 on #59) |
 
 ## 2. Statistical Controlled A/B Ablation Matrix ($n=5$ Interleaved Repetitions)
 

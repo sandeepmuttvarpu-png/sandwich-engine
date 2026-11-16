@@ -1,0 +1,14 @@
+{
+  "technique_id": 13,
+  "name": "Intel Hybrid Topology P-Core Pinning",
+  "arm_a_mu": 7.9839646,
+  "arm_a_sigma": 0.09721510814323038,
+  "arm_b_mu": 8.7353096,
+  "arm_b_sigma": 0.13710244474953776,
+  "delta_tps": 0.7513450000000006,
+  "delta_pct": 9.410675493225517,
+  "sigma_comb": 0.1680709897858641,
+  "two_sigma_threshold": 0.3361419795717282,
+  "passed": true,
+  "verdict": "PROMOTED TO PROVEN"
+}

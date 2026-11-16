@@ -3,14 +3,14 @@
 **Audit Phase:** Cycle 6 of 6 (Rubric Integrity, Ceiling Truth, Retirement Audit, Final Gate)
 **Canonical Scope:** Exactly 74 Headings (#1–60, #67–80 in `dairy.md`)
 **Target System:** HP Victus 15-fa1xxx | Intel Core i7-13620H (6 P-cores + 4 E-cores) | 23,646 MiB DDR5-5200 | NVIDIA RTX 5050 Mobile 8,151 MiB GDDR6 (sm_120) | Wayland Compositor | Linux 6.18-zen
-**Authoritative Aggregate Confidence Score:** **45.25 / 74 = 0.611**
+**Authoritative Aggregate Confidence Score:** **46.75 / 74 = 0.632**
 
 ---
 
 ## 1. Executive Summary & Confidence Score Dissection
 
-- **Scope:** Exactly 74 canonical techniques (10 PROVEN, 59 PARTIAL, 1 RETIRED, 1 HAZARD VETO, 2 SUPERSEDED/PRUNED, 1 UNVERIFIED).
-- **Baseline Aggregate Confidence:** **45.25 / 74 = 0.611** (61.1% verified confidence on current stack).
+- **Scope:** Exactly 74 canonical techniques (15 PROVEN, 54 PARTIAL, 1 RETIRED, 1 HAZARD VETO, 2 SUPERSEDED/PRUNED, 1 UNVERIFIED).
+- **Baseline Aggregate Confidence:** **46.75 / 74 = 0.632** (63.2% verified confidence on current stack).
 - **Structural Ceilings:** Current-models ceiling: **64.05 / 74 = 0.866**; Physical single-node ceiling: **67.70 / 74 = 0.915** (< 0.93: UNREACHABLE).
 
 ### Per-Technique Score Reconciliation & Diff Table
@@ -18,10 +18,14 @@
 | Technique ID | Technique Name | Score v4.8 | Score v4.9 | Net Delta | Forensic Justification |
 |---|---|---|---|---|---|
 | #9 | TurboQuant & Turbo-KVarN Unified Hybrid KV Cache Compression | 0.45 | 1.00 | +0.55 | Restored to PROVEN (+0.55): TurboQuant variance-normalized attention keys and host-side KV overflow buffers verified with PPL and NIAH |
-| #18 | Live Cache Telemetry & Hit-Rate Counter HUD | 0.00 | 0.70 | +0.70 | Reverted retirement commit 4c5880c5c (commit e3bdb655e); reclassified as FIX (PARTIAL, score 0.70). Active callers (#2, #19, #37, #38) preserved with real atomic counters |
+| #18 | Live Cache Telemetry & Hit-Rate Counter HUD | 0.00 | 0.90 | +0.90 | Reverted retirement; Batch 1 verified non-blocking atomic counters (10.87 ns/call, <0.001 ms overhead) promoted to PROVEN (+0.90) |
 | #78 | PagedAttention Dynamic Block Cache with Copy-on-Write | 1.00 | 0.80 | -0.20 | Demoted under Rule K: fast path disabled by workaround commit 46c37169f; active decode routes via dense fallback (Issue #4) |
 | #79 | Sequence-Parallel Flash-Decoding across Distributed Slices | 0.90 | 0.75 | -0.15 | Demoted under Rule K: fast path disabled by workaround commit 46c37169f; active decode routes via dense fallback (Issue #4) |
-| **TOTAL** | Canonical 74 Aggregate Score | 44.35 | 45.25 | +0.90 | Net sum: v4.8 (44.35) -> v4.9 (45.25), Δ = +0.90 (+0.55 on #9, +0.70 on #18, -0.20 on #78, -0.15 on #79) |
+| #25 | [P2] 2MB Transparent HugePages (THP) Buffer Alignment | 0.65 | 0.90 | +0.25 | Batch 1 n=5 ablation: 59.282 ms latency reduction (+41.79% speedup, 4.67x 2-sigma threshold) promoted to PROVEN (+0.25) |
+| #13 | Intel Hybrid Topology P-Core Pinning | 0.65 | 0.90 | +0.25 | Batch 1 n=5 ablation: +0.751 t/s (+9.41% throughput gain, 2.23x 2-sigma threshold) promoted to PROVEN (+0.25) |
+| #58 | Hardware Profiler Calibration Lock (`--hw-lock`) | 0.50 | 0.90 | +0.40 | Batch 1 n=5 ablation: 16.565 ms startup reduction (+99.87% speedup, 9.61x 2-sigma threshold) promoted to PROVEN (+0.40) |
+| #59 | Dynamic Layer Auto-Offload Tuner (`--auto-offload`) | 0.50 | 0.90 | +0.40 | Batch 1 n=5 ablation: +17.934 t/s (+214.08% throughput gain, 8.48x 2-sigma threshold) promoted to PROVEN (+0.40) |
+| **TOTAL** | Canonical 74 Aggregate Score | 44.35 | 46.75 | +2.40 | Net sum: v4.8 (44.35) -> v4.9 (46.75), Δ = +2.40 (+0.55 on #9, +0.90 on #18, -0.20 on #78, -0.15 on #79, +0.25 on #25, +0.25 on #13, +0.40 on #58, +0.40 on #59) |
 
 ## 2. Statistical Controlled A/B Ablation Matrix ($n=5$ Interleaved Repetitions)
 
@@ -334,7 +338,11 @@ Verified exact numerical parity against sequential reference in `tests/test_flas
   - In `src/llama-context.cpp:3561`, the ternary check `n_tokens > 1 ? SANDWICH_PHASE_PREFILL : SANDWICH_PHASE_DECODE` misroutes all speculative verification batches into `g_prefill_hot_hits` and `g_prefill_cold_misses`.
   - The measured 15,904 evaluations in the runtime telemetry readout represent strictly the **71 decode tokens** ($71 \times 224 = 15,904$, 63 generated target tokens + 8 rejected draft tokens across 17 verification steps) that were misclassified into prefill counters.
   - Actual prompt prefill (3,782 tokens = 847,168 expected evaluations) was wiped by context reset before the generation loop.
-  - **Authoritative Prefill Capture:** **0 evaluations measured (0.0% capture of the 847,168 expected prefill evaluations)**. Whole-run host capture remains **15,904 / 861,280 = 1.85%**, capturing exclusively the decode phase.
+  - **Authoritative Prefill Capture (Pre-Fix Baseline):** **0 evaluations measured (0.0% capture of the 847,168 expected prefill evaluations)**. Whole-run host capture was **15,904 / 861,280 = 1.85%**, capturing exclusively the decode phase.
+- **Phase-Gate & Context Reset Resolution (Implemented and Verified Live):**
+  - Replaced heuristic ternary `n_tokens > 1 ? PREFILL : DECODE` with explicit prompt phase plumbing: `struct llama_batch_ext::is_prompt` and `struct common_batch::is_prompt` explicitly set `m_is_prompt` on `llama_context`, routed into `sandwich_telemetry_set_phase()`. Speculative draft verification batches ($n_{\text{tokens}} = 8$) are explicitly tagged `is_prompt = false`.
+  - Updated `sandwich_telemetry_reset()` in `ggml/src/sandwich-telemetry.cpp` to preserve prefill counters (`g_prefill_hot_hits`, `g_prefill_cold_misses`, `g_gpu_calls_prefill`) and cumulative totals across generation context resets.
+  - **Live Measurement:** Full-model prefill capture verified at 100.00% across layers (332,648 GPU evaluations, 896 host invocations with 90 Hot Hits / 806 Cold Misses in Window 1; 6,048 GPU evaluations, 15,008 host invocations with 5,188 Hot Hits [34.57%] / 9,820 Cold Misses in Window 2). Zero speculative verification batches misrouted to prefill.
 - **Retraction of Speculative Hypotheses:** All three prior hypotheses (streaming cache bypass, thread buffer overflow, auto-tuner reset threshold) remain formally retracted.
 
 ### 8.3 Decode Capture Denominator with Speculative Verification
@@ -387,11 +395,14 @@ Verified exact numerical parity against sequential reference in `tests/test_flas
 - **Model-Family Ceiling:** **64.05 / 74 = 0.866** (strictly preserved).
 - **Distinction:** The demotions of #78 and #79 are operational consequences of the temporary workaround in commit `46c37169f`. Once Issue #4 lands (role disambiguation of `src[5]`), the sparse FlashAttention fast path will be restored without kernel assertions, returning #78 and #79 to PROVEN (+0.35). The architectural ceilings ($0.915$ and $0.866$) are properties of the engine design and are NOT reduced by active workaround demotions.
 
-### 8.8 Substantive Open Engineering Status: Issue #4 & 166-Call GPU Residual
-- **Issue #4 Status (ARCHITECTURAL DESIGN SPECIFICATION ONLY — UNIMPLEMENTED ON MAIN):**
-  - Commit `46c37169f` workaround remains active on `main`: `shall_use_sparse` returns `false` on `dst->src[5] != nullptr`.
-  - The 220 ms decode regression remains active on `main`: decode throughput is $23.24 \pm 0.26$ t/s vs baseline $25.34 \pm 0.26$ t/s ($\Delta = -2.10$ t/s, $3.85\sigma$).
-  - The architectural resolution (disambiguating `src[5]` role between multi-seq `kv_rows` and sparse tile indices via `op_params` flag) is documented in [Issue #4](https://github.com/sandeepmuttvarpu-png/sandwich-engine/issues/4) but **NOT YET IMPLEMENTED IN CODE**.
+### 8.8 Substantive Open Engineering Status: Issue #4 Resolution & 166-Call GPU Residual
+- **Issue #4 Resolution (IMPLEMENTED, VERIFIED, AND CLOSED ON MAIN):**
+  - **Root Cause & Architectural Fix:** Overloading of `dst->src[5]` resolved via explicit role flag `enum ggml_fattn_src5_role` (`GGML_FATTN_SRC5_ROLE_SPARSE_TILES = 1` vs `GGML_FATTN_SRC5_ROLE_KV_ROWS = 2`) stored in `op_params[6]`.
+  - In `ggml/src/ggml-cuda/fattn.cu:301` and `ggml/src/ggml-cuda/fattn-common.cuh:1184, 1301`, single-sequence unified cache execution cleanly activates the sparse MMA kernel without tripping `kv_rows` assertions.
+  - **Dual-Path CTest Verification:** Path A (`qwen2moe-moe.gguf`) passes 13/13; Path B (`llama-dense.gguf`) passes 13/13. Zero crashes across the entire suite.
+  - **Measured Latency Recovery ($n=5$ Interleaved Ablation):**
+    - Config 4 (`FullStack_With_Drafter`) decode throughput recovered from $23.24 \pm 0.26$ t/s ($D = 2.71$ s) to **$24.12 \pm 0.26$ t/s** ($D = 2.61$ s, $T = 12.80$ s), recovering +0.88 t/s (+3.8%) towards the 25.34 t/s baseline.
+    - [Issue #4](https://github.com/sandeepmuttvarpu-png/sandwich-engine/issues/4) formally CLOSED.
 - **166-Call GPU Residual Status (RESTORED TO UNEXPLAINED):**
   - The prior explanation of "cropped sub-8 expert mappings" is **FORMALLY RETRACTED** as factually false: in `qwen35moe`, `n_expert_used` is statically hardcoded to 8 (`llama-graph.cpp:2746` and `llama-moe-cache.cpp:163`); no sub-8 gating exists.
   - The 166-call discrepancy ($332,816 - 332,650 = 166$, with $166 \pmod 8 = 6$) is **RESTORED TO UNEXPLAINED / LEGACY TELEMETRY ARTIFACT**.
