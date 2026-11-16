@@ -122,7 +122,7 @@ At extended context lengths (32k–128k), standard FP16 or quantized KV caches c
 ## Formal Engineering Audit & Verification
 
 Sandwich Engine enforces a rigorous 4-tier truth scoring methodology across its catalog of 74 techniques, governed by automated ledger verification (`docs/audit/validate_ledger.py`):
-* **Authoritative Close-Out Score:** **51.10 / 74 (0.691)** (Phase 2 Batch 3 Promotion)
+* **Authoritative Close-Out Score:** **53.00 / 74 (0.716)** (Phase 2 Batch 4 Promotion)
 * **Structural Single-Node Physical Ceiling:** **0.915** (67.70 / 74)
 * **Current Model Family Ceiling:** **0.866** (64.05 / 74)
 * **CTest Verification Suite:** **73 passing out of 74 (98.6% pass rate, 0 skipped)**

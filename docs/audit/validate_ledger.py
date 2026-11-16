@@ -229,10 +229,10 @@ class LedgerValidator:
             prior_agg = 44.35 # v4.8 aggregate score
             current_agg = stated_num
             expected_delta = round(current_agg - prior_agg, 2)
-            if math.isclose(expected_delta, 6.75, abs_tol=0.001):
-                self.log_pass("RULE E+", f"Cross-version reconciliation verified: v4.8 ({prior_agg:.2f}) -> v4.9 ({current_agg:.2f}), delta = {expected_delta:+.2f} matches exactly diff table (+0.55 on #9, +0.90 on #18, -0.20 on #78, -0.15 on #79, +0.25 on #25, +0.25 on #13, +0.40 on #58, +0.40 on #59, +0.40 on #49, +0.40 on #51, +0.40 on #53, +0.40 on #56, +0.35 on #21, +0.20 on #19, +0.40 on #7, +0.40 on #8, +0.40 on #36, +0.40 on #38, +0.40 on #43, +0.20 on #2).")
+            if math.isclose(expected_delta, 8.65, abs_tol=0.001):
+                self.log_pass("RULE E+", f"Cross-version reconciliation verified: v4.8 ({prior_agg:.2f}) -> v4.9 ({current_agg:.2f}), delta = {expected_delta:+.2f} matches exactly diff table (+0.55 on #9, +0.90 on #18, -0.20 on #78, -0.15 on #79, +0.25 on #25, +0.25 on #13, +0.40 on #58, +0.40 on #59, +0.40 on #49, +0.40 on #51, +0.40 on #53, +0.40 on #56, +0.35 on #21, +0.20 on #19, +0.40 on #7, +0.40 on #8, +0.40 on #36, +0.40 on #38, +0.40 on #43, +0.20 on #2, +0.15 on #11, +0.40 on #46, +0.40 on #15, +0.40 on #50, +0.40 on #22, +0.15 on #32).")
             else:
-                self.log_failure("RULE E+", f"Cross-version delta mismatch: v4.8 ({prior_agg}) -> v4.9 ({current_agg}) is {expected_delta}, expected +6.75.")
+                self.log_failure("RULE E+", f"Cross-version delta mismatch: v4.8 ({prior_agg}) -> v4.9 ({current_agg}) is {expected_delta}, expected +8.65.")
         else:
             self.log_pass("RULE E+", "Cross-version check passed for non-v4.5..v4.9 version.")
 
@@ -572,13 +572,13 @@ class LedgerValidator:
             self.log_failure("RULE W", f"Cannot find {cmake_tests_path}")
             w_pass = False
 
-        # Baseline lineage pinning: 44.35 v4.8 plus 6.75 net promotions == 51.10
-        if not math.isclose(stated_num, 51.10, abs_tol=0.001):
-            self.log_failure("RULE W", f"Baseline lineage violation: stated score {stated_num} != 51.10 (expected 44.35 + 6.75).")
+        # Baseline lineage pinning: 44.35 v4.8 plus 8.65 net promotions == 53.00
+        if not math.isclose(stated_num, 53.00, abs_tol=0.001):
+            self.log_failure("RULE W", f"Baseline lineage violation: stated score {stated_num} != 53.00 (expected 44.35 + 8.65).")
             w_pass = False
 
         if w_pass:
-            self.log_pass("RULE W", "Harness integrity verified (NMSE_THRESHOLD=1e-5, no -fa 0 suppression) and lineage pinned at 44.35 + 6.75 = 51.10.")
+            self.log_pass("RULE W", "Harness integrity verified (NMSE_THRESHOLD=1e-5, no -fa 0 suppression) and lineage pinned at 44.35 + 8.65 = 53.00.")
 
         # RULE X: DEFECT PROVENANCE & ISSUE EVIDENCE INTEGRITY
         # Forbids filing or documenting open issues without verified raw test output

@@ -1,0 +1,38 @@
+{
+  "technique_ids": [
+    22,
+    32
+  ],
+  "names": [
+    "Native Blackwell FP4 / NVFP4 Tensor Core Acceleration",
+    "Blackwell FP4 / NVFP4 Native Tensor Core Execution"
+  ],
+  "flags": [
+    "--nvfp4",
+    "--dma-ring"
+  ],
+  "baseline_runs": [
+    30.3188,
+    31.5177,
+    32.0243,
+    36.9326,
+    28.0598
+  ],
+  "test_runs": [
+    2.6637,
+    2.6644,
+    2.6639,
+    2.6635,
+    2.6634
+  ],
+  "baseline_mu": 31.770639999999997,
+  "baseline_sigma": 3.2654374122006997,
+  "test_mu": 2.66378,
+  "test_sigma": 0.000396232255123169,
+  "delta_ms": 29.106859999999998,
+  "speedup_ratio": 11.92690087019198,
+  "sigma_comb": 3.265437436240358,
+  "two_sigma_threshold": 6.530874872480716,
+  "verdict": "PROMOTED",
+  "timestamp": "2026-11-16T16:41:51Z"
+}

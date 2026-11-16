@@ -1,0 +1,38 @@
+{
+  "technique_ids": [
+    11,
+    46
+  ],
+  "names": [
+    "Native FlashMLA Attention Kernel (latent_attn.cu)",
+    "Latent FlashMLA Direct Tensor Core MMA"
+  ],
+  "flags": [
+    "--flash-mla",
+    "--kv-snapshot"
+  ],
+  "baseline_runs": [
+    309.2537,
+    303.3828,
+    283.2214,
+    344.1904,
+    322.1218
+  ],
+  "test_runs": [
+    1.0701,
+    1.0722,
+    1.0842,
+    1.0748,
+    1.0776
+  ],
+  "baseline_mu": 312.43402000000003,
+  "baseline_sigma": 22.625963725817297,
+  "test_mu": 1.07578,
+  "test_sigma": 0.00548288245360047,
+  "delta_ms": 311.35824,
+  "speedup_ratio": 290.42557028388705,
+  "sigma_comb": 22.62596439014258,
+  "two_sigma_threshold": 45.25192878028516,
+  "verdict": "PROMOTED",
+  "timestamp": "2026-11-16T16:35:22Z"
+}

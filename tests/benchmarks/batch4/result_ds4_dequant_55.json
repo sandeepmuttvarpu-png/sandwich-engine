@@ -1,0 +1,29 @@
+{
+  "technique_id": 55,
+  "name": "Sub-2-bit MoE Expert Dequantization",
+  "flag": "--fused-expdec",
+  "baseline_runs": [
+    5.978,
+    6.0919,
+    7.5746,
+    6.9395,
+    6.1177
+  ],
+  "test_runs": [
+    6.3385,
+    5.834,
+    7.2226,
+    8.1458,
+    5.7926
+  ],
+  "baseline_mu": 6.5403400000000005,
+  "baseline_sigma": 0.6937167527168421,
+  "test_mu": 6.6667000000000005,
+  "test_sigma": 1.0077098987307804,
+  "delta_ms": -0.12636000000000003,
+  "sigma_comb": 1.2234059722757609,
+  "two_sigma_threshold": 2.4468119445515217,
+  "verdict": "KEPT PARTIAL (Rule K Veto - No Fused CUDA Kernel)",
+  "rule_k_veto": true,
+  "timestamp": "2026-11-16T16:43:44Z"
+}

@@ -1,0 +1,38 @@
+{
+  "technique_ids": [
+    15,
+    50
+  ],
+  "names": [
+    "LFM2 Hybrid Recurrent State Rollback",
+    "KVA Late-Layer Recurrence Prefill"
+  ],
+  "flags": [
+    "--rs-rollback",
+    "--kv-defrag"
+  ],
+  "baseline_runs": [
+    6.6619,
+    6.9126,
+    6.8366,
+    6.7452,
+    6.6748
+  ],
+  "test_runs": [
+    0.1387,
+    0.1387,
+    0.1534,
+    0.132,
+    0.1486
+  ],
+  "baseline_mu": 6.76622,
+  "baseline_sigma": 0.10731095936576095,
+  "test_mu": 0.14228000000000002,
+  "test_sigma": 0.008586442802464829,
+  "delta_ms": 6.623939999999999,
+  "speedup_ratio": 47.55566488614,
+  "sigma_comb": 0.10765393165138001,
+  "two_sigma_threshold": 0.21530786330276003,
+  "verdict": "PROMOTED",
+  "timestamp": "2026-11-16T16:39:22Z"
+}
