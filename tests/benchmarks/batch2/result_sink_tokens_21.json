@@ -1,0 +1,15 @@
+{
+  "technique_id": 21,
+  "name": "Streaming Attention Sink / Sliding-Window KV Compaction (`--sink-tokens`)",
+  "arm_a_retention_mu": 25.0,
+  "arm_a_retention_sigma": 0.0,
+  "arm_b_retention_mu": 100.0,
+  "arm_b_retention_sigma": 0.0,
+  "delta_retention_pct": 75.0,
+  "arm_a_latency_us": 7.096000000000001,
+  "arm_b_latency_us": 7.756,
+  "sigma_comb": 0.0,
+  "two_sigma_threshold": 0.01,
+  "passed": true,
+  "verdict": "PROMOTED TO PROVEN"
+}

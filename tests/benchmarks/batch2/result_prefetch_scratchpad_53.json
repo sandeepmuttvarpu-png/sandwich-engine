@@ -1,0 +1,14 @@
+{
+  "technique_id": 53,
+  "name": "Per-Layer Pinned Prefetch Scratchpads (`--prefetch-scratchpad`)",
+  "arm_a_mu": 62.9948,
+  "arm_a_sigma": 8.425135885254313,
+  "arm_b_mu": 23.50124,
+  "arm_b_sigma": 1.3298735402285438,
+  "delta_ms": 39.49356,
+  "delta_pct": 62.69336516664868,
+  "sigma_comb": 8.529447714711662,
+  "two_sigma_threshold": 17.058895429423323,
+  "passed": true,
+  "verdict": "PROMOTED TO PROVEN"
+}

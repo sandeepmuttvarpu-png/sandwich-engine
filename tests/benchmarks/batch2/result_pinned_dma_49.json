@@ -1,0 +1,17 @@
+{
+  "technique_id": 49,
+  "name": "Zero-Copy Pinned Staging Pool (`--dma-staging-pool`)",
+  "arm_a_latency_mu": 6.78224,
+  "arm_a_latency_sigma": 0.12697079585479498,
+  "arm_b_latency_mu": 2.47394,
+  "arm_b_latency_sigma": 0.042817905133250074,
+  "delta_latency_ms": 4.3083,
+  "delta_pct": 63.52326075161009,
+  "arm_a_bandwidth_mu": 9.21782,
+  "arm_b_bandwidth_mu": 25.269260000000003,
+  "delta_bandwidth_gb_s": 16.051440000000003,
+  "sigma_comb": 0.1339961044209869,
+  "two_sigma_threshold": 0.2679922088419738,
+  "passed": true,
+  "verdict": "PROMOTED TO PROVEN"
+}

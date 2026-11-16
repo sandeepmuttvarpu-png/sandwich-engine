@@ -1,0 +1,14 @@
+{
+  "technique_id": 51,
+  "name": "Contiguous Single-Allocation Expert Slabs (`--moe-slab-alloc`)",
+  "arm_a_mu": 92.3836,
+  "arm_a_sigma": 0.15496462499551322,
+  "arm_b_mu": 32.8968,
+  "arm_b_sigma": 0.05674037363289086,
+  "delta_ms": 59.4868,
+  "delta_pct": 64.39108239990648,
+  "sigma_comb": 0.16502577071475866,
+  "two_sigma_threshold": 0.3300515414295173,
+  "passed": true,
+  "verdict": "PROMOTED TO PROVEN"
+}

@@ -1,0 +1,14 @@
+{
+  "technique_id": 56,
+  "name": "Speculative Batch Cascade Verification (`--spec-cascade`)",
+  "arm_a_mu": 66.14000000000001,
+  "arm_a_sigma": 0.673052746818552,
+  "arm_b_mu": 127.92,
+  "arm_b_sigma": 7.394727851652147,
+  "delta_tps": 61.77999999999999,
+  "delta_pct": 93.4079225884487,
+  "sigma_comb": 7.425294606949947,
+  "two_sigma_threshold": 14.850589213899895,
+  "passed": true,
+  "verdict": "PROMOTED TO PROVEN"
+}

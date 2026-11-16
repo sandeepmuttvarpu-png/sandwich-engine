@@ -8,7 +8,7 @@
 [![C++ Standard: C++17](https://img.shields.io/badge/C%2B%2B-17-blue.svg)](CMakeLists.txt)
 [![CTest: 73/74 Passing](https://img.shields.io/badge/CTest-73%2F74%20(98.6%25)-brightgreen)](docs/audit/)
 [![Parity: Bit-Identical Verified](https://img.shields.io/badge/Parity-Bit--Identical%20(SHA256)-success)](docs/audit/)
-[![Audit Score: 0.632 / 0.915](https://img.shields.io/badge/Audited%20Score-0.632%20%7C%20Ceiling%200.915-orange)](docs/techniques.md)
+[![Audit Score: 0.661 / 0.915](https://img.shields.io/badge/Audited%20Score-0.661%20%7C%20Ceiling%200.915-orange)](docs/techniques.md)
 [![Hardware Target: Consumer Asymmetric Silicon](https://img.shields.io/badge/Hardware-VRAM%20%2B%20DDR5%20%2B%20NVMe-purple)](#)
 
 ---
@@ -122,7 +122,7 @@ At extended context lengths (32k–128k), standard FP16 or quantized KV caches c
 ## Formal Engineering Audit & Verification
 
 Sandwich Engine enforces a rigorous 4-tier truth scoring methodology across its catalog of 74 techniques, governed by automated ledger verification (`docs/audit/validate_ledger.py`):
-* **Authoritative Close-Out Score:** **46.75 / 74 (0.632)** (Phase 2 Batch 1 Promotion)
+* **Authoritative Close-Out Score:** **48.90 / 74 (0.661)** (Phase 2 Batch 2 Promotion)
 * **Structural Single-Node Physical Ceiling:** **0.915** (67.70 / 74)
 * **Current Model Family Ceiling:** **0.866** (64.05 / 74)
 * **CTest Verification Suite:** **73 passing out of 74 (98.6% pass rate, 0 skipped)**

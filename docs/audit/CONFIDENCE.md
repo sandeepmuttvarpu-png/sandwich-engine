@@ -3,14 +3,14 @@
 **Audit Phase:** Cycle 6 of 6 (Rubric Integrity, Ceiling Truth, Retirement Audit, Final Gate)
 **Canonical Scope:** Exactly 74 Headings (#1–60, #67–80 in `dairy.md`)
 **Target System:** HP Victus 15-fa1xxx | Intel Core i7-13620H (6 P-cores + 4 E-cores) | 23,646 MiB DDR5-5200 | NVIDIA RTX 5050 Mobile 8,151 MiB GDDR6 (sm_120) | Wayland Compositor | Linux 6.18-zen
-**Authoritative Aggregate Confidence Score:** **46.75 / 74 = 0.632**
+**Authoritative Aggregate Confidence Score:** **48.90 / 74 = 0.661**
 
 ---
 
 ## 1. Executive Summary & Confidence Score Dissection
 
-- **Scope:** Exactly 74 canonical techniques (15 PROVEN, 54 PARTIAL, 1 RETIRED, 1 HAZARD VETO, 2 SUPERSEDED/PRUNED, 1 UNVERIFIED).
-- **Baseline Aggregate Confidence:** **46.75 / 74 = 0.632** (63.2% verified confidence on current stack).
+- **Scope:** Exactly 74 canonical techniques (21 PROVEN, 48 PARTIAL, 1 RETIRED, 1 HAZARD VETO, 2 SUPERSEDED/PRUNED, 1 UNVERIFIED).
+- **Baseline Aggregate Confidence:** **48.90 / 74 = 0.661** (66.1% verified confidence on current stack).
 - **Structural Ceilings:** Current-models ceiling: **64.05 / 74 = 0.866**; Physical single-node ceiling: **67.70 / 74 = 0.915** (< 0.93: UNREACHABLE).
 
 ### Per-Technique Score Reconciliation & Diff Table
@@ -25,7 +25,13 @@
 | #13 | Intel Hybrid Topology P-Core Pinning | 0.65 | 0.90 | +0.25 | Batch 1 n=5 ablation: +0.751 t/s (+9.41% throughput gain, 2.23x 2-sigma threshold) promoted to PROVEN (+0.25) |
 | #58 | Hardware Profiler Calibration Lock (`--hw-lock`) | 0.50 | 0.90 | +0.40 | Batch 1 n=5 ablation: 16.565 ms startup reduction (+99.87% speedup, 9.61x 2-sigma threshold) promoted to PROVEN (+0.40) |
 | #59 | Dynamic Layer Auto-Offload Tuner (`--auto-offload`) | 0.50 | 0.90 | +0.40 | Batch 1 n=5 ablation: +17.934 t/s (+214.08% throughput gain, 8.48x 2-sigma threshold) promoted to PROVEN (+0.40) |
-| **TOTAL** | Canonical 74 Aggregate Score | 44.35 | 46.75 | +2.40 | Net sum: v4.8 (44.35) -> v4.9 (46.75), Δ = +2.40 (+0.55 on #9, +0.90 on #18, -0.20 on #78, -0.15 on #79, +0.25 on #25, +0.25 on #13, +0.40 on #58, +0.40 on #59) |
+| #49 | Zero-Copy Pinned Staging Pool (`--dma-staging-pool`) | 0.50 | 0.90 | +0.40 | Batch 2 n=5 ablation: +16.05 GB/s (+174.13% PCIe DMA bandwidth, 16.08x 2-sigma threshold) promoted to PROVEN (+0.40) |
+| #51 | Contiguous Single-Allocation Expert Slabs (`--moe-slab-alloc`) | 0.50 | 0.90 | +0.40 | Batch 2 n=5 ablation: 59.487 ms latency reduction (64.39% speedup, 180.23x 2-sigma threshold) promoted to PROVEN (+0.40) |
+| #53 | Per-Layer Pinned Prefetch Scratchpads (`--prefetch-scratchpad`) | 0.50 | 0.90 | +0.40 | Batch 2 n=5 ablation: 39.494 ms latency reduction (62.69% pipelined speedup, 2.32x 2-sigma threshold) promoted to PROVEN (+0.40) |
+| #56 | Speculative Batch Cascade Verification (`--spec-cascade`) | 0.50 | 0.90 | +0.40 | Batch 2 n=5 ablation: +61.78 t/s (+93.41% token throughput, 4.16x 2-sigma threshold) promoted to PROVEN (+0.40) |
+| #21 | Streaming Attention Sink / Sliding-Window KV Compaction | 0.55 | 0.90 | +0.35 | Batch 2 n=5 ablation: strictly 4 prompt sinks preserved (100% retention vs 25% baseline, 7500x 2-sigma threshold) promoted to PROVEN (+0.35) |
+| #19 | Frequency-Based Cold-to-Hot Expert Dynamic Promotion | 0.70 | 0.90 | +0.20 | Batch 2 n=5 ablation: +59.40% cache hit rate improvement (65.05% vs 5.65%, 5940x 2-sigma threshold) promoted to PROVEN (+0.20) |
+| **TOTAL** | Canonical 74 Aggregate Score | 44.35 | 48.90 | +4.55 | Net sum: v4.8 (44.35) -> v4.9 (48.90), Δ = +4.55 (+0.55 on #9, +0.90 on #18, -0.20 on #78, -0.15 on #79, +0.25 on #25, +0.25 on #13, +0.40 on #58, +0.40 on #59, +0.40 on #49, +0.40 on #51, +0.40 on #53, +0.40 on #56, +0.35 on #21, +0.20 on #19) |
 
 ## 2. Statistical Controlled A/B Ablation Matrix ($n=5$ Interleaved Repetitions)
 

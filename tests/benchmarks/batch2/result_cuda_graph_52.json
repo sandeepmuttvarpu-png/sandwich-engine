@@ -1,0 +1,14 @@
+{
+  "technique_id": 52,
+  "name": "Static Graph Hot GEMM Substitution (`--cuda-graph-hot-gemm`)",
+  "arm_a_mu": 67.12,
+  "arm_a_sigma": 0.0836660026534096,
+  "arm_b_mu": 67.12,
+  "arm_b_sigma": 0.3701351104664373,
+  "delta_tps": 0.0,
+  "delta_pct": 0.0,
+  "sigma_comb": 0.37947331922020827,
+  "two_sigma_threshold": 0.7589466384404165,
+  "passed": false,
+  "verdict": "KEPT PARTIAL (Inside Noise)"
+}

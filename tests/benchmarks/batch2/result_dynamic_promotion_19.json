@@ -1,0 +1,13 @@
+{
+  "technique_id": 19,
+  "name": "Frequency-Based Cold-to-Hot Expert Dynamic Promotion (`--moe-cache-profile`)",
+  "arm_a_mu": 5.65,
+  "arm_a_sigma": 0.0,
+  "arm_b_mu": 65.05,
+  "arm_b_sigma": 0.0,
+  "delta_hit_rate_pct": 59.4,
+  "sigma_comb": 0.0,
+  "two_sigma_threshold": 0.01,
+  "passed": true,
+  "verdict": "PROMOTED TO PROVEN"
+}
