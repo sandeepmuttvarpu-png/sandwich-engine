@@ -1,0 +1,74 @@
+{
+  "issue_id": 7,
+  "title": "Recurrent / Hybrid state_load NMSE Divergence",
+  "timestamp": "2026-11-18T14:30:58Z",
+  "target_count": 5,
+  "failures_detected": 5,
+  "results": [
+    {
+      "model": "kolibri1-moe.gguf",
+      "status": "FAIL",
+      "step": 1,
+      "measured_nmse": 2.723098e-05,
+      "threshold": 1e-05,
+      "nmse_ratio": 2.723098,
+      "raw_output": [
+        "baseline    \u001b[1;32mOK\u001b[0m",
+        "generate_tokens_compare: error: NMSE at step 1 is 2.723098e-05 (threshold 1.0e-05)",
+        "state_load  \u001b[1;31mFAIL\u001b[0m"
+      ]
+    },
+    {
+      "model": "mimo2-moe.gguf",
+      "status": "FAIL",
+      "step": 0,
+      "measured_nmse": 0.0001082131,
+      "threshold": 1e-05,
+      "nmse_ratio": 10.821309999999999,
+      "raw_output": [
+        "baseline    \u001b[1;32mOK\u001b[0m",
+        "generate_tokens_compare: error: NMSE at step 0 is 1.082131e-04 (threshold 1.0e-05)",
+        "state_load  \u001b[1;31mFAIL\u001b[0m"
+      ]
+    },
+    {
+      "model": "muse-spark-moe.gguf",
+      "status": "FAIL",
+      "step": 2,
+      "measured_nmse": 1.646647e-05,
+      "threshold": 1e-05,
+      "nmse_ratio": 1.646647,
+      "raw_output": [
+        "baseline    \u001b[1;32mOK\u001b[0m",
+        "generate_tokens_compare: error: NMSE at step 2 is 1.646647e-05 (threshold 1.0e-05)",
+        "state_load  \u001b[1;31mFAIL\u001b[0m"
+      ]
+    },
+    {
+      "model": "olmo2-dense.gguf",
+      "status": "FAIL",
+      "step": 0,
+      "measured_nmse": 2.976436e-05,
+      "threshold": 1e-05,
+      "nmse_ratio": 2.9764359999999996,
+      "raw_output": [
+        "baseline    \u001b[1;32mOK\u001b[0m",
+        "generate_tokens_compare: error: NMSE at step 0 is 2.976436e-05 (threshold 1.0e-05)",
+        "state_load  \u001b[1;31mFAIL\u001b[0m"
+      ]
+    },
+    {
+      "model": "plamo3-dense.gguf",
+      "status": "FAIL",
+      "step": 0,
+      "measured_nmse": 0.0224014,
+      "threshold": 1e-05,
+      "nmse_ratio": 2240.14,
+      "raw_output": [
+        "baseline    \u001b[1;32mOK\u001b[0m",
+        "generate_tokens_compare: error: NMSE at step 0 is 2.240140e-02 (threshold 1.0e-05)",
+        "state_load  \u001b[1;31mFAIL\u001b[0m"
+      ]
+    }
+  ]
+}

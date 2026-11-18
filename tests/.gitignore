@@ -5,6 +5,8 @@
 !llama-context/
 !benchmarks/
 !benchmarks/**
+!diagnostics/
+!diagnostics/**
 *.o
 ggml-common.h
 **/*.swp
