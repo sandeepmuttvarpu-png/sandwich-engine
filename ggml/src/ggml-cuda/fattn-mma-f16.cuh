@@ -2644,7 +2644,16 @@ void ggml_cuda_flash_attn_ext_mma_f16_case(ggml_backend_cuda_context & ctx, ggml
             }
         } else
         if constexpr (!is_quant_kv && ggml_cuda_flash_attn_ext_mma_f16_may_use_sparse(DKQ, DV, ncols1, ncols2)) {
-            if (ggml_cuda_flash_attn_ext_mma_f16_shall_use_sparse(cc, dst, ncols1, ncols2)) {
+            bool use_sparse_choice = ggml_cuda_flash_attn_ext_mma_f16_shall_use_sparse(cc, dst, ncols1, ncols2);
+            const char * env_fattn_mode = getenv("SANDWICH_FATTN_FORCE_MODE");
+            if (env_fattn_mode && dst->src[0]->ne[1] == 1) {
+                if (strcmp(env_fattn_mode, "dense") == 0) {
+                    use_sparse_choice = false;
+                } else if (strcmp(env_fattn_mode, "sparse") == 0) {
+                    use_sparse_choice = true;
+                }
+            }
+            if (use_sparse_choice) {
                 constexpr bool use_sparse_kernel = true;
                 fattn_kernel = flash_attn_ext_f16<DKQ, DV, ncols1, ncols2, use_logit_softcap, V_is_K_view, use_sparse_kernel, type_K, type_V>;
                 use_sparse = true;

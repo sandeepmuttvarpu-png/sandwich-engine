@@ -306,7 +306,8 @@ bool ggml_cuda_flash_attn_ext_mma_f16_shall_use_sparse(const int cc, const ggml_
         return false;
     }
 
-    const int64_t n_kv_max = ggml_cuda_fattn_sparse_n_kv(dst, ncols1);
+    const int64_t n_kv_max = (src5_role == GGML_FATTN_SRC5_ROLE_SPARSE_TILES && dst->src[5] != nullptr) ?
+        dst->src[5]->ne[0] : ggml_cuda_fattn_sparse_n_kv(dst, ncols1);
 
     // the dense kernel handles up to 64/ncols2 queries per K/V pass, the single-query gather has to beat that
     const int64_t n_gather = (ncols1 == 1 ? std::min<int64_t>(Q->ne[1], 64/ncols2) : 1) * n_kv_max;
@@ -1021,8 +1022,10 @@ static best_fattn_kernel ggml_cuda_get_best_fattn_kernel(
         float logit_softcap = 0.0f;
         memcpy(&logit_softcap, (const float *) KQV->op_params + 2, sizeof(float));
         const ggml_tensor * rows = dst->src[5];
+        const enum ggml_fattn_src5_role src5_role = ggml_flash_attn_ext_get_src5_role(dst);
         if (!turing_mma_available(cc) || (K->ne[0] != 128 && K->ne[0] != 256) || V->ne[0] != K->ne[0] ||
-                mask == nullptr || max_bias != 0.0f || logit_softcap != 0.0f || ggml_get_op_params_i32(dst, 4) > 0 ||
+                mask == nullptr || max_bias != 0.0f || logit_softcap != 0.0f ||
+                (src5_role == GGML_FATTN_SRC5_ROLE_KV_ROWS && ggml_get_op_params_i32(dst, 4) > 0) ||
                 rows->type != GGML_TYPE_I32 || rows->ne[0] % FATTN_KQ_STRIDE != 0 || mask->ne[0] != rows->ne[0]) {
             return BEST_FATTN_KERNEL_NONE;
         }

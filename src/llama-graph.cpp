@@ -3217,6 +3217,7 @@ ggml_tensor * llm_graph_context::build_attn_mha(
             ggml_flash_attn_ext_set_src5_role(cur, GGML_FATTN_SRC5_ROLE_NONE);
         }
         res->add_fused_node({kv_rows ? LLM_FUSED_OP_FLASH_ATTN_KV_ROWS : LLM_FUSED_OP_FLASH_ATTN, cur, il});
+        ggml_format_name(cur, "fattn_l%d", (int)il);
 
         ggml_flash_attn_ext_add_sinks(cur, sinks);
         GGML_ASSERT(n_kv_max >= 0 && n_kv_max <= INT32_MAX);

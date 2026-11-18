@@ -1313,6 +1313,9 @@ void launch_fattn(
     } else if (use_sparse) {
         GGML_ASSERT(mask != nullptr);
         n_kv_max = ggml_cuda_fattn_sparse_n_kv(KQV, ncols1);
+        if (n_kv_max <= 0) {
+            n_kv_max = K->ne[1];
+        }
         GGML_ASSERT(n_kv_max > 0);
         GGML_ASSERT(mask->ne[2] == 1);
         n_kv_max = GGML_PAD(n_kv_max, FATTN_KQ_STRIDE);
@@ -1497,6 +1500,15 @@ void launch_fattn(
         mask_nb[3] = mask_nb[2];
     }
 
+    cudaEvent_t ev_start = nullptr, ev_stop = nullptr;
+    const char * env_prof = getenv("SANDWICH_PROFILE_FATTN");
+    const bool do_profile = (env_prof && env_prof[0] != '0');
+    if (do_profile) {
+        CUDA_CHECK(cudaEventCreate(&ev_start));
+        CUDA_CHECK(cudaEventCreate(&ev_stop));
+        CUDA_CHECK(cudaEventRecord(ev_start, main_stream));
+    }
+
     ggml_cuda_kernel_launch_params launch_params = ggml_cuda_kernel_launch_params(blocks_num, block_dim, nbytes_shared, main_stream);
     ggml_cuda_kernel_launch(fattn_kernel, launch_params,
         (const char *) Q->data,
@@ -1562,4 +1574,15 @@ void launch_fattn(
             dst_tmp.ptr, dst_tmp_meta.ptr, (float *) KQV->data, parallel_blocks);
     }
     CUDA_CHECK(cudaGetLastError());
+
+    if (do_profile) {
+        CUDA_CHECK(cudaEventRecord(ev_stop, main_stream));
+        CUDA_CHECK(cudaEventSynchronize(ev_stop));
+        float elapsed_ms = 0.0f;
+        CUDA_CHECK(cudaEventElapsedTime(&elapsed_ms, ev_start, ev_stop));
+        CUDA_CHECK(cudaEventDestroy(ev_start));
+        CUDA_CHECK(cudaEventDestroy(ev_stop));
+        fprintf(stderr, "[FATTN_CUDAEVENT] layer=%s q1=%ld n_kv=%ld sparse=%d ms=%.4f\n",
+                dst->name, (long)Q->ne[1], (long)n_kv, (int)use_sparse, elapsed_ms);
+    }
 }
