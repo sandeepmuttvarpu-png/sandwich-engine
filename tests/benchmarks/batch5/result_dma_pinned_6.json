@@ -1,0 +1,19 @@
+{
+  "technique_id": 6,
+  "name": "Pinned Host Memory & Zero-Copy PCIe DMA (`cudaHostRegister`)",
+  "arm_a_latency_mu": 13.714580000000002,
+  "arm_a_latency_sigma": 0.33997700951682014,
+  "arm_b_latency_mu": 5.0235,
+  "arm_b_latency_sigma": 0.12964715577289018,
+  "delta_latency_ms": 8.691080000000001,
+  "delta_pct": 63.371098495178124,
+  "arm_a_bandwidth_mu": 9.118739999999999,
+  "arm_a_bandwidth_sigma": 0.21987249259514013,
+  "arm_b_bandwidth_mu": 24.89604,
+  "arm_b_bandwidth_sigma": 0.6327322522204792,
+  "delta_bandwidth_gb_s": 15.7773,
+  "sigma_comb_lat": 0.36385814818415163,
+  "two_sigma_threshold_lat": 0.7277162963683033,
+  "passed": true,
+  "verdict": "PROMOTED TO PROVEN"
+}
