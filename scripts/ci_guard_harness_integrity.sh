@@ -20,7 +20,14 @@ if grep -q "\-fa 0" "${REPO_ROOT}/tests/CMakeLists.txt"; then
 fi
 echo "✓ FlashAttention flags intact (no -fa 0 suppression)."
 
-# 3. Assert baseline lineage in docs/audit/technique_ledger_v4.9.json
+# 3. Assert zero test exclusions (-E or --exclude-regex) in scripts/ or tests/
+if grep -rnE "(^|[ ;])ctest [^|]*(-E|--exclude-regex)" "${REPO_ROOT}/scripts/" "${REPO_ROOT}/tests/" 2>/dev/null; then
+    echo "🚨 ERROR: Test exclusion flag (-E / --exclude-regex) detected! Zero test exclusions permitted." >&2
+    exit 1
+fi
+echo "✓ Zero test exclusions verified across scripts and tests."
+
+# 4. Assert baseline lineage and Rule W in docs/audit/technique_ledger_v4.9.json
 python3 "${REPO_ROOT}/docs/audit/validate_ledger.py"
 
 echo "=== [CI GUARD] All Integrity Checks Passed Successfully ==="

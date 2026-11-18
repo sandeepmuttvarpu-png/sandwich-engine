@@ -572,13 +572,29 @@ class LedgerValidator:
             self.log_failure("RULE W", f"Cannot find {cmake_tests_path}")
             w_pass = False
 
+        # Zero-exclusion gate: forbid -E or --exclude-regex test suppression in scripts/ or tests/
+        exclusion_found = []
+        for check_dir in [os.path.join(REPO_ROOT, "scripts"), os.path.join(REPO_ROOT, "tests")]:
+            if os.path.exists(check_dir):
+                for root, _, files in os.walk(check_dir):
+                    for file in files:
+                        if file.endswith((".sh", ".py", ".cmake")):
+                            fp = os.path.join(root, file)
+                            with open(fp, "r", errors="ignore") as f_in:
+                                content = f_in.read()
+                                if re.search(r"\bctest\b(?:(?!\|).)*\s+(-E|--exclude-regex)\b", content):
+                                    exclusion_found.append(os.path.relpath(fp, REPO_ROOT))
+        if exclusion_found:
+            self.log_failure("RULE W", f"Test exclusion flags (-E / --exclude-regex) detected in test/CI runners: {exclusion_found}. Zero exclusions permitted.")
+            w_pass = False
+
         # Baseline lineage pinning: 44.35 v4.8 plus 8.65 net promotions == 53.00
         if not math.isclose(stated_num, 53.00, abs_tol=0.001):
             self.log_failure("RULE W", f"Baseline lineage violation: stated score {stated_num} != 53.00 (expected 44.35 + 8.65).")
             w_pass = False
 
         if w_pass:
-            self.log_pass("RULE W", "Harness integrity verified (NMSE_THRESHOLD=1e-5, no -fa 0 suppression) and lineage pinned at 44.35 + 8.65 = 53.00.")
+            self.log_pass("RULE W", "Harness integrity verified (NMSE_THRESHOLD=1e-5, no -fa 0, zero test exclusions -E/--exclude-regex) and lineage pinned at 44.35 + 8.65 = 53.00.")
 
         # RULE X: DEFECT PROVENANCE & ISSUE EVIDENCE INTEGRITY
         # Forbids filing or documenting open issues without verified raw test output

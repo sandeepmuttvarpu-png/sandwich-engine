@@ -923,7 +923,7 @@ static __device__ __forceinline__ void flash_attn_ext_f16_iter(
             __syncthreads();
         } else {
             flash_attn_ext_f16_load_tile<stride_tile_V, nwarps, nbatch_fa, use_cp_async, oob_check, use_sparse>
-                (V_h2, tile_V, nbatch_V2, stride_V, k_VKQ_0, k_VKQ_sup, nullptr);
+                (V_h2, tile_V, nbatch_V2, stride_V, k_VKQ_0, k_VKQ_sup, indices);
         }
     } else {
         // the sparse mask values are gathered per element, always load them synchronously
@@ -1369,7 +1369,7 @@ static __device__ __forceinline__ void flash_attn_ext_f16_iter(
                 flash_attn_ext_quant_stage_tile<type_K, DKQ, nthreads, nbatch_fa, gather_quant>((const char *) K_h2, raw_K, k_VKQ_0 + nbatch_fa, stride_K, indices);
             } else {
                 flash_attn_ext_f16_load_tile<stride_tile_K, nwarps, nbatch_fa, use_cp_async, oob_check, use_sparse>
-                    (K_h2, tile_K, nbatch_K2, stride_K, k_VKQ_0 + nbatch_fa, k_VKQ_sup, nullptr);
+                    (K_h2, tile_K, nbatch_K2, stride_K, k_VKQ_0 + nbatch_fa, k_VKQ_sup, indices);
             }
         }
         if constexpr (is_quant_kv && !stage_shadow) {
@@ -1809,7 +1809,7 @@ static __device__ __forceinline__ void flash_attn_ext_f16_process_tile(
             }
         } else {
             flash_attn_ext_f16_load_tile<stride_tile_K, nwarps, nbatch_fa, use_cp_async, oob_check, use_sparse>
-                (K_h2, tile_K, nbatch_K2, stride_K, kb0*nbatch_fa, k_VKQ_sup, nullptr);
+                (K_h2, tile_K, nbatch_K2, stride_K, kb0*nbatch_fa, k_VKQ_sup, indices);
         }
     }
 
