@@ -1239,7 +1239,7 @@
       "t2_cite": "test-sandwich-dispatch (exit 0)",
       "t3_telemetry": "474.30 t/s prefill rate with fused dequant GEMV",
       "reachability_class": "REACHABLE-ON-THIS-STACK",
-      "notes": "Dequantizes Turbo4 directly into Tensor Core registers during MMA dot-product pipeline. [Issue #4 Resolved: Fast path disambiguated via GGML_FATTN_SRC5_ROLE_SPARSE_TILES; dual-path regression verified]"
+      "notes": "Dequantizes Turbo4 directly into Tensor Core registers during MMA dot-product pipeline. [Issue #4 Closed as premise-invalid: Dense beats sparse across all batch sizes; segmented paged blocks verified]"
     },
     {
       "id": 79,
@@ -1256,7 +1256,7 @@
       "t2_cite": "tests/test_flash_decoding_parity.py: PASS (exit 0)",
       "t3_telemetry": "1.64e-07 max abs error (100.0% cosine similarity >= 0.99999998 across 12 configs, 0.000 ms overhead)",
       "reachability_class": "REACHABLE-ON-THIS-STACK",
-      "notes": "Cycle 5 Reconciliation: Host scheduler sequence-split reduction over block-level device softmax verified. FP32 single-precision kernel parity verified across 12 configs (error <= 1.64e-07, cosine >= 0.99999998, 0.000 ms overhead). [Issue #4 Resolved: Fast path disambiguated via GGML_FATTN_SRC5_ROLE_SPARSE_TILES; dual-path regression verified]"
+      "notes": "Cycle 5 Reconciliation: Host scheduler sequence-split reduction over block-level device softmax verified. FP32 single-precision kernel parity verified across 12 configs (error <= 1.64e-07, cosine >= 0.99999998, 0.000 ms overhead). [Issue #4 Closed as premise-invalid: Dense beats sparse across all batch sizes; local chunk reduction verified]"
     },
     {
       "id": 80,

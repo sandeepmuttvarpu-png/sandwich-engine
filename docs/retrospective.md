@@ -35,7 +35,7 @@ This is the core of what changed in your engine. Here is what the code was actua
 
 ### Turbo4 KV Compression & The Attention Path
 * **BEFORE:** In `ggml-cuda/fattn-common.cuh`, the function that decides which attention types CUDA supports (`ggml_cuda_fattn_kv_type_supported()`) completely omitted `TURBO4_0`, `TURBO3_0`, and `TURBO2_0`. Because CUDA rejected the compressed cache, the engine silently fell back to computing prompt attention on the CPU (`ggml-cpu`) across 28 layers. On top of that, `fattn-mma-f16.cuh` divided byte strides by `sizeof(half2)` instead of the quantized block size, corrupting memory access. Prompt processing collapsed by 16$\times$ (down to 31.2 tokens/sec) while the UI claimed Turbo4 was running on GPU.
-* **AFTER:** We patched the type switch to explicitly recognize Turbo4, removed an arbitrary `Q->ne[1] <= 4` gate, and corrected the byte stride math.
+* **AFTER:** We patched the type switch to explicitly recognize Turbo4, corrected the byte stride math in `fattn-mma-f16.cuh`, and preserved the microarchitecturally required `Q->ne[1] <= 4` gate for `mma_turbo` (fused tensor cores for $Q \le 4$; speculative verify steps at $Q > 4$ route through `BEST_FATTN_KERNEL_MMA_F16` with dynamic in-kernel dequantization to maintain 16-byte memory alignment for 66-byte `block_turbo4_0`).
 * **WHY IT MATTERS:** Prompt ingestion jumped from 31.20 t/s to **508.36 t/s** (a 16.3$\times$ speedup) in `ab_Config_2_Turbo4_KV.log`. Attention stays 100% on GPU tensor cores, and memory usage drops by 4$\times$ without CPU thrashing.
 
 ### The Warm RAM Pool

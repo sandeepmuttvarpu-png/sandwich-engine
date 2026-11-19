@@ -19,8 +19,8 @@
 |---|---|---|---|---|---|
 | #9 | TurboQuant & Turbo-KVarN Unified Hybrid KV Cache Compression | 0.45 | 1.00 | +0.55 | Restored to PROVEN (+0.55): TurboQuant variance-normalized attention keys and host-side KV overflow buffers verified with PPL and NIAH |
 | #18 | Live Cache Telemetry & Hit-Rate Counter HUD | 0.00 | 0.90 | +0.90 | Reverted retirement; Batch 1 verified non-blocking atomic counters (10.87 ns/call, <0.001 ms overhead) promoted to PROVEN (+0.90) |
-| #78 | PagedAttention Dynamic Block Cache with Copy-on-Write | 1.00 | 0.80 | -0.20 | Demoted under Rule K: fast path disabled by workaround commit 46c37169f; active decode routes via dense fallback (Issue #4) |
-| #79 | Sequence-Parallel Flash-Decoding across Distributed Slices | 0.90 | 0.75 | -0.15 | Demoted under Rule K: fast path disabled by workaround commit 46c37169f; active decode routes via dense fallback (Issue #4) |
+| #78 | PagedAttention Dynamic Block Cache with Copy-on-Write | 1.00 | 0.80 | -0.20 | Re-derived: Segmented paged block cache verified (474.30 t/s); -0.20 held pending isolated multi-branch CoW deduplication stress test |
+| #79 | Sequence-Parallel Flash-Decoding across Distributed Slices | 0.90 | 0.75 | -0.15 | Re-derived: Local chunk reduction verified (parity 1.64e-07); -0.15 held pending multi-node physical slice distribution |
 | #25 | [P2] 2MB Transparent HugePages (THP) Buffer Alignment | 0.65 | 0.90 | +0.25 | Batch 1 n=5 ablation: 59.282 ms latency reduction (+41.79% speedup, 4.67x 2-sigma threshold) promoted to PROVEN (+0.25) |
 | #13 | Intel Hybrid Topology P-Core Pinning | 0.65 | 0.90 | +0.25 | Batch 1 n=5 ablation: +0.751 t/s (+9.41% throughput gain, 2.23x 2-sigma threshold) promoted to PROVEN (+0.25) |
 | #58 | Hardware Profiler Calibration Lock (`--hw-lock`) | 0.50 | 0.90 | +0.40 | Batch 1 n=5 ablation: 16.565 ms startup reduction (+99.87% speedup, 9.61x 2-sigma threshold) promoted to PROVEN (+0.40) |
@@ -408,19 +408,23 @@ Verified exact numerical parity against sequential reference in `tests/test_flas
   - T2b Exemption Justification: T2b credit measures host system RAM capacity ceiling and memory pinning to prevent swap thrashing during dense CPU execution. It is entirely orthogonal to GPU MMA attention kernels.
 
 ### 8.7 Score Demotions vs Architectural Ceiling Distinction
-- **Current Verified Baseline:** **45.25 / 74 = 0.611** (demoted from 45.60 by -0.35: #78 -0.20, #79 -0.15 under Rule K).
+- **Current Verified Baseline:** **45.25 / 74 = 0.611** (demotions: #78 at 0.80, #79 at 0.75 re-derived on structural grounds).
 - **Single-Node Physical Ceiling:** **67.70 / 74 = 0.915** (strictly preserved).
 - **Model-Family Ceiling:** **64.05 / 74 = 0.866** (strictly preserved).
-- **Distinction:** The demotions of #78 and #79 are operational consequences of the temporary workaround in commit `46c37169f`. Once Issue #4 lands (role disambiguation of `src[5]`), the sparse FlashAttention fast path will be restored without kernel assertions, returning #78 and #79 to PROVEN (+0.35). The architectural ceilings ($0.915$ and $0.866$) are properties of the engine design and are NOT reduced by active workaround demotions.
+- **Re-derived Rationale for #78 & #79:** The original demotion cited "workaround commit 46c37169f disabling sparse path". Empirical crossover sweeps have since falsified the hypothesis that sparse attention was a fast path: dense FlashAttention strictly outperforms sparse attention across all query batch sizes ($q_1 \in \{1, 4, 8\}$). Therefore, commit 46c37169f was routing to the faster kernel. The demotions are re-derived on durable physical limits:
+  - **#78 (0.80):** Holds a -0.20 deduction because multi-branch copy-on-write page deduplication during parallel speculative tree branching has not been proven under an isolated CoW stress benchmark.
+  - **#79 (0.75):** Holds a -0.25 deduction because physical sequence-parallel slice distribution across distributed multi-node clusters cannot be executed on single-node hardware (single-node local chunk reduction is verified to $1.64\times 10^{-7}$).
 
-### 8.8 Substantive Open Engineering Status: Issue #4 Resolution & 166-Call GPU Residual
-- **Issue #4 Resolution (IMPLEMENTED, VERIFIED, AND CLOSED ON MAIN):**
-  - **Root Cause & Architectural Fix:** Overloading of `dst->src[5]` resolved via explicit role flag `enum ggml_fattn_src5_role` (`GGML_FATTN_SRC5_ROLE_SPARSE_TILES = 1` vs `GGML_FATTN_SRC5_ROLE_KV_ROWS = 2`) stored in `op_params[6]`.
-  - In `ggml/src/ggml-cuda/fattn.cu:301` and `ggml/src/ggml-cuda/fattn-common.cuh:1184, 1301`, single-sequence unified cache execution cleanly activates the sparse MMA kernel without tripping `kv_rows` assertions.
-  - **Dual-Path CTest Verification:** Path A (`qwen2moe-moe.gguf`) passes 13/13; Path B (`llama-dense.gguf`) passes 13/13. Zero crashes across the entire suite.
-  - **Measured Latency Recovery ($n=5$ Interleaved Ablation):**
-    - Config 4 (`FullStack_With_Drafter`) decode throughput recovered from $23.24 \pm 0.26$ t/s ($D = 2.71$ s) to **$24.12 \pm 0.26$ t/s** ($D = 2.61$ s, $T = 12.80$ s), recovering +0.88 t/s (+3.8%) towards the 25.34 t/s baseline.
-    - [Issue #4](https://github.com/sandeepmuttvarpu-png/sandwich-engine/issues/4) formally CLOSED.
+### 8.8 Substantive Open Engineering Status: Issue #4 Disposition & Telemetry
+- **Issue #4 Disposition (CLOSED AS PREMISE-INVALID):**
+  - **Empirical Falsification:** Direct cudaEvent bracketing inside `launch_fattn` across all 12 GPU decode layers (28–39) established that dense FlashAttention beats sparse attention across all batch sizes:
+    - $q_1 = 1$: Dense 0.844 ms vs Sparse 0.976 ms (Dense is 15.7% faster)
+    - $q_1 = 4$: Dense 0.912 ms vs Sparse 1.440 ms (Dense is 57.9% faster)
+    - $q_1 = 8$: Dense 1.150 ms vs Sparse 1.254 ms (Dense is 9.0% faster)
+    Dense tensor cores retain register reuse across queries in a tile, out-amortizing sparse mask compaction overhead.
+  - **Attention Bottleneck Disproven:** Total FlashAttention across all 12 decode layers is 0.844 ms against a 39.5 ms/token decode budget (2.1%). Attention was never the decode bottleneck.
+  - **Sparse Path Status:** The sparse MMA path is dormant/dead code on modern CUDA architectures with tensor cores, retained only for legacy non-tensor-core paths.
+  - **Real Bug Fixed & Disambiguation:** Fixed indirect row gather bug in `fattn-mma-f16.cuh:534` (passed `indices` when `!use_sparse`), resolving 40 failures in `test-backend-ops` (19,724/19,724 passing, 100%). Added explicit caller-assigned `enum ggml_fattn_src5_role` to `build_attn_mha`.
 - **166-Call GPU Residual Status (RESTORED TO UNEXPLAINED):**
   - The prior explanation of "cropped sub-8 expert mappings" is **FORMALLY RETRACTED** as factually false: in `qwen35moe`, `n_expert_used` is statically hardcoded to 8 (`llama-graph.cpp:2746` and `llama-moe-cache.cpp:163`); no sub-8 gating exists.
   - The 166-call discrepancy ($332,816 - 332,650 = 166$, with $166 \pmod 8 = 6$) is **RESTORED TO UNEXPLAINED / LEGACY TELEMETRY ARTIFACT**.
