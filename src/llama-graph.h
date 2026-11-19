@@ -1304,7 +1304,8 @@ struct llm_graph_context {
             ggml_tensor * v_mla,   // [n_embd_head_v_mla, n_embd_head_v, n_head_v]
                 int64_t   n_kv_max,
                   float   kq_scale,
-                    int   il) const;
+                    int   il,
+   enum ggml_fattn_src5_role src5_role = GGML_FATTN_SRC5_ROLE_NONE) const;
 
     llm_graph_input_attn_no_cache * build_attn_inp_no_cache() const;
 

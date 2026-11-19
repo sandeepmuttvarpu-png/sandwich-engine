@@ -289,6 +289,15 @@ bool ggml_cuda_flash_attn_ext_mma_f16_shall_use_sparse(const int cc, const ggml_
     GGML_UNUSED_VARS(cc, dst, ncols1, ncols2);
     return false;
 #else
+    const char * env_fattn_mode = getenv("SANDWICH_FATTN_FORCE_MODE");
+    if (env_fattn_mode) {
+        if (strcmp(env_fattn_mode, "dense") == 0) {
+            return false;
+        } else if (strcmp(env_fattn_mode, "sparse") == 0) {
+            return GGML_CUDA_CC_IS_NVIDIA(cc) && turing_mma_available(cc);
+        }
+    }
+
     const ggml_tensor * Q    = dst->src[0];
     const ggml_tensor * K    = dst->src[1];
     const ggml_tensor * mask = dst->src[3];
@@ -1257,16 +1266,31 @@ void ggml_cuda_flash_attn_ext(ggml_backend_cuda_context & ctx, ggml_tensor * dst
                 && Q->ne[1] <= 4 && V->ne[0] == Q->ne[0] && turing_mma_available(cc)) {
             if (Q->ne[0] == 128) {
                 switch (K->type) {
-                    case GGML_TYPE_TURBO4_0: ggml_cuda_flash_attn_ext_mma_turbo_switch_ncols2<128, 128, GGML_TYPE_TURBO4_0, GGML_TYPE_TURBO4_0>(ctx, dst); return;
-                    case GGML_TYPE_TURBO3_0: ggml_cuda_flash_attn_ext_mma_turbo_switch_ncols2<128, 128, GGML_TYPE_TURBO3_0, GGML_TYPE_TURBO3_0>(ctx, dst); return;
-                    case GGML_TYPE_TURBO2_0: ggml_cuda_flash_attn_ext_mma_turbo_switch_ncols2<128, 128, GGML_TYPE_TURBO2_0, GGML_TYPE_TURBO2_0>(ctx, dst); return;
+                    case GGML_TYPE_TURBO4_0:
+                        fattn_native_count.fetch_add(1, std::memory_order_relaxed);
+                        ggml_cuda_flash_attn_ext_mma_turbo_switch_ncols2<128, 128, GGML_TYPE_TURBO4_0, GGML_TYPE_TURBO4_0>(ctx, dst);
+                        return;
+                    case GGML_TYPE_TURBO3_0:
+                        fattn_native_count.fetch_add(1, std::memory_order_relaxed);
+                        ggml_cuda_flash_attn_ext_mma_turbo_switch_ncols2<128, 128, GGML_TYPE_TURBO3_0, GGML_TYPE_TURBO3_0>(ctx, dst);
+                        return;
+                    case GGML_TYPE_TURBO2_0:
+                        fattn_native_count.fetch_add(1, std::memory_order_relaxed);
+                        ggml_cuda_flash_attn_ext_mma_turbo_switch_ncols2<128, 128, GGML_TYPE_TURBO2_0, GGML_TYPE_TURBO2_0>(ctx, dst);
+                        return;
                     default: break;
                 }
             }
             if (Q->ne[0] == 256) {
                 switch (K->type) {
-                    case GGML_TYPE_TURBO4_0: ggml_cuda_flash_attn_ext_mma_turbo_switch_ncols2<256, 256, GGML_TYPE_TURBO4_0, GGML_TYPE_TURBO4_0>(ctx, dst); return;
-                    case GGML_TYPE_TURBO3_0: ggml_cuda_flash_attn_ext_mma_turbo_switch_ncols2<256, 256, GGML_TYPE_TURBO3_0, GGML_TYPE_TURBO3_0>(ctx, dst); return;
+                    case GGML_TYPE_TURBO4_0:
+                        fattn_native_count.fetch_add(1, std::memory_order_relaxed);
+                        ggml_cuda_flash_attn_ext_mma_turbo_switch_ncols2<256, 256, GGML_TYPE_TURBO4_0, GGML_TYPE_TURBO4_0>(ctx, dst);
+                        return;
+                    case GGML_TYPE_TURBO3_0:
+                        fattn_native_count.fetch_add(1, std::memory_order_relaxed);
+                        ggml_cuda_flash_attn_ext_mma_turbo_switch_ncols2<256, 256, GGML_TYPE_TURBO3_0, GGML_TYPE_TURBO3_0>(ctx, dst);
+                        return;
                     default: break;
                 }
             }
@@ -1281,6 +1305,9 @@ void ggml_cuda_flash_attn_ext(ggml_backend_cuda_context & ctx, ggml_tensor * dst
             ggml_cuda_flash_attn_ext_tile(ctx, dst);
             break;
         case BEST_FATTN_KERNEL_VEC:
+            if (ggml_is_quantized(dst->src[1]->type) || ggml_is_quantized(dst->src[2]->type)) {
+                fattn_native_count.fetch_add(1, std::memory_order_relaxed);
+            }
             ggml_cuda_flash_attn_ext_vec(ctx, dst);
             break;
         case BEST_FATTN_KERNEL_MMA_F16:

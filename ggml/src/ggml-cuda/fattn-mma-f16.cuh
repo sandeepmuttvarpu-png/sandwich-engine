@@ -534,6 +534,9 @@ static __device__ __forceinline__ void flash_attn_ext_f16_load_tile(
                     // padded slots gather row 0, the -inf mask removes their contribution
                     const int32_t index = i < i_sup ? indices[k_VKQ_0 + i] : 0;
                     i_KV = index >= 0 ? index : 0;
+                } else if (indices) {
+                    // K/V rows given per mask column, negative rows are padding
+                    i_KV = max(indices[k_VKQ_0 + i], 0);
                 } else {
                     i_KV = k_VKQ_0 + i;
                 }
@@ -581,8 +584,11 @@ static __device__ __forceinline__ void flash_attn_ext_f16_load_tile(
                     if constexpr (use_sparse) {
                         const int32_t index = i < i_sup ? indices[k_VKQ_0 + i] : -1;
                         src = index >= 0 ? KV + int64_t(index)*stride_KV + k*h2_per_chunk : zero;
+                    } else if (!oob_check || i < i_sup) {
+                        const int64_t i_KV = indices ? max(indices[k_VKQ_0 + i], 0) : k_VKQ_0 + i;
+                        src = KV + i_KV*stride_KV + k*h2_per_chunk;
                     } else {
-                        src = !oob_check || i < i_sup ? KV + int64_t(k_VKQ_0 + i)*stride_KV + k*h2_per_chunk : zero;
+                        src = zero;
                     }
                     ggml_cuda_memcpy_1<16>(swizzle<stride_tile>(tile_KV, i*stride_tile + k*h2_per_chunk, i), src);
                 }
@@ -2646,7 +2652,7 @@ void ggml_cuda_flash_attn_ext_mma_f16_case(ggml_backend_cuda_context & ctx, ggml
         if constexpr (!is_quant_kv && ggml_cuda_flash_attn_ext_mma_f16_may_use_sparse(DKQ, DV, ncols1, ncols2)) {
             bool use_sparse_choice = ggml_cuda_flash_attn_ext_mma_f16_shall_use_sparse(cc, dst, ncols1, ncols2);
             const char * env_fattn_mode = getenv("SANDWICH_FATTN_FORCE_MODE");
-            if (env_fattn_mode && dst->src[0]->ne[1] == 1) {
+            if (env_fattn_mode) {
                 if (strcmp(env_fattn_mode, "dense") == 0) {
                     use_sparse_choice = false;
                 } else if (strcmp(env_fattn_mode, "sparse") == 0) {

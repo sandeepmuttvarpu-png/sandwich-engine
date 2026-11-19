@@ -1,0 +1,24 @@
+{
+  "baseline": {
+    "stack": "baseline",
+    "elapsed_sec": 12.951139450073242,
+    "peak_vram_mib": 4880,
+    "fattn_native_count": 0,
+    "pure_token_sha256": "481b2a7aea43731e77979bca6631cfac9d32bd42d023d63c91552b245931a6aa",
+    "canonical_pure_sha256": "481b2a7aea43731e77979bca6631cfac9d32bd42d023d63c91552b245931a6aa",
+    "pure_token_match": true,
+    "full_output_sha256": "77e2b15be215db920cd2bb86ece4bea713f42954e302c2e396bb26239f12d74b",
+    "gen_text": "[Start thinking]\n\nHere's a thinking process:\n\n1.  **Analyze User Input:**\n   - The user has pasted the exact same sentence 100 times: \"The computational architecture of heterogeneous Mixture of Experts (MoE) inference requires careful memory coordination between VRAM, DDR5, and NVMe.\""
+  },
+  "c4": {
+    "stack": "c4",
+    "elapsed_sec": 12.974568128585815,
+    "peak_vram_mib": 6614,
+    "fattn_native_count": 0,
+    "pure_token_sha256": "481b2a7aea43731e77979bca6631cfac9d32bd42d023d63c91552b245931a6aa",
+    "canonical_pure_sha256": "481b2a7aea43731e77979bca6631cfac9d32bd42d023d63c91552b245931a6aa",
+    "pure_token_match": true,
+    "full_output_sha256": "77e2b15be215db920cd2bb86ece4bea713f42954e302c2e396bb26239f12d74b",
+    "gen_text": "[Start thinking]\n\nHere's a thinking process:\n\n1.  **Analyze User Input:**\n   - The user has pasted the exact same sentence 100 times: \"The computational architecture of heterogeneous Mixture of Experts (MoE) inference requires careful memory coordination between VRAM, DDR5, and NVMe.\""
+  }
+}

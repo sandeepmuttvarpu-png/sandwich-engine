@@ -3171,7 +3171,8 @@ ggml_tensor * llm_graph_context::build_attn_mha(
          ggml_tensor * v_mla,
              int64_t   n_kv_max,
                float   kq_scale,
-                 int   il) const {
+                 int   il,
+   enum ggml_fattn_src5_role src5_role) const {
     const bool v_trans = v->nb[1] > v->nb[2];
 
     // split the batch into streams if needed
@@ -3206,11 +3207,13 @@ ggml_tensor * llm_graph_context::build_attn_mha(
             v = ggml_cast(ctx0, v, GGML_TYPE_F16);
         }
 
-        if (kv_rows) {
+        if (kv_rows != nullptr) {
             cur = ggml_flash_attn_ext_rows(ctx0, q, k, v, kq_mask, kv_rows, kq_scale, hparams.f_max_alibi_bias,
                                            hparams.attn_soft_cap ? hparams.f_attn_logit_softcapping : 0.0f);
-            const bool is_sparse_tiles = (kv_rows->ne[1] <= 1 && kq_mask != nullptr && kq_mask->ne[0] == kv_rows->ne[0]);
-            ggml_flash_attn_ext_set_src5_role(cur, is_sparse_tiles ? GGML_FATTN_SRC5_ROLE_SPARSE_TILES : GGML_FATTN_SRC5_ROLE_KV_ROWS);
+            const enum ggml_fattn_src5_role role_to_set = (src5_role != GGML_FATTN_SRC5_ROLE_NONE)
+                ? src5_role
+                : GGML_FATTN_SRC5_ROLE_KV_ROWS;
+            ggml_flash_attn_ext_set_src5_role(cur, role_to_set);
         } else {
             cur = ggml_flash_attn_ext(ctx0, q, k, v, kq_mask, kq_scale, hparams.f_max_alibi_bias,
                                       hparams.attn_soft_cap ? hparams.f_attn_logit_softcapping : 0.0f);

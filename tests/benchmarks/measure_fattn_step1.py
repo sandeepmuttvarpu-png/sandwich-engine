@@ -3,8 +3,9 @@
 Step 1 Gate: Forensic CudaEvent Measurement Suite for Issue #4
 Brackets launch_fattn with cudaEvent on identical KV state, sparse vs dense,
 across all 12 active GPU decode layers (28-39).
+Supports q1 query counts: q1=1, q1=4, q1=8.
 Runs an n=5 interleaved A/B test with 4-second thermal cooling and performance governor.
-Compares measured Δ per token against the implied 3.49 ms/token (220 ms / 63).
+Measures crossover point to confirm or retract the amortization/scratchpad hypothesis.
 """
 
 import subprocess
@@ -14,6 +15,7 @@ import re
 import math
 import sys
 import os
+import argparse
 
 BIN_PATH = "/home/sandeep/dev/sandwich/sandwich-engine/tests/benchmarks/measure_fattn_step1"
 
@@ -24,8 +26,8 @@ def set_performance_governor():
     except Exception as e:
         print(f"[WARN] Failed to set powerprofilesctl: {e}")
 
-def run_arm(mode: str):
-    cmd = [BIN_PATH, f"--{mode}"]
+def run_arm(mode: str, q1: int):
+    cmd = [BIN_PATH, f"--{mode}", "--q1", str(q1)]
     env = os.environ.copy()
     proc = subprocess.run(cmd, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     if proc.returncode != 0:
@@ -37,7 +39,7 @@ def run_arm(mode: str):
         raise ValueError(f"Could not parse JSON from stdout:\n{proc.stdout}")
     data = json.loads(json_match.group(0))
 
-    # Parse stderr for per-layer timings (last 12 events)
+    # Parse stderr for per-layer timings
     layer_events = []
     pattern = re.compile(r'\[FATTN_CUDAEVENT\]\s+layer=(\w+)\s+q1=(\d+)\s+n_kv=(\d+)\s+sparse=(\d+)\s+ms=([0-9.]+)')
     for line in proc.stderr.splitlines():
@@ -51,16 +53,21 @@ def run_arm(mode: str):
                 "ms": float(m.group(5)),
             })
 
-    # The measured run is the last 12 events (after 2 warm-up runs of 12 events each)
+    # The measured run is the last 12 events
     if len(layer_events) >= 12:
         measured_layers = layer_events[-12:]
     else:
         measured_layers = layer_events
 
+    total_batch_ms = data.get("total_batch_kernel_ms", data.get("total_token_kernel_ms", 0.0))
+    per_token_ms = data.get("per_token_kernel_ms", total_batch_ms / q1)
+
     return {
         "mode": mode,
-        "total_token_kernel_ms": data["total_token_kernel_ms"],
-        "avg_layer_kernel_ms": data["avg_layer_kernel_ms"],
+        "q1": q1,
+        "total_batch_kernel_ms": total_batch_ms,
+        "per_token_kernel_ms": per_token_ms,
+        "avg_layer_kernel_ms": data.get("avg_layer_kernel_ms", total_batch_ms / 12.0),
         "layers": measured_layers
     }
 
@@ -73,120 +80,115 @@ def std(arr):
     m = mean(arr)
     return math.sqrt(sum((x - m) ** 2 for x in arr) / (len(arr) - 1))
 
-def main():
-    print("=" * 80)
-    print(" STEP 1 GATE: CUDAEVENT BRACKET BENCHMARK (n=5 Interleaved A/B)")
-    print(" Target: Issue #4 - Sparse vs Dense FlashAttention on 12 GPU Layers (28-39)")
-    print(" Metric: Kernel Latency per token (ms) and per layer (ms)")
-    print(" Baseline (Arm A): Dense Fallback (--dense)")
-    print(" Test     (Arm B): Sparse Fast Path (--sparse)")
-    print(" Enforcing: powerprofilesctl=performance, 4s thermal cooling")
+def benchmark_q1(q1: int, n: int = 5):
+    print("\n" + "=" * 80)
+    print(f" BENCHMARK RUN: q1 = {q1} (n={n} Interleaved A/B)")
+    print(f" Target: Sparse MMA Fast-Path vs Dense MMA Fallback (12 GPU decode layers)")
     print("=" * 80)
 
-    set_performance_governor()
-
-    n = 5
     dense_results = []
     sparse_results = []
 
     for i in range(n):
-        print(f"\n--- Iteration {i+1} / {n} ---")
+        print(f"  [q1={q1}] Iteration {i+1}/{n}...")
 
         # Arm A: Dense
-        print("[ARM A: Dense] Thermal cooling (4s)...")
+        print(f"    Arm A (Dense): cooling (4s)...")
         time.sleep(4)
-        res_a = run_arm("dense")
+        res_a = run_arm("dense", q1)
         dense_results.append(res_a)
-        print(f"  -> Total token ms: {res_a['total_token_kernel_ms']:.4f} ms | Avg layer ms: {res_a['avg_layer_kernel_ms']:.4f} ms")
+        print(f"    -> Dense total: {res_a['total_batch_kernel_ms']:.4f} ms | per-token: {res_a['per_token_kernel_ms']:.4f} ms")
 
         # Arm B: Sparse
-        print("[ARM B: Sparse] Thermal cooling (4s)...")
+        print(f"    Arm B (Sparse): cooling (4s)...")
         time.sleep(4)
-        res_b = run_arm("sparse")
+        res_b = run_arm("sparse", q1)
         sparse_results.append(res_b)
-        print(f"  -> Total token ms: {res_b['total_token_kernel_ms']:.4f} ms | Avg layer ms: {res_b['avg_layer_kernel_ms']:.4f} ms")
+        print(f"    -> Sparse total: {res_b['total_batch_kernel_ms']:.4f} ms | per-token: {res_b['per_token_kernel_ms']:.4f} ms")
 
-    # Statistical Evaluation
-    dense_totals = [r["total_token_kernel_ms"] for r in dense_results]
-    sparse_totals = [r["total_token_kernel_ms"] for r in sparse_results]
+    dense_batch_times = [r["total_batch_kernel_ms"] for r in dense_results]
+    sparse_batch_times = [r["total_batch_kernel_ms"] for r in sparse_results]
 
-    mu_dense = mean(dense_totals)
-    std_dense = std(dense_totals)
+    dense_token_times = [r["per_token_kernel_ms"] for r in dense_results]
+    sparse_token_times = [r["per_token_kernel_ms"] for r in sparse_results]
 
-    mu_sparse = mean(sparse_totals)
-    std_sparse = std(sparse_totals)
+    mu_dense_batch = mean(dense_batch_times)
+    std_dense_batch = std(dense_batch_times)
+    mu_sparse_batch = mean(sparse_batch_times)
+    std_sparse_batch = std(sparse_batch_times)
 
-    # Note: If dense is slower than sparse, delta = mu_dense - mu_sparse is positive (savings from sparse).
-    # If delta is negative, dense is actually faster or identical.
-    delta_token = mu_dense - mu_sparse
-    sigma_comb = math.sqrt(std_dense**2 + std_sparse**2)
-    two_sigma = 2.0 * sigma_comb
+    mu_dense_token = mean(dense_token_times)
+    std_dense_token = std(dense_token_times)
+    mu_sparse_token = mean(sparse_token_times)
+    std_sparse_token = std(sparse_token_times)
+
+    # Delta = Baseline (Dense) - Test (Sparse). Positive means Sparse is faster.
+    delta_batch = mu_dense_batch - mu_sparse_batch
+    delta_token = mu_dense_token - mu_sparse_token
+    sigma_comb_token = math.sqrt(std_dense_token**2 + std_sparse_token**2)
+    two_sigma_token = 2.0 * sigma_comb_token
+
+    is_significant = abs(delta_token) > two_sigma_token
+    winner = "Sparse" if delta_token > 0 and is_significant else ("Dense" if delta_token < 0 and is_significant else "Indistinguishable (Inside 2σ Noise)")
+
+    print(f"\n  --- Results for q1 = {q1} ---")
+    print(f"  Dense Batch  : {mu_dense_batch:.4f} ± {std_dense_batch:.4f} ms")
+    print(f"  Sparse Batch : {mu_sparse_batch:.4f} ± {std_sparse_batch:.4f} ms")
+    print(f"  Dense / Token: {mu_dense_token:.4f} ± {std_dense_token:.4f} ms")
+    print(f"  Sparse / Token: {mu_sparse_token:.4f} ± {std_sparse_token:.4f} ms")
+    print(f"  Delta / Token: {delta_token:+.4f} ms ({winner})")
+    print(f"  2σ Threshold : {two_sigma_token:.4f} ms | Significant: {is_significant}")
+
+    return {
+        "q1": q1,
+        "n": n,
+        "mu_dense_batch_ms": mu_dense_batch,
+        "std_dense_batch_ms": std_dense_batch,
+        "mu_sparse_batch_ms": mu_sparse_batch,
+        "std_sparse_batch_ms": std_sparse_batch,
+        "mu_dense_per_token_ms": mu_dense_token,
+        "std_dense_per_token_ms": std_dense_token,
+        "mu_sparse_per_token_ms": mu_sparse_token,
+        "std_sparse_per_token_ms": std_sparse_token,
+        "delta_per_token_ms": delta_token,
+        "sigma_comb_token": sigma_comb_token,
+        "two_sigma_token": two_sigma_token,
+        "is_significant": is_significant,
+        "winner": winner,
+        "dense_batch_raw": dense_batch_times,
+        "sparse_batch_raw": sparse_batch_times,
+    }
+
+def main():
+    parser = argparse.ArgumentParser(description="Step 1 Gate Crossover Benchmark")
+    parser.add_argument("--q1", type=int, default=None, help="Specific q1 to test (e.g. 1, 4, 8)")
+    parser.add_argument("--n", type=int, default=5, help="Number of interleaved iterations")
+    parser.add_argument("--sweep", action="store_true", help="Sweep q1 = [1, 4, 8]")
+    args = parser.parse_args()
+
+    set_performance_governor()
+
+    q1_values = [1, 4, 8] if (args.sweep or args.q1 is None) else [args.q1]
+    all_results = {}
+
+    for q1 in q1_values:
+        res = benchmark_q1(q1, n=args.n)
+        all_results[f"q1_{q1}"] = res
 
     print("\n" + "=" * 80)
-    print(" PER-LAYER BREAKDOWN ACROSS 12 GPU DECODE LAYERS (28 - 39)")
+    print(" CROSSOVER SUMMARY ACROSS q1 ∈ {1, 4, 8}")
     print("=" * 80)
-    print(f"{'Layer':<12} | {'Dense Mean (ms)':<16} | {'Sparse Mean (ms)':<16} | {'Delta (ms)':<12}")
-    print("-" * 62)
+    print(f"{'q1':<6} | {'Dense ms/tok':<14} | {'Sparse ms/tok':<14} | {'Delta ms/tok':<14} | {'2σ Bound':<10} | {'Advantage'}")
+    print("-" * 78)
+    for q1 in q1_values:
+        r = all_results[f"q1_{q1}"]
+        print(f"{q1:<6} | {r['mu_dense_per_token_ms']:<14.4f} | {r['mu_sparse_per_token_ms']:<14.4f} | {r['delta_per_token_ms']:<+14.4f} | {r['two_sigma_token']:<10.4f} | {r['winner']}")
 
-    layer_names = [r["layer"] for r in dense_results[0]["layers"]]
-    for idx, l_name in enumerate(layer_names):
-        l_dense_vals = [r["layers"][idx]["ms"] for r in dense_results if idx < len(r["layers"])]
-        l_sparse_vals = [r["layers"][idx]["ms"] for r in sparse_results if idx < len(r["layers"])]
-        m_d = mean(l_dense_vals)
-        m_s = mean(l_sparse_vals)
-        d_l = m_d - m_s
-        print(f"{l_name:<12} | {m_d:<16.4f} | {m_s:<16.4f} | {d_l:<+12.4f}")
-
-    print("\n" + "=" * 80)
-    print(" STATISTICAL SUMMARY (Total 12-Layer Token Kernel Latency)")
-    print("=" * 80)
-    print(f"Dense (Baseline) : {mu_dense:.4f} ± {std_dense:.4f} ms")
-    print(f"Sparse (Fast-Path): {mu_sparse:.4f} ± {std_sparse:.4f} ms")
-    print(f"Measured Delta   : {delta_token:+.4f} ms per token")
-    print(f"Sigma Combined   : {sigma_comb:.4f} ms")
-    print(f"2-Sigma Threshold: {two_sigma:.4f} ms")
-    print(f"|Delta| > 2-Sigma : {'YES' if abs(delta_token) > two_sigma else 'NO (Inside Noise)'}")
-
-    # Comparison against the Implied 3.49 ms/token
-    IMPLIED_DELTA = 3.492  # 220 ms / 63 tokens
-    print("\n" + "=" * 80)
-    print(" COMPARISON AGAINST IMPLIED REGRESSION (220 ms / 63 = 3.492 ms/token)")
-    print("=" * 80)
-    print(f"Implied Delta per token : {IMPLIED_DELTA:.4f} ms/token (from 220 ms over 63 tokens)")
-    print(f"Measured Delta per token: {delta_token:+.4f} ms/token (exact cudaEvent bracket)")
-    discrepancy = abs(delta_token - IMPLIED_DELTA)
-    ratio = (delta_token / IMPLIED_DELTA) * 100.0 if delta_token != 0 else 0.0
-
-    print(f"Difference              : {discrepancy:.4f} ms/token")
-    print(f"Kernel Share of Delta   : {ratio:.1f}%")
-
-    print("\n[VERDICT & GATE RESOLUTION]")
-    if abs(delta_token - IMPLIED_DELTA) < 0.5:
-        print("  -> Measured Δ ≈ 3.49 ms: Sparse restoration is the primary root cause.")
-        print("  -> Proceed to Step 2.")
-    else:
-        print("  -> Measured Δ is MATERIALLY SMALLER than the implied 3.49 ms/token.")
-        print(f"     Specifically, the isolated GPU kernel difference accounts for {delta_token:+.4f} ms/token,")
-        print(f"     leaving {IMPLIED_DELTA - delta_token:.4f} ms/token to HOST-SIDE / OCCUPANCY / GRAPH OVERHEAD.")
-        print("  -> The 'implied average' label is FORMALLY RETIRED with empirical measurement.")
-
-    report_path = "/home/sandeep/dev/sandwich/sandwich-engine/tests/benchmarks/measure_fattn_step1_results.json"
-    with open(report_path, "w") as f:
-        json.dump({
-            "mu_dense": mu_dense,
-            "std_dense": std_dense,
-            "mu_sparse": mu_sparse,
-            "std_sparse": std_sparse,
-            "delta_token": delta_token,
-            "sigma_comb": sigma_comb,
-            "two_sigma": two_sigma,
-            "implied_delta": IMPLIED_DELTA,
-            "kernel_share_pct": ratio,
-            "n": n,
-            "dense_totals": dense_totals,
-            "sparse_totals": sparse_totals
-        }, f, indent=2)
-    print(f"\n[REPORT] Saved full JSON results to: {report_path}")
+    # Save output
+    out_file = "/home/sandeep/dev/sandwich/sandwich-engine/tests/benchmarks/measure_fattn_crossover_results.json"
+    with open(out_file, "w") as f:
+        json.dump(all_results, f, indent=2)
+    print(f"\n[REPORT] Saved crossover results to: {out_file}")
 
 if __name__ == "__main__":
     main()

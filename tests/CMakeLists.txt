@@ -363,6 +363,7 @@ if (GGML_METAL AND NOT GGML_BACKEND_DL)
 endif()
 
 llama_build(test-backend-ops.cpp LINK ggml Threads::Threads)
+llama_test(test-backend-ops LABEL "backend" ARGS test -j 8)
 
 llama_build_and_test(test-backend-tensor.cpp LINK ggml)
 

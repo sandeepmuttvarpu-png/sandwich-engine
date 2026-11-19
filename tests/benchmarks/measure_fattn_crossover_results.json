@@ -1,0 +1,95 @@
+{
+  "q1_1": {
+    "q1": 1,
+    "n": 5,
+    "mu_dense_batch_ms": 0.85254,
+    "std_dense_batch_ms": 0.006114981602588836,
+    "mu_sparse_batch_ms": 1.01128,
+    "std_sparse_batch_ms": 0.013555331054607224,
+    "mu_dense_per_token_ms": 0.85254,
+    "std_dense_per_token_ms": 0.006114981602588836,
+    "mu_sparse_per_token_ms": 1.01128,
+    "std_sparse_per_token_ms": 0.013555331054607224,
+    "delta_per_token_ms": -0.15874,
+    "sigma_comb_token": 0.014870776711389318,
+    "two_sigma_token": 0.029741553422778635,
+    "is_significant": true,
+    "winner": "Dense",
+    "dense_batch_raw": [
+      0.8478,
+      0.8483,
+      0.8512,
+      0.8525,
+      0.8629
+    ],
+    "sparse_batch_raw": [
+      0.9886,
+      1.0249,
+      1.0161,
+      1.0122,
+      1.0146
+    ]
+  },
+  "q1_4": {
+    "q1": 4,
+    "n": 5,
+    "mu_dense_batch_ms": 0.9895400000000001,
+    "std_dense_batch_ms": 0.14853332286056217,
+    "mu_sparse_batch_ms": 2.34732,
+    "std_sparse_batch_ms": 0.03441870131193218,
+    "mu_dense_per_token_ms": 0.24738000000000002,
+    "std_dense_per_token_ms": 0.03712245950903577,
+    "mu_sparse_per_token_ms": 0.58684,
+    "std_sparse_per_token_ms": 0.008585627525114261,
+    "delta_per_token_ms": -0.33946,
+    "sigma_comb_token": 0.03810236213150045,
+    "two_sigma_token": 0.0762047242630009,
+    "is_significant": true,
+    "winner": "Dense",
+    "dense_batch_raw": [
+      0.9325,
+      0.9113,
+      0.9087,
+      1.2541,
+      0.9411
+    ],
+    "sparse_batch_raw": [
+      2.3357,
+      2.3326,
+      2.3256,
+      2.3342,
+      2.4085
+    ]
+  },
+  "q1_8": {
+    "q1": 8,
+    "n": 5,
+    "mu_dense_batch_ms": 1.0096399999999999,
+    "std_dense_batch_ms": 0.0024845522735495533,
+    "mu_sparse_batch_ms": 1.1093,
+    "std_sparse_batch_ms": 0.004207136793592522,
+    "mu_dense_per_token_ms": 0.1262,
+    "std_dense_per_token_ms": 0.000324037034920398,
+    "mu_sparse_per_token_ms": 0.13866,
+    "std_sparse_per_token_ms": 0.000531977443130814,
+    "delta_per_token_ms": -0.012459999999999999,
+    "sigma_comb_token": 0.0006228964600958988,
+    "two_sigma_token": 0.0012457929201917977,
+    "is_significant": true,
+    "winner": "Dense",
+    "dense_batch_raw": [
+      1.0136,
+      1.0094,
+      1.0097,
+      1.0068,
+      1.0087
+    ],
+    "sparse_batch_raw": [
+      1.1149,
+      1.1047,
+      1.1065,
+      1.1123,
+      1.1081
+    ]
+  }
+}

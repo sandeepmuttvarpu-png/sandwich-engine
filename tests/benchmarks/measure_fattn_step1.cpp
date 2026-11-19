@@ -43,12 +43,15 @@ static void fill_random_f16(ggml_fp16_t * data, size_t n) {
 
 int main(int argc, char ** argv) {
     std::string mode = "dense";
+    int64_t q1 = 1;
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
         if (arg == "--sparse") {
             mode = "sparse";
         } else if (arg == "--dense") {
             mode = "dense";
+        } else if (arg == "--q1" && i + 1 < argc) {
+            q1 = std::max<int64_t>(1, std::stol(argv[++i]));
         }
     }
 
@@ -72,7 +75,7 @@ int main(int argc, char ** argv) {
     const int64_t nh = 8;          // 8 KV heads
     const int64_t gqa = 8;         // 64 Q heads (nh * gqa = 64)
     const int64_t n_q_heads = nh * gqa;
-    const int64_t q1 = 1;          // decode single token
+    // q1 is configured from command line (defaults to 1)
     const int64_t n_kv = 3840;     // evaluated prompt context length (padded to FATTN_KQ_STRIDE=256)
     const int64_t n_sparse_rows = 3840; // active sparse tile index count matching mask->ne[0]
     const float kq_scale = 1.0f / sqrtf((float)hs);
@@ -142,8 +145,8 @@ int main(int argc, char ** argv) {
     }
     ggml_backend_tensor_set(rows, rows_data.data(), 0, ggml_nbytes(rows));
 
-    std::vector<ggml_fp16_t> mask_data(n_kv);
-    for (int64_t i = 0; i < n_kv; ++i) {
+    std::vector<ggml_fp16_t> mask_data(n_kv * q1);
+    for (int64_t i = 0; i < n_kv * q1; ++i) {
         mask_data[i] = ggml_fp32_to_fp16(0.0f);
     }
     ggml_backend_tensor_set(mask, mask_data.data(), 0, ggml_nbytes(mask));
@@ -189,10 +192,13 @@ int main(int argc, char ** argv) {
 
     printf("{\n");
     printf("  \"mode\": \"%s\",\n", mode.c_str());
+    printf("  \"q1\": %ld,\n", (long)q1);
     printf("  \"num_layers\": %d,\n", num_layers);
     printf("  \"context_length\": %ld,\n", (long)n_kv);
-    printf("  \"total_token_kernel_ms\": %.4f,\n", total_token_ms);
-    printf("  \"avg_layer_kernel_ms\": %.4f\n", total_token_ms / num_layers);
+    printf("  \"total_batch_kernel_ms\": %.4f,\n", total_token_ms);
+    printf("  \"per_token_kernel_ms\": %.4f,\n", total_token_ms / q1);
+    printf("  \"avg_layer_kernel_ms\": %.4f,\n", total_token_ms / num_layers);
+    printf("  \"avg_layer_per_token_ms\": %.4f\n", total_token_ms / (num_layers * q1));
     printf("}\n");
 
     // Cleanup
