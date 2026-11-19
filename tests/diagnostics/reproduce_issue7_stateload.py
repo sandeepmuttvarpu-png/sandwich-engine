@@ -2,7 +2,7 @@
 """
 Issue #7 Forensic Diagnostic Suite: Recurrent / Hybrid State Load Divergence Reproducer.
 Systematically reproduces and catalogs NMSE drift during state_load across candidate models:
-kolibri1-moe, mimo2-moe, muse-spark-moe, olmo2-dense, and plamo3-dense.
+kolibri1-moe, mimo2-moe, muse-spark-moe, olmo2-dense, plamo3-dense, maple-moe, cohere2moe-moe, and flint-moe.
 """
 
 import json
@@ -24,6 +24,9 @@ TARGET_MODELS = [
     "muse-spark-moe.gguf",
     "olmo2-dense.gguf",
     "plamo3-dense.gguf",
+    "maple-moe.gguf",
+    "cohere2moe-moe.gguf",
+    "flint-moe.gguf",
 ]
 
 
@@ -57,8 +60,8 @@ def test_model(model_name: str) -> dict:
     # Parse NMSE divergence
     # Format: "generate_tokens_compare: error: NMSE at step 1 is 2.723098e-05 (threshold 1.0e-05)"
     nmse_match = re.search(r"NMSE at step (\d+) is ([0-9.eE+-]+)\s*\(threshold ([0-9.eE+-]+)\)", clean_stdout)
-    step = int(nmse_match.group(1)) if nmse_match else -1
-    measured_nmse = float(nmse_match.group(2)) if nmse_match else 0.0
+    step = int(nmse_match.group(1)) if nmse_match else None
+    measured_nmse = float(nmse_match.group(2)) if nmse_match else None
     threshold = float(nmse_match.group(3)) if nmse_match else 1e-5
 
     status = "FAIL" if "state_load  FAIL" in clean_stdout else ("PASS" if "state_load  OK" in clean_stdout else "UNKNOWN")
@@ -69,7 +72,7 @@ def test_model(model_name: str) -> dict:
         "step": step,
         "measured_nmse": measured_nmse,
         "threshold": threshold,
-        "nmse_ratio": measured_nmse / threshold if threshold > 0 else 0.0,
+        "nmse_ratio": (measured_nmse / threshold) if (measured_nmse is not None and threshold > 0) else None,
         "raw_output": [l for l in res.stdout.splitlines() if "baseline" in l or "state_load" in l or "NMSE" in l],
     }
 
@@ -85,18 +88,22 @@ def main():
         r = test_model(model)
         status = r["status"]
         if status == "FAIL":
-            print(f"FAILED (step {r['step']}, NMSE: {r['measured_nmse']:.4e}, {r['nmse_ratio']:.1f}x threshold)")
+            nmse_val = f"{r['measured_nmse']:.4e}" if r['measured_nmse'] is not None else "UNKNOWN"
+            ratio_val = f"{r['nmse_ratio']:.1f}x" if r['nmse_ratio'] is not None else "N/A"
+            print(f"FAILED (step {r['step']}, NMSE: {nmse_val}, {ratio_val} threshold)")
         else:
             print(f"{status}")
         results.append(r)
 
     print("=" * 80)
     print("ISSUE #7 FORENSIC MATRIX")
-    print(f"{'Model':<24} | {'Status':<6} | {'Step':<5} | {'Measured NMSE':<14} | {'Threshold':<10} | {'Ratio':<8}")
+    print(f"{'Model':<24} | {'Status':<6} | {'Step':<5} | {'Measured NMSE':<18} | {'Threshold':<10} | {'Ratio':<8}")
     print("-" * 80)
     for r in results:
-        ratio_str = f"{r['nmse_ratio']:.1f}x" if r['threshold'] > 0 else "N/A"
-        print(f"{r['model']:<24} | {r['status']:<6} | {r['step']:<5} | {r['measured_nmse']:<14.4e} | {r['threshold']:<10.1e} | {ratio_str:<8}")
+        step_str = str(r['step']) if r['step'] is not None else "N/A"
+        nmse_str = f"{r['measured_nmse']:.4e}" if r['measured_nmse'] is not None else "PASS (not-emitted)"
+        ratio_str = f"{r['nmse_ratio']:.1f}x" if r['nmse_ratio'] is not None else "N/A"
+        print(f"{r['model']:<24} | {r['status']:<6} | {step_str:<5} | {nmse_str:<18} | {r['threshold']:<10.1e} | {ratio_str:<8}")
     print("=" * 80)
 
     report = {

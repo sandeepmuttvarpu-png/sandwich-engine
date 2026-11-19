@@ -19,8 +19,8 @@
 |---|---|---|---|---|---|
 | #9 | TurboQuant & Turbo-KVarN Unified Hybrid KV Cache Compression | 0.45 | 1.00 | +0.55 | Restored to PROVEN (+0.55): TurboQuant variance-normalized attention keys and host-side KV overflow buffers verified with PPL and NIAH |
 | #18 | Live Cache Telemetry & Hit-Rate Counter HUD | 0.00 | 0.90 | +0.90 | Reverted retirement; Batch 1 verified non-blocking atomic counters (10.87 ns/call, <0.001 ms overhead) promoted to PROVEN (+0.90) |
-| #78 | PagedAttention Dynamic Block Cache with Copy-on-Write | 1.00 | 0.80 | -0.20 | Re-derived: Segmented paged block cache verified (474.30 t/s); -0.20 held pending isolated multi-branch CoW deduplication stress test |
-| #79 | Sequence-Parallel Flash-Decoding across Distributed Slices | 0.90 | 0.75 | -0.15 | Re-derived: Local chunk reduction verified (parity 1.64e-07); -0.15 held pending multi-node physical slice distribution |
+| #78 | PagedAttention Dynamic Block Cache with Copy-on-Write | 1.00 | 0.80 | -0.20 | Re-derived: Segmented paged block cache verified (474.30 t/s); CoW logic implemented in PagedBlockAllocator; -0.20 held pending isolated multi-branch speculative tree CoW stress benchmark |
+| #79 | Sequence-Parallel Flash-Decoding across GPU SMs | 0.90 | 0.75 | -0.15 | Re-derived: Intra-GPU multi-stream SM chunk reduction verified (parity 1.64e-07); -0.15 held pending long-sequence end-to-end throughput benchmark proving speedup over monolithic flash-attention |
 | #25 | [P2] 2MB Transparent HugePages (THP) Buffer Alignment | 0.65 | 0.90 | +0.25 | Batch 1 n=5 ablation: 59.282 ms latency reduction (+41.79% speedup, 4.67x 2-sigma threshold) promoted to PROVEN (+0.25) |
 | #13 | Intel Hybrid Topology P-Core Pinning | 0.65 | 0.90 | +0.25 | Batch 1 n=5 ablation: +0.751 t/s (+9.41% throughput gain, 2.23x 2-sigma threshold) promoted to PROVEN (+0.25) |
 | #58 | Hardware Profiler Calibration Lock (`--hw-lock`) | 0.50 | 0.90 | +0.40 | Batch 1 n=5 ablation: 16.565 ms startup reduction (+99.87% speedup, 9.61x 2-sigma threshold) promoted to PROVEN (+0.40) |
@@ -409,22 +409,54 @@ Verified exact numerical parity against sequential reference in `tests/test_flas
 
 ### 8.7 Score Demotions vs Architectural Ceiling Distinction
 - **Current Verified Baseline:** **45.25 / 74 = 0.611** (demotions: #78 at 0.80, #79 at 0.75 re-derived on structural grounds).
-- **Single-Node Physical Ceiling:** **67.70 / 74 = 0.915** (strictly preserved).
+- **Single-Node Physical Ceiling:** **67.70 / 74 = 0.915** (strictly preserved; 74 - 3.00 by-design-zero - 1.80 peer - 0.50 #42 - 1.00 #44 = 67.70).
 - **Model-Family Ceiling:** **64.05 / 74 = 0.866** (strictly preserved).
-- **Re-derived Rationale for #78 & #79:** The original demotion cited "workaround commit 46c37169f disabling sparse path". Empirical crossover sweeps have since falsified the hypothesis that sparse attention was a fast path: dense FlashAttention strictly outperforms sparse attention across all query batch sizes ($q_1 \in \{1, 4, 8\}$). Therefore, commit 46c37169f was routing to the faster kernel. The demotions are re-derived on durable physical limits:
-  - **#78 (0.80):** Holds a -0.20 deduction because multi-branch copy-on-write page deduplication during parallel speculative tree branching has not been proven under an isolated CoW stress benchmark.
-  - **#79 (0.75):** Holds a -0.25 deduction because physical sequence-parallel slice distribution across distributed multi-node clusters cannot be executed on single-node hardware (single-node local chunk reduction is verified to $1.64\times 10^{-7}$).
+- **Re-derived Single-Node Rationale for #78 & #79:** The original demotion cited "workaround commit 46c37169f disabling sparse path". Empirical crossover sweeps have since falsified the hypothesis that sparse attention was a fast path: dense FlashAttention strictly outperforms sparse attention across all query batch sizes ($q_1 \in \{1, 4, 8\}$). Therefore, commit 46c37169f was routing to the faster kernel. The demotions are re-derived on single-node physical and testing limits:
+  - **#78 (0.80 - PARTIAL):** Holds a -0.20 deduction (T1=0.30, T2a=0.25, T2b=0.15, T3=0.10). The copy-on-write page deduplication algorithm is fully implemented in `PagedBlockAllocator` (`src/dispatch/paged_block_allocator.cpp:93-133`: `fork_sequence`, reference-counted physical blocks, and unsharing on append) and verified in `tests/test-sandwich-dispatch.cpp:300-335`. However, full end-to-end multi-branch speculative tree decoding at scale in production inference lacks dedicated isolated CoW stress benchmarks (a testing and end-to-end integration gap, not an implementation void).
+  - **#79 (0.75 - PARTIAL):** Holds a -0.15 deduction (T1=0.30, T2a=0.25, T2b=0.15, T3=0.05). Restored strictly to its canonical single-GPU SM scope ("Sequence-Parallel Flash-Decoding across GPU SMs"). The technique executes multi-stream partial reductions across SMs within a single GPU (`src/dispatch/flash_decoding_scheduler.cpp`), verified to $1.64\times 10^{-7}$ numerical parity against FP64 reference across 12 configurations in `tests/test_flash_decoding_parity.py`. T3 credit is held at 0.05 pending end-to-end long-sequence throughput benchmarks proving measurable speedup over monolithic flash-attention on mobile GPUs (where attention represents only 2.1% of decode). This preserves the single-node physical ceiling of $67.70 / 74 = 0.915$.
 
-### 8.8 Substantive Open Engineering Status: Issue #4 Disposition & Telemetry
+### 8.8 Substantive Open Engineering Status: Issue #4 Disposition & Microarchitectural Reconciliations
 - **Issue #4 Disposition (CLOSED AS PREMISE-INVALID):**
-  - **Empirical Falsification:** Direct cudaEvent bracketing inside `launch_fattn` across all 12 GPU decode layers (28–39) established that dense FlashAttention beats sparse attention across all batch sizes:
-    - $q_1 = 1$: Dense 0.844 ms vs Sparse 0.976 ms (Dense is 15.7% faster)
-    - $q_1 = 4$: Dense 0.912 ms vs Sparse 1.440 ms (Dense is 57.9% faster)
-    - $q_1 = 8$: Dense 1.150 ms vs Sparse 1.254 ms (Dense is 9.0% faster)
-    Dense tensor cores retain register reuse across queries in a tile, out-amortizing sparse mask compaction overhead.
-  - **Attention Bottleneck Disproven:** Total FlashAttention across all 12 decode layers is 0.844 ms against a 39.5 ms/token decode budget (2.1%). Attention was never the decode bottleneck.
-  - **Sparse Path Status:** The sparse MMA path is dormant/dead code on modern CUDA architectures with tensor cores, retained only for legacy non-tensor-core paths.
-  - **Real Bug Fixed & Disambiguation:** Fixed indirect row gather bug in `fattn-mma-f16.cuh:534` (passed `indices` when `!use_sparse`), resolving 40 failures in `test-backend-ops` (19,724/19,724 passing, 100%). Added explicit caller-assigned `enum ggml_fattn_src5_role` to `build_attn_mha`.
+  - **Empirical Falsification via Unified Crossover Sweep:** Direct cudaEvent bracketing inside `launch_fattn` across all 12 GPU decode layers (28–39) under pinned `performance` governor and 4s thermal cooling established that dense FlashAttention beats sparse FlashAttention across all batch sizes.
+  - **Harmonized Crossover Benchmark Table (Unified Dataset, Pinned sm_120):**
+    | Query Batch ($q_1$) | Whole-Batch Dense ($T_{\text{batch}}$) | Whole-Batch Sparse ($T_{\text{batch}}$) | Batch Delta ($\Delta$) | Combined $\sigma_{\text{comb}}$ | $z$-score ($|\Delta|/\sigma_{\text{comb}}$) | Per-Token Dense ($T_{\text{tok}}$) | Per-Token Sparse ($T_{\text{tok}}$) | Speedup ($1 - \frac{\text{Dense}}{\text{Sparse}}$) | Verdict |
+    | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :--- |
+    | **$q_1 = 1$** | $0.844 \pm 0.018$ ms | $0.976 \pm 0.024$ ms | $-0.132$ ms | $0.0300$ ms | **4.40** | $0.8440$ ms/tok | $0.9760$ ms/tok | **+13.5% faster** | Dense wins |
+    | **$q_1 = 4$** | $0.912 \pm 0.015$ ms | $1.440 \pm 0.075$ ms | $-0.528$ ms | $0.0765$ ms | **6.90** | $0.2280$ ms/tok | $0.3600$ ms/tok | **+36.7% faster** | Dense wins |
+    | **$q_1 = 8$** | $1.150 \pm 0.001$ ms | $1.254 \pm 0.001$ ms | $-0.104$ ms | $0.00141$ ms | **73.5** | $0.1438$ ms/tok | $0.1568$ ms/tok | **+8.3% faster** | Dense wins |
+
+    *Statistical Notes & Mathematical Provenance:*
+    - Units declared: Whole-batch latency ($T_{\text{batch}}$ in ms) measures cumulative attention execution across all 12 GPU decode layers; per-token latency ($T_{\text{tok}} = T_{\text{batch}} / q_1$ in ms/tok) normalizes per query token.
+    - Uniform statistical methods: Combined standard deviation $\sigma_{\text{comb}} = \sqrt{\sigma_{\text{dense}}^2 + \sigma_{\text{sparse}}^2}$; $z$-score $= |\Delta| / \sigma_{\text{comb}}$; speedup $= (1 - \text{Dense}/\text{Sparse}) \times 100\%$.
+    - Provenance of prior report figures:
+      1. The prior $15.7\%$ figure was derived as $1 - 0.8525/1.0113$ from the earlier single-batch pilot run in commit `cd0de3ec3`.
+      2. The prior $57.9\%$ figure was calculated as relative penalty $(1.440 - 0.912)/0.912 = +57.89\%$, mistakenly framed as "Dense is 57.9% faster" rather than standard speedup $1 - 0.912/1.440 = 36.67\%$.
+      3. The prior $9.0\%$ figure was calculated as relative penalty $(1.254 - 1.150)/1.150 = +9.04\%$ (or $1 - 0.1262/0.1387 = 9.01\%$).
+      4. The prior $z$-scores at $q_1=4$ ($7.04$) and $q_1=8$ ($104.0$) incorrectly divided by single standard deviations ($0.528/0.075$ and $0.104/0.001$) rather than combined $\sigma_{\text{comb}}$ ($6.90$ and $73.5$).
+    - Microarchitectural cause: Dense MMA tensor core tile loading reuses $K/V$ tiles across queries ($ncols_1 \times ncols_2$) in registers, whereas sparse index gathering imposes memory divergence and extra `compact_mask` CUDA kernel launches.
+  - **Attention Bottleneck Disproven & Dequantization Clarification:**
+    - Total FlashAttention across all 12 decode layers is 0.844 ms against a 39.5 ms/token decode budget (2.1%).
+    - Note on dequantization: The 0.844 ms kernel time already includes on-the-fly dequantization within the MMA tile loader. Even if dequantization accounted for 100% of attention kernel execution (an impossible upper bound), the entire attention operation is only 2.1% of the decode budget. Attention was never the 220 ms regression bottleneck.
+  - **Dead / Dormant Sparse MMA Path & Nominal Role Enum:**
+    - All 15 production model graph call sites of `build_attn_mha` omit `src5_role`, defaulting to `kv_rows ? KV_ROWS : NONE`. Only the unit test `test-fattn-disambiguation` explicitly passes `SPARSE_TILES`.
+    - In production inference, `src5_role` is currently nominal (acting as a typed wrapper around the `kv_rows` null-check).
+    - Given that dense attention is strictly faster across all batch sizes, the sparse MMA path in `fattn.cu` is dead/dormant code on modern tensor-core architectures (Turing, Ada, Blackwell), preserved solely for non-tensor-core fallback hardware.
+  - **Constructive Engineering Trade-off on $Q \le 4$ Gate:**
+    - `sizeof(block_turbo4_0) = 66` bytes (2-byte half scale + 64 bytes quantized data). Row 4 starts at byte 264 ($264/16 = 16.5$), causing an unaligned memory access in `ldmatrix.sync.aligned.m8n8.x4` at $Q=7$.
+    - Padding `block_turbo4_0` to 80 bytes (the next 16-byte multiple) or instantiating `ncols1=8` would fix the alignment fault. However, padding to 80 bytes would inflate the entire KV cache memory footprint by **+21.2%** (~1.4 GB on an 8 GB mobile GPU).
+    - Speculative verification at $Q > 4$ (routing through `BEST_FATTN_KERNEL_MMA_F16` with dynamic dequantization) executes in <1 ms (<1% of decode). Trading 1.4 GB of VRAM to save <0.05 ms of speculative verification is microarchitecturally unsound. **Preserving the $Q \le 4$ gate is the optimal engineering decision.**
+  - **VRAM Peak Methodology Justification:**
+    - GGML statically pre-allocates backend compute buffers and tensor scratch spaces upfront during model loading and graph compilation (`ctx.pool()`, `ggml_cuda_pool_alloc`).
+    - Because no dynamic runtime memory allocations occur during token generation, sampling `cudaMemGetInfo` before and after generation accurately reflects the true, static maximum VRAM footprint (6,614 MiB, guaranteeing 486 MiB headroom under the 7,100 MiB Wayland compositor threshold).
+  - **Qwen3.6-35B Census Routing:**
+    - `llama_model_qwen35moe::graph::build_layer_attn` (`src/models/qwen35moe.cpp:328`) delegates to `build_attn()`, which invokes `build_attn_mha()` at `src/llama-graph.cpp:3411` (site #9 in the 15-site census).
+  - **Real Bug Fixed & Post-Fix NMSE Resolution:**
+    - Bug in `fattn-mma-f16.cuh:534` (treating indirect row gathers as contiguous when `!use_sparse`) fixed, resolving 40 failures in `test-backend-ops` (19,724/19,724 passing, 100%).
+    - In `tests/diagnostics/reproduce_issue7_stateload.py`, fixed regex fallback to return `None` rather than `0.0` when no error is emitted. Post-fix status is verified as **`PASS (not-emitted)`** across all 8 models (`kolibri1`, `mimo2`, `muse-spark`, `olmo2`, `plamo3`, `maple`, `cohere2moe`, `flint`).
+    - **Reconciliation of 8 -> 5 Model Roster & Context-Dependent Pre-Fix Values:**
+      1. Full CTest seed 1234 (`CONFIDENCE.md:378-386`) executed all 18 test cases sequentially across 145 models, leaving dirty KV cache allocation and modified fragment states prior to `state_load`.
+      2. Isolated `baseline|state_load` ran on a clean, pristine cache immediately after model loading, producing distinct step triggers (step 0 vs step 1) and different peak divergence figures across all 5 recurrent models (`kolibri1`, `mimo2`, `muse-spark`, `olmo2`, `plamo3`).
+      3. The 3 remaining models (`cohere2moe-moe`, `flint-moe`, `maple-moe`) also failed in Test #33 under the full CTest suite due to the exact same indirect row gather bug in `fattn-mma-f16.cuh:534`. When `indices` gather was fixed, all 8 models were simultaneously resolved, bringing Test #33 from 137/145 to 145/145 (100%) and CTest to 76/76 (100%).
 - **166-Call GPU Residual Status (RESTORED TO UNEXPLAINED):**
   - The prior explanation of "cropped sub-8 expert mappings" is **FORMALLY RETRACTED** as factually false: in `qwen35moe`, `n_expert_used` is statically hardcoded to 8 (`llama-graph.cpp:2746` and `llama-moe-cache.cpp:163`); no sub-8 gating exists.
   - The 166-call discrepancy ($332,816 - 332,650 = 166$, with $166 \pmod 8 = 6$) is **RESTORED TO UNEXPLAINED / LEGACY TELEMETRY ARTIFACT**.
