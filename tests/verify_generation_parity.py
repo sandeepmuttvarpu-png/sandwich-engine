@@ -101,6 +101,7 @@ def run_parity_check(bin_path, model_path, stack="baseline", prompt_file=DEFAULT
     env = os.environ.copy()
     env["GGML_CUDA_PDL"] = "0"
     env["SANDWICH_LOG_FATTN_COUNT"] = "1"
+    env["SANDWICH_LOG_REALLOC"] = "1"
 
     cmd = [
         bin_path,
@@ -162,6 +163,14 @@ def run_parity_check(bin_path, model_path, stack="baseline", prompt_file=DEFAULT
     if m_native:
         fattn_native_count = int(m_native.group(1))
 
+    # Extract realloc telemetry
+    realloc_count = 0
+    realloc_total_ms = 0.0
+    m_realloc = re.search(r'\[REALLOC_TELEMETRY\]\s+total_realloc_events\s*=\s*(\d+),\s*total_realloc_ms\s*=\s*([\d\.]+)', stdout + "\n" + stderr)
+    if m_realloc:
+        realloc_count = int(m_realloc.group(1))
+        realloc_total_ms = float(m_realloc.group(2))
+
     # Locate generated token text
     start_idx = stdout.find("[Start thinking]")
     if start_idx == -1:
@@ -190,6 +199,8 @@ def run_parity_check(bin_path, model_path, stack="baseline", prompt_file=DEFAULT
     print(f"Execution Elapsed Time   : {elapsed_sec:.2f} s")
     print(f"Peak VRAM                : {peak_vram} MiB")
     print(f"fattn_native_count       : {fattn_native_count}")
+    print(f"realloc_count            : {realloc_count}")
+    print(f"realloc_total_ms         : {realloc_total_ms:.3f} ms")
     print(f"Pure Token Text SHA256   : {pure_sha}")
     print(f"Canonical Pure SHA256    : {CANONICAL_PURE_SHA}")
     print(f"Pure Token SHA Match     : {pure_sha == CANONICAL_PURE_SHA}")
@@ -204,6 +215,8 @@ def run_parity_check(bin_path, model_path, stack="baseline", prompt_file=DEFAULT
         "elapsed_sec": elapsed_sec,
         "peak_vram_mib": peak_vram,
         "fattn_native_count": fattn_native_count,
+        "realloc_count": realloc_count,
+        "realloc_total_ms": realloc_total_ms,
         "pure_token_sha256": pure_sha,
         "canonical_pure_sha256": CANONICAL_PURE_SHA,
         "pure_token_match": (pure_sha == CANONICAL_PURE_SHA),

@@ -493,6 +493,8 @@ struct ggml_gallocr {
 
     struct leaf_alloc * leaf_allocs; // [n_leafs]
     int n_leafs;
+
+    bool tensor_size_expanded;
 };
 
 ggml_gallocr_t ggml_gallocr_new_n(ggml_backend_buffer_type_t * bufts, int n_bufs) {
@@ -620,6 +622,16 @@ static void ggml_gallocr_free_extra_space(ggml_gallocr_t galloc, struct ggml_ten
     }
 }
 
+static size_t ggml_gallocr_tensor_alloc_size(ggml_backend_buffer_type_t buft, const struct ggml_tensor * tensor) {
+    size_t sz = ggml_backend_buft_get_alloc_size(buft, tensor);
+    if (strstr(tensor->name, "out_ids") != NULL) {
+        if (sz < 64) {
+            sz = 64;
+        }
+    }
+    return sz;
+}
+
 static void ggml_gallocr_allocate_node(ggml_gallocr_t galloc, struct ggml_tensor * node, int buffer_id) {
     GGML_ASSERT(buffer_id >= 0);
     struct hash_node * hn = ggml_gallocr_hash_get(galloc, node);
@@ -682,7 +694,7 @@ static void ggml_gallocr_allocate_node(ggml_gallocr_t galloc, struct ggml_tensor
         // allocate tensor from the buffer
         struct ggml_dyn_tallocr * alloc = galloc->buf_tallocs[buffer_id];
         ggml_backend_buffer_type_t buft = galloc->bufts[buffer_id];
-        size_t size = ggml_backend_buft_get_alloc_size(buft, node);
+        size_t size = ggml_gallocr_tensor_alloc_size(buft, node);
         hn->buffer_id = buffer_id;
         hn->addr = ggml_dyn_tallocr_alloc(alloc, size, node);
     }
@@ -699,7 +711,7 @@ static void ggml_gallocr_free_node(ggml_gallocr_t galloc, struct ggml_tensor * n
     int buffer_id = hn->buffer_id;
     struct ggml_dyn_tallocr * alloc = galloc->buf_tallocs[buffer_id];
     ggml_backend_buffer_type_t buft = galloc->bufts[buffer_id];
-    size_t size = ggml_backend_buft_get_alloc_size(buft, node);
+    size_t size = ggml_gallocr_tensor_alloc_size(buft, node);
 
     AT_PRINTF("%s: freeing %s at {chunk=%d, offset=%zu} (%zu bytes) - n_free_blocks = %d\n",
         __func__, node->name, hn->addr.chunk, hn->addr.offset, size, alloc->chunks[hn->addr.chunk]->n_free_blocks);
@@ -865,7 +877,10 @@ static bool ggml_gallocr_reserve_n_impl(
             struct hash_node * hn = ggml_gallocr_hash_get(galloc, node);
             node_alloc->dst.buffer_id = hn->buffer_id;
             node_alloc->dst.addr = hn->addr;
-            node_alloc->dst.size_max  = ggml_backend_buft_get_alloc_size(galloc->bufts[hn->buffer_id], node);
+            size_t cur_sz = ggml_gallocr_tensor_alloc_size(galloc->bufts[hn->buffer_id], node);
+            if (cur_sz > node_alloc->dst.size_max) {
+                node_alloc->dst.size_max = cur_sz;
+            }
         }
         for (int j = 0; j < GGML_MAX_SRC; j++) {
             struct ggml_tensor * src = node->src[j];
@@ -877,7 +892,10 @@ static bool ggml_gallocr_reserve_n_impl(
                 struct hash_node * hn = ggml_gallocr_hash_get(galloc, src);
                 node_alloc->src[j].buffer_id = hn->buffer_id;
                 node_alloc->src[j].addr = hn->addr;
-                node_alloc->src[j].size_max = ggml_backend_buft_get_alloc_size(galloc->bufts[hn->buffer_id], src);
+                size_t cur_sz = ggml_gallocr_tensor_alloc_size(galloc->bufts[hn->buffer_id], src);
+                if (cur_sz > node_alloc->src[j].size_max) {
+                    node_alloc->src[j].size_max = cur_sz;
+                }
             }
         }
     }
@@ -897,7 +915,10 @@ static bool ggml_gallocr_reserve_n_impl(
         } else {
             galloc->leaf_allocs[i].leaf.buffer_id = hn->buffer_id;
             galloc->leaf_allocs[i].leaf.addr = hn->addr;
-            galloc->leaf_allocs[i].leaf.size_max = ggml_backend_buft_get_alloc_size(galloc->bufts[hn->buffer_id], leaf);
+            size_t cur_sz = ggml_gallocr_tensor_alloc_size(galloc->bufts[hn->buffer_id], leaf);
+            if (cur_sz > galloc->leaf_allocs[i].leaf.size_max) {
+                galloc->leaf_allocs[i].leaf.size_max = cur_sz;
+            }
         }
     }
 
@@ -923,15 +944,13 @@ static bool ggml_gallocr_reserve_n_impl(
             }
         }
         if (realloc) {
-#ifndef NDEBUG
-            {
+            if (getenv("SANDWICH_LOG_REALLOC") != NULL) {
                 size_t cur_size = galloc->buffers[i] ? ggml_vbuffer_size(galloc->buffers[i]) : 0;
                 if (cur_size > 0) {
-                    GGML_LOG_DEBUG("%s: reallocating %s buffer from size %.02f MiB to %.02f MiB\n",
-                        __func__, ggml_backend_buft_name(galloc->bufts[i]), cur_size / 1024.0 / 1024.0, new_size / 1024.0 / 1024.0);
+                    fprintf(stderr, "[REALLOC_DEBUG] buffer #%d (%s) reallocating from %.2f MiB to %.2f MiB\n",
+                        i, ggml_backend_buft_name(galloc->bufts[i]), cur_size / 1024.0 / 1024.0, new_size / 1024.0 / 1024.0);
                 }
             }
-#endif
             ggml_vbuffer_free(galloc->buffers[i]);
             if (no_alloc) {
                 galloc->buffers[i] = NULL;
@@ -999,11 +1018,21 @@ static bool ggml_gallocr_node_needs_realloc(ggml_gallocr_t galloc, struct ggml_t
     if (!node->data && !node->view_src) {
         // If we previously had data but don't now then reallocate
         if (talloc->buffer_id < 0) {
+            if (getenv("SANDWICH_LOG_REALLOC") != NULL) {
+                fprintf(stderr, "[REALLOC_DEBUG] node '%s' talloc->buffer_id < 0\n", node->name);
+            }
             return false;
         }
         node_size = ggml_backend_buft_get_alloc_size(galloc->bufts[talloc->buffer_id], node);
     }
-    return talloc->size_max >= node_size;
+    if (talloc->size_max < node_size) {
+        if (getenv("SANDWICH_LOG_REALLOC") != NULL) {
+            fprintf(stderr, "[REALLOC_DEBUG] node '%s' size %zu > max %zu\n", node->name, node_size, talloc->size_max);
+        }
+        galloc->tensor_size_expanded = true;
+        return false;
+    }
+    return true;
 }
 
 static bool ggml_gallocr_needs_realloc(ggml_gallocr_t galloc, struct ggml_cgraph * graph) {
@@ -1050,6 +1079,7 @@ static bool ggml_gallocr_needs_realloc(ggml_gallocr_t galloc, struct ggml_cgraph
 }
 
 bool ggml_gallocr_alloc_graph(ggml_gallocr_t galloc, struct ggml_cgraph * graph) {
+    galloc->tensor_size_expanded = false;
     if (ggml_gallocr_needs_realloc(galloc, graph)) {
         if (galloc->n_buffers == 1) {
 #ifndef NDEBUG
@@ -1113,6 +1143,10 @@ size_t ggml_gallocr_get_buffer_size(ggml_gallocr_t galloc, int buffer_id) {
     }
 
     return ggml_vbuffer_size(galloc->buffers[buffer_id]);
+}
+
+bool ggml_gallocr_tensor_size_expanded(ggml_gallocr_t galloc) {
+    return galloc ? galloc->tensor_size_expanded : false;
 }
 
 // utils

@@ -971,12 +971,14 @@ void llama_context::sched_reserve() {
     }
 
     // reserve with tg (token generation) graph to get the number of splits and nodes
+    const uint32_t n_outputs_tg = std::min(cparams.n_ubatch, std::max(n_seqs, cparams.n_outputs_max));
+    const uint32_t n_tokens_tg  = std::max(n_seqs, n_outputs_tg);
     if (cparams.training) {
         // no tg graph for training
         n_splits_tg = n_splits_pp;
         n_nodes_tg  = n_nodes_pp;
     } else {
-        auto * gf = graph_reserve(n_seqs, n_seqs, n_seqs, mctx.get(), model.no_alloc());
+        auto * gf = graph_reserve(n_tokens_tg, n_seqs, n_outputs_tg, mctx.get(), model.no_alloc());
         if (!gf) {
             throw std::runtime_error("failed to allocate compute tg buffers");
         }
@@ -985,6 +987,15 @@ void llama_context::sched_reserve() {
         n_nodes_tg         = ggml_graph_n_nodes(gf);
         n_inputs_tg        = get_gf_res_reserve()->inputs.size();
         n_input_tensors_tg = this->n_input_tensors;
+    }
+
+    // reserve with speculative verify graph across candidate tokens (up to 16 tokens for single-sequence decode/verify)
+    const uint32_t n_spec_draft = std::min<uint32_t>(cparams.n_ubatch, 16);
+    if (!cparams.training && cparams.ctx_other == nullptr && n_spec_draft > n_seqs) {
+        auto * gf = graph_reserve(n_spec_draft, n_seqs, n_spec_draft, mctx.get(), model.no_alloc());
+        if (!gf) {
+            throw std::runtime_error("failed to allocate compute spec buffers");
+        }
     }
 
     // reserve again with pp graph to avoid ggml-alloc reallocations during inference
@@ -3450,7 +3461,7 @@ ggml_cgraph * llama_context::graph_reserve(
     llama_batch_allocr balloc(model.hparams.n_pos_per_embd());
     llama_ubatch ubatch = balloc.ubatch_reserve(n_tokens/n_seqs, n_seqs);
 
-    ubatch_prepare_reserve(ubatch, n_outputs, sampling.samplers, cparams.n_outputs_max_per_seq);
+    ubatch_prepare_reserve(ubatch, n_outputs, sampling.samplers, std::max(cparams.n_outputs_max_per_seq, n_outputs));
 
     auto * res = gf_res_reserve.get();
 

@@ -440,34 +440,39 @@ Verified exact numerical parity against sequential reference in `tests/test_flas
     - Note on dequantization: The 0.844 ms kernel time already includes on-the-fly dequantization within the MMA tile loader. Even if dequantization accounted for 100% of attention kernel execution (an impossible upper bound), the entire attention operation is only 2.1% of the decode budget. Attention was never the 220 ms regression bottleneck.
   - **Sparse MMA Path Reservation (High-Sparsity KV Eviction):**
     - All 15 production model graph call sites of `build_attn_mha` omit `src5_role`, defaulting to `kv_rows ? KV_ROWS : NONE`. Only the unit test `test-fattn-disambiguation` explicitly passes `SPARSE_TILES`.
-    - Microarchitectural correction: The sparse MMA path requires Tensor Cores (`turing_mma_available(cc)` $\ge 7.0$ or AMD MFMA) and cannot run on legacy non-tensor-core hardware.
+    - Microarchitectural correction: The NVIDIA Turing `mma.sync.aligned.m16n8k16` tensor core instructions require Compute Capability $\ge 7.5$ (`turing_mma_available(cc) == true`). Volta (CC 7.0) used `m8n8k4`. Pre-Turing legacy architectures (`sm_61`, `sm_50`) lack Tensor Cores entirely and fall back to vector/scalar kernels.
     - True workload reservation: Under standard causal attention, historical context is ~76% active, so sparse tile compaction overhead dominates. However, under dynamic KV eviction policies like Heavy Hitter Oracle (#77 `--h2o`) or streaming sinks (#21) at 20% retention / 80% eviction, skipping ~80% of tiles could out-amortize compaction overhead.
-    - The sparse MMA path is therefore preserved and explicitly reserved as **untested under high-sparsity KV eviction (e.g. #77 H2O)**.
+    - The sparse MMA path is therefore preserved and explicitly reserved as **untested under high-sparsity KV eviction (e.g. #77 H2O, #21 sinks)**.
   - **Corrected Engineering Trade-off on $Q \le 4$ Gate:**
-    - KV memory footprint calculation: 10 active GPU attention layers $\times$ 512 B/token $\times$ 5,000 tokens $= 25.6$ MB of KV cache.
-    - Padding `block_turbo4_0` from 66 to 80 bytes (+21.2% padding ratio) costs $25.6\text{ MB} \times 0.212 = \mathbf{5.4\text{ MB}}$ of VRAM ($\sim 4.5$ MB at $-c\ 4096$).
+    - KV Geometry from GGUF Metadata: `qwen35moe.attention.head_count_kv = 2`, `qwen35moe.attention.key_length = 256` ($2 \text{ heads} \times 256 \text{ dim} = 512$ elements = 512 bytes per token under Turbo4 quantization).
+    - Layer Distribution: The model has 10 trunk full-attention layers: `[3, 7, 11, 15, 19, 23, 27, 31, 35, 39]` (`full_attention_interval = 4`). Under `i_gpu_start = 28`, exactly **3 attention layers reside in GPU VRAM** (layers 31, 35, 39), while the remaining 7 attention layers reside in CPU host RAM.
+    - VRAM-Resident Memory & Padding Footprint:
+      - At $-c\ 5000$: $3 \text{ layers} \times 512 \text{ B/tok} \times 5,000 \text{ tok} = 7.68\text{ MB}$ of VRAM. Padding `block_turbo4_0` from 66 to 80 bytes (+21.21%) costs $7.68\text{ MB} \times 0.2121 = \mathbf{1.63\text{ MB}}$ of GPU VRAM ($\mathbf{1.33\text{ MB}}$ at $-c\ 4096$).
+      - Total Combined Memory (GPU VRAM + CPU Host RAM across all 10 attention layers): $10 \text{ layers} \times 512 \text{ B/tok} \times 5,000 \text{ tok} = 25.6\text{ MB}$. Padding cost across total system memory is $25.6\text{ MB} \times 0.2121 = \mathbf{5.43\text{ MB}}$ ($\mathbf{4.45\text{ MB}}$ at $-c\ 4096$).
     - The prior report's 1.4 GB figure is **FORMALLY RETRACTED** (it erroneously multiplied +21.2% against the 6,614 MiB total VRAM footprint, which is dominated by IQ3_S/IQ2_S model weights).
     - Unmeasured benefit figure ("<0.05 ms") dropped: keeping the $Q \le 4$ gate is justified on the clean microarchitectural fact that attention is only 2.1% of the decode budget. Speculative verification at $Q > 4$ (routing through `BEST_FATTN_KERNEL_MMA_F16` with dynamic dequantization) executes in <1 ms, so even a hypothetical 2x kernel win returns at most ~1% of decode throughput. **Preserving the $Q \le 4$ gate is the optimal engineering decision.**
   - **VRAM Peak Methodology & Realloc Event Count under `GGML_SCHED_DEBUG_REALLOC=1`:**
-    - Empirical verification: Running canonical decode with `GGML_SCHED_DEBUG_REALLOC=1` triggered `GGML_ABORT` (exit code -6 / SIGABRT) at node counts 4,965 (Baseline) and 5,215 (C4) on prompt-to-decode batch switching, **disproving** the "zero runtime dynamic allocations" assertion.
-    - Assertion retracted: Graph buffer reallocations do occur during prompt-to-decode and speculative verify transitions.
-    - True peak measurement: Peak VRAM is measured via **continuous 50 ms asynchronous runtime sampling** (`VRAMSampler` in `tests/verify_generation_parity.py`), capturing the true runtime peak at **6,614 MiB** (guaranteeing 486 MiB headroom under the 7,100 MiB Wayland compositor threshold).
+    - Empirical verification: Running canonical decode with `GGML_SCHED_DEBUG_REALLOC=1` previously triggered `GGML_ABORT` (exit code -6 / SIGABRT) at node counts 4,965 (Baseline) and 5,215 (C4) on prompt-to-decode batch switching, **disproving** the "zero runtime dynamic allocations" assertion.
+    - Assertion retracted: Graph buffer reallocations occurred during prompt-to-decode and speculative verify transitions.
+    - Transient Resolution Note: Because graph-reshape allocations and deallocations are transient (<1 ms), 50 ms asynchronous sampling cannot resolve fine-grained allocation spikes; 6,614 MiB is strictly the **observed peak at 50 ms resolution** (providing 486 MiB observed headroom under the 7,100 MiB Wayland compositor guard threshold) pending worst-case graph reservation or high-frequency sampling.
+    - **Directive 1 (Instrumented Reallocation Wall Time):** Total reallocation wall time measured via high-resolution telemetry across all 34 speculative decode transitions was **4.03 ms** (~0.118 ms per transition), and total reallocation wall time across all 64 tokens was **32.35 ms**. The hypothesis that dynamic reallocations explain the 220 ms regression is **FORMALLY FALSIFIED** ($32.35 \ll 220$ ms).
+    - **Directive 2 (Worst-Case Graph Reservation Across Prompt/Decode/Verify):** Implemented worst-case token generation reservation in `llama-context.cpp: sched_reserve()` ($n_\text{outputs, tg} = \min(cparams.n\_ubatch, \max(n\_seqs, cparams.n\_outputs\_max))$, $n_\text{tokens, tg} = \max(n\_seqs, n_\text{outputs, tg})$). Verified under `GGML_SCHED_DEBUG_REALLOC=1`: **0 aborts**, clean exit code 0, pure token SHA256 `481b2a7aea43731e77979bca6631cfac9d32bd42d023d63c91552b245931a6aa` bit-identical, and 76/76 CTest suite pass rate.
   - **Qwen3.6-35B Census Routing:**
     - `llama_model_qwen35moe::graph::build_layer_attn` (`src/models/qwen35moe.cpp:328`) delegates to `build_attn()`, which invokes `build_attn_mha()` at `src/llama-graph.cpp:3411` (site #9 in the 15-site census).
   - **Real Bug Fixed & Post-Fix NMSE Resolution:**
     - Bug in `fattn-mma-f16.cuh:534` (treating indirect row gathers as contiguous when `!use_sparse`) fixed, resolving 40 failures in `test-backend-ops` (19,724/19,724 passing, 100%).
     - In `tests/diagnostics/reproduce_issue7_stateload.py`, fixed regex fallback to return `None` rather than `0.0` when no error is emitted. Post-fix status is verified as **`PASS (not-emitted)`** across all 8 models.
     - **Reconciliation of Test #33 Roster & Dual Pre-Fix Context Table:**
-      | Model | Full-Suite (Seed 1234, `CONFIDENCE.md`) | Isolated Diagnostic (`baseline\|state_load`) | Post-Fix Status | Verdict |
+      | Model | Full-Suite (Seed 1234, `CONFIDENCE.md`) | Isolated Diagnostic (`baseline\|state_load`) | Post-Fix Status | Post-Fix Verification Verdict |
       | :--- | :---: | :---: | :---: | :---: |
-      | `kolibri1-moe.gguf` | $2.3015\times 10^{-5}$ (step 0) | $2.7231\times 10^{-5}$ (step 1) | **PASS (not-emitted)** | Clean ($\le 1.0\times 10^{-5}$) |
-      | `mimo2-moe.gguf` | $2.7187\times 10^{-5}$ (step 0) | $1.0821\times 10^{-4}$ (step 0) | **PASS (not-emitted)** | Clean ($\le 1.0\times 10^{-5}$) |
-      | `muse-spark-moe.gguf` | $4.1859\times 10^{-5}$ (step 0) | $1.6466\times 10^{-5}$ (step 2) | **PASS (not-emitted)** | Clean ($\le 1.0\times 10^{-5}$) |
-      | `olmo2-dense.gguf` | $4.5846\times 10^{-5}$ (step 1) | $2.9764\times 10^{-5}$ (step 0) | **PASS (not-emitted)** | Clean ($\le 1.0\times 10^{-5}$) |
-      | `plamo3-dense.gguf` | $7.0529\times 10^{-3}$ (step 0) | $2.2401\times 10^{-2}$ (step 0) | **PASS (not-emitted)** | Clean ($\le 1.0\times 10^{-5}$) |
-      | `maple-moe.gguf` | $3.2456\times 10^{-5}$ (step 1) | N/A (untracked in Issue #7) | **PASS (not-emitted)** | Clean ($\le 1.0\times 10^{-5}$) |
-      | `cohere2moe-moe.gguf` | $2.8873\times 10^{-5}$ (step 1) | N/A (untracked in Issue #7) | **PASS (not-emitted)** | Clean ($\le 1.0\times 10^{-5}$) |
-      | `flint-moe.gguf` | $2.7356\times 10^{-5}$ (step 1) | N/A (untracked in Issue #7) | **PASS (not-emitted)** | Clean ($\le 1.0\times 10^{-5}$) |
+      | `kolibri1-moe.gguf` | $2.3015\times 10^{-5}$ (step 0) | $2.7231\times 10^{-5}$ (step 1) | **PASS (not-emitted)** | Post-fix: below gate ($\le 1.0\times 10^{-5}$) |
+      | `mimo2-moe.gguf` | $2.7187\times 10^{-5}$ (step 0) | $1.0821\times 10^{-4}$ (step 0) | **PASS (not-emitted)** | Post-fix: below gate ($\le 1.0\times 10^{-5}$) |
+      | `muse-spark-moe.gguf` | $4.1859\times 10^{-5}$ (step 0) | $1.6466\times 10^{-5}$ (step 2) | **PASS (not-emitted)** | Post-fix: below gate ($\le 1.0\times 10^{-5}$) |
+      | `olmo2-dense.gguf` | $4.5846\times 10^{-5}$ (step 1) | $2.9764\times 10^{-5}$ (step 0) | **PASS (not-emitted)** | Post-fix: below gate ($\le 1.0\times 10^{-5}$) |
+      | `plamo3-dense.gguf` | $7.0529\times 10^{-3}$ (step 0) | $2.2401\times 10^{-2}$ (step 0) | **PASS (not-emitted)** | Post-fix: below gate ($\le 1.0\times 10^{-5}$) |
+      | `maple-moe.gguf` | $3.2456\times 10^{-5}$ (step 1) | N/A (untracked in Issue #7; verified in full suite) | **PASS (not-emitted)** | Post-fix: below gate ($\le 1.0\times 10^{-5}$) |
+      | `cohere2moe-moe.gguf` | $2.8873\times 10^{-5}$ (step 1) | N/A (untracked in Issue #7; verified in full suite) | **PASS (not-emitted)** | Post-fix: below gate ($\le 1.0\times 10^{-5}$) |
+      | `flint-moe.gguf` | $2.7356\times 10^{-5}$ (step 1) | N/A (untracked in Issue #7; verified in full suite) | **PASS (not-emitted)** | Post-fix: below gate ($\le 1.0\times 10^{-5}$) |
       Pre-fix divergence difference is explained by KV cache dirtiness (18 prior test cases in full suite vs clean cache in isolated diagnostic). All 8 models failed due to `indices` row gather omission in `fattn-mma-f16.cuh:534` and all 8 now pass 100% in both isolated and full CTest modes.
 - **166-Call GPU Residual Status (RESTORED TO UNEXPLAINED):**
   - The prior explanation of "cropped sub-8 expert mappings" is **FORMALLY RETRACTED** as factually false: in `qwen35moe`, `n_expert_used` is statically hardcoded to 8 (`llama-graph.cpp:2746` and `llama-moe-cache.cpp:163`); no sub-8 gating exists.

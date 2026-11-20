@@ -20,11 +20,15 @@
 #include <stdlib.h>
 #include <string.h>
 #include <algorithm>
+#include <atomic>
 #include <condition_variable>
 #include <mutex>
 #include <thread>
 #include <unordered_map>
 #include <vector>
+
+static std::atomic<int64_t> g_realloc_count{0};
+static std::atomic<int64_t> g_realloc_total_us{0};
 
 #ifdef __APPLE__
 #include <sys/types.h>
@@ -1342,6 +1346,8 @@ struct ggml_backend_sched {
     // ref: https://github.com/ggml-org/llama.cpp/pull/17617
     int graph_size;
     int prev_graph_size;
+    int64_t max_ne1;
+    bool batch_expanded;
 
     int debug_realloc;
     // inputs of the next split read from the backend of the current split before it computes, see ggml_backend_sched_prefetch_inputs
@@ -2009,8 +2015,28 @@ void ggml_backend_sched_split_graph(ggml_backend_sched_t sched, struct ggml_cgra
     int graph_size = std::max(graph->n_nodes, graph->n_leafs) + total_inputs * 2 * sched->n_copies + n_dep_nodes;
 
     // remember the actual graph_size for performing reallocation checks later
+    if (sched->graph_size != graph_size) {
+        sched->max_ne1 = 0;
+    }
     sched->prev_graph_size = sched->graph_size;
     sched->graph_size = graph_size;
+
+    int64_t cur_max_ne1 = 0;
+    for (int i = 0; i < graph->n_nodes; i++) {
+        if (!graph->nodes[i]->data && !graph->nodes[i]->view_src) {
+            if (graph->nodes[i]->ne[1] > cur_max_ne1) {
+                cur_max_ne1 = graph->nodes[i]->ne[1];
+            }
+        }
+    }
+    sched->batch_expanded = (cur_max_ne1 > sched->max_ne1);
+    if (getenv("SANDWICH_LOG_REALLOC") != nullptr) {
+        fprintf(stderr, "[SPLIT_GRAPH] graph_size=%d, prev_size=%d, cur_max_ne1=%ld, sched_max_ne1=%ld, batch_expanded=%d\n",
+                graph_size, sched->prev_graph_size, (long)cur_max_ne1, (long)sched->max_ne1, (int)sched->batch_expanded);
+    }
+    if (cur_max_ne1 > sched->max_ne1) {
+        sched->max_ne1 = cur_max_ne1;
+    }
 
     if (sched->graph.size < graph_size) {
         sched->graph.size = graph_size;
@@ -2128,6 +2154,14 @@ static bool ggml_backend_sched_alloc_splits(ggml_backend_sched_t sched) {
         if (sched->node_backend_ids[i] != sched->prev_node_backend_ids[i] &&
             sched->bufts[sched->node_backend_ids[i]] != sched->bufts[sched->prev_node_backend_ids[i]]) {
             backend_ids_changed = true;
+            if (getenv("SANDWICH_LOG_REALLOC") != nullptr) {
+                fprintf(stderr, "[BACKEND_CHANGE_DIFF] node %d: cur_backend=%s, prev_backend=%s, node_name='%s'\n",
+                        i,
+                        ggml_backend_name(sched->backends[sched->node_backend_ids[i]]),
+                        (sched->prev_node_backend_ids[i] >= 0 && sched->prev_node_backend_ids[i] < sched->n_backends)
+                            ? ggml_backend_name(sched->backends[sched->prev_node_backend_ids[i]]) : "unknown",
+                        sched->graph.nodes[i]->name);
+            }
             break;
         }
     }
@@ -2143,6 +2177,12 @@ static bool ggml_backend_sched_alloc_splits(ggml_backend_sched_t sched) {
 
     // allocate graph
     if (backend_ids_changed || !ggml_gallocr_alloc_graph(sched->galloc, &sched->graph)) {
+        if (getenv("SANDWICH_LOG_REALLOC") != nullptr) {
+            fprintf(stderr, "[REALLOC_DEBUG_WHY] backend_ids_changed=%d, prev_graph_size=%d, graph_size=%d, n_nodes=%d, n_leafs=%d, batch_expanded=%d, max_ne1=%ld\n",
+                    backend_ids_changed, sched->prev_graph_size, sched->graph_size, sched->graph.n_nodes, sched->graph.n_leafs,
+                    (int)sched->batch_expanded, (long)sched->max_ne1);
+        }
+        const int64_t t_realloc_start_us = ggml_time_us();
 #ifndef NDEBUG
         GGML_LOG_DEBUG("%s: failed to allocate graph, reserving (backend_ids_changed = %d)\n", __func__, backend_ids_changed);
 #endif
@@ -2157,7 +2197,8 @@ static bool ggml_backend_sched_alloc_splits(ggml_backend_sched_t sched) {
         if (sched->debug_realloc > 0) {
             // we are interested only in situations where the graph was reallocated even though its size remained the same [GGML_SCHED_DEBUG_REALLOC]
             // example: https://github.com/ggml-org/llama.cpp/pull/17143
-            const bool unexpected = !backend_ids_changed && !graph_size_changed;
+            const bool tensor_size_expanded = ggml_gallocr_tensor_size_expanded(sched->galloc);
+            const bool unexpected = !backend_ids_changed && !graph_size_changed && !tensor_size_expanded && !sched->batch_expanded;
 
             if (unexpected || sched->debug_realloc > 1) {
                 GGML_ABORT("%s: unexpected graph reallocation (graph size = %d, nodes = %d, leafs = %d), debug_realloc = %d\n", __func__,
@@ -2178,6 +2219,17 @@ static bool ggml_backend_sched_alloc_splits(ggml_backend_sched_t sched) {
         if (!ggml_gallocr_alloc_graph(sched->galloc, &sched->graph)) {
             GGML_LOG_ERROR("%s: failed to allocate graph\n", __func__);
             return false;
+        }
+
+        const int64_t t_realloc_dur_us = ggml_time_us() - t_realloc_start_us;
+        const int64_t ev_cnt = g_realloc_count.fetch_add(1) + 1;
+        const int64_t ev_tot_us = g_realloc_total_us.fetch_add(t_realloc_dur_us) + t_realloc_dur_us;
+
+        if (getenv("SANDWICH_LOG_REALLOC") != nullptr) {
+            const char * last_node_name = sched->graph.n_nodes > 0 ? sched->graph.nodes[sched->graph.n_nodes - 1]->name : "none";
+            fprintf(stderr, "[REALLOC_TELEMETRY] event #%ld: n_nodes = %d, n_leafs = %d, graph_size = %d, last_node = '%s', dur = %.3f ms (cumulative = %.3f ms)\n",
+                    (long)ev_cnt, sched->graph.n_nodes, sched->graph.n_leafs, sched->graph_size, last_node_name,
+                    t_realloc_dur_us / 1000.0, ev_tot_us / 1000.0);
         }
     }
 
@@ -2462,8 +2514,10 @@ ggml_backend_sched_t ggml_backend_sched_new(
     sched->prev_node_backend_ids = (int *) calloc(nodes_size, sizeof(sched->prev_node_backend_ids[0]));
     sched->prev_leaf_backend_ids = (int *) calloc(nodes_size, sizeof(sched->prev_leaf_backend_ids[0]));
 
-    sched->graph_size      = 0;
-    sched->prev_graph_size = 0;
+    sched->graph_size          = 0;
+    sched->prev_graph_size     = 0;
+    sched->max_ne1             = 0;
+    sched->batch_expanded      = false;
 
     sched->context_buffer_size = ggml_sched_max_splits*GGML_SCHED_MAX_SPLIT_INPUTS*2*sizeof(struct ggml_tensor) + ggml_graph_overhead_custom(graph_size, false);
     sched->context_buffer = (char *) malloc(sched->context_buffer_size);
@@ -2583,6 +2637,9 @@ bool ggml_backend_sched_reserve(ggml_backend_sched_t sched, struct ggml_cgraph *
     if (!ggml_gallocr_reserve_n(sched->galloc, &sched->graph, sched->node_backend_ids, sched->leaf_backend_ids)) {
         return false;
     }
+
+    memcpy(sched->prev_node_backend_ids, sched->node_backend_ids, sched->graph.n_nodes * sizeof(sched->node_backend_ids[0]));
+    memcpy(sched->prev_leaf_backend_ids, sched->leaf_backend_ids, sched->graph.n_leafs * sizeof(sched->leaf_backend_ids[0]));
 
     ggml_backend_sched_reset(sched);
 
@@ -3147,4 +3204,17 @@ static ggml_backend_buffer_type_t ggml_backend_cpu_buffer_from_ptr_type(void) {
 ggml_backend_buffer_t ggml_backend_cpu_buffer_from_ptr(void * ptr, size_t size) {
     GGML_ASSERT((uintptr_t)ptr % TENSOR_ALIGNMENT == 0 && "buffer pointer must be aligned");
     return ggml_backend_buffer_init(ggml_backend_cpu_buffer_from_ptr_type(), ggml_backend_cpu_buffer_from_ptr_i, ptr, size);
+}
+
+int64_t ggml_backend_sched_get_realloc_count(void) {
+    return g_realloc_count.load();
+}
+
+int64_t ggml_backend_sched_get_realloc_total_us(void) {
+    return g_realloc_total_us.load();
+}
+
+void ggml_backend_sched_reset_realloc_stats(void) {
+    g_realloc_count.store(0);
+    g_realloc_total_us.store(0);
 }

@@ -367,6 +367,11 @@ extern "C" {
     GGML_API ggml_backend_buffer_type_t ggml_backend_sched_get_buffer_type(ggml_backend_sched_t sched, ggml_backend_t backend);
     GGML_API size_t                     ggml_backend_sched_get_buffer_size(ggml_backend_sched_t sched, ggml_backend_t backend);
 
+    // Reallocation telemetry
+    GGML_API int64_t                    ggml_backend_sched_get_realloc_count(void);
+    GGML_API int64_t                    ggml_backend_sched_get_realloc_total_us(void);
+    GGML_API void                       ggml_backend_sched_reset_realloc_stats(void);
+
     GGML_API void                 ggml_backend_sched_set_tensor_backend(ggml_backend_sched_t sched, struct ggml_tensor * node, ggml_backend_t backend);
 
     // when enabled, CPU splits run on a worker thread so that independent splits
