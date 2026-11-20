@@ -10,6 +10,7 @@
 #include <unistd.h>
 #include <algorithm>
 #include <cctype>
+#include <filesystem>
 
 // Forward declaration of engine execution entry point
 int llama_cli(int argc, char ** argv);
@@ -40,8 +41,9 @@ bool Router::is_manual_cli_invocation(int argc, char ** argv) {
 void Router::print_help(const char * progname) {
     std::cout << "\033[1;38;2;229;169;59m🥪 Sandwich.cpp ── Next-Generation Independent Inference Engine\033[0m\n\n";
     std::cout << "\033[1mUSAGE:\033[0m\n";
-    std::cout << "  " << progname << "                  Show help and status\n";
-    std::cout << "  " << progname << " [flags...]       Run direct CLI inference\n\n";
+    std::cout << "  " << progname << "                  Launch Interactive Strata TUI Wizard\n";
+    std::cout << "  " << progname << " --tui            Explicitly launch Strata TUI Wizard\n";
+    std::cout << "  " << progname << " [flags...]       Run direct CLI inference (bypasses TUI)\n\n";
 
     std::cout << "\033[1mAUTO-DISPATCH & PROFILING COMMANDS:\033[0m\n";
     std::cout << "  --tune, --profile           Run hardware profiling and display JSON diagnostics\n";
@@ -298,8 +300,28 @@ int Router::route(int argc, char ** argv) {
         return auto_calibrate_and_dispatch(argc, argv);
     }
 
-    // Case 5: Default invocation
-    if (argc == 1) {
+    // Case 5: Interactive Strata TUI (default for argc == 1 or --tui)
+    if (argc == 1 || (argc == 2 && (std::strcmp(argv[1], "--tui") == 0 || std::strcmp(argv[1], "-ui") == 0))) {
+        if (!isatty(STDIN_FILENO) || !isatty(STDOUT_FILENO)) {
+            print_help(argv[0]);
+            return 0;
+        }
+
+        std::filesystem::path prog = argv[0];
+        std::filesystem::path tui_path = prog.parent_path() / "sandwich-tui";
+        std::error_code ec;
+
+        if (std::filesystem::exists(tui_path, ec)) {
+            char * const tui_argv[] = { const_cast<char*>("sandwich-tui"), nullptr };
+            execv(tui_path.c_str(), tui_argv);
+        } else if (std::filesystem::exists("./build/bin/sandwich-tui", ec)) {
+            char * const tui_argv[] = { const_cast<char*>("sandwich-tui"), nullptr };
+            execv("./build/bin/sandwich-tui", tui_argv);
+        } else {
+            char * const tui_argv[] = { const_cast<char*>("sandwich-tui"), nullptr };
+            execvp("sandwich-tui", tui_argv);
+        }
+
         print_help(argv[0]);
         return 0;
     }
