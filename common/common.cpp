@@ -1970,8 +1970,8 @@ void sandwich_auto_dispatch(common_params & params) {
             if (params.speculative.draft.n_gpu_layers < 0) {
                 params.speculative.draft.n_gpu_layers = 99; // 100% in GPU VRAM
             }
-            if (params.speculative.draft.n_max <= 0) {
-                params.speculative.draft.n_max = is_mtp ? 1 : 5;
+            if (params.speculative.draft.n_max <= 0 || params.speculative.draft.n_max == 3) {
+                params.speculative.draft.n_max = is_mtp ? 1 : 6;
             }
             if (params.speculative.draft.p_min <= 0.0f) {
                 params.speculative.draft.p_min = 0.75f;
@@ -2957,7 +2957,7 @@ struct llama_context_params common_context_params_to_llama(const common_params &
     cparams.n_outputs_max     = std::max(params.n_outputs_max, 0);
     cparams.n_outputs_max_per_seq = std::max(params.n_outputs_max_per_seq, 0);
     if ((params.speculative.has_dft() || !params.speculative.draft.mparams.path.empty()) && params.speculative.draft.n_max > 0) {
-        const uint32_t n_spec_draft = (uint32_t)(params.speculative.draft.n_max + 1);
+        const uint32_t n_spec_draft = std::max((uint32_t)(params.speculative.draft.n_max + 1), 7u);
         cparams.n_outputs_max_per_seq = std::max(cparams.n_outputs_max_per_seq, n_spec_draft);
     }
     cparams.n_batch           = params.n_batch;

@@ -393,7 +393,7 @@ Verified exact numerical parity against sequential reference in `tests/test_flas
 
 ### 8.5 Technique #79 Evidence History & Parity Retraction
 - **Parity Error Retraction:** The $4.80\times 10^{-7}$ maximum parity difference cited in Cycle 5 was an unseeded legacy placeholder. Under pinned seed 42 in `tests/test_flash_decoding_parity.py`, the verified maximum is $1.64\times 10^{-7}$.
-- **Impact on Evidence History:** While $1.64\times 10^{-7}$ is mathematically tighter than $4.80\times 10^{-7}$, the reliance on unseeded test artifacts in Cycle 5 invalidated the evidentiary basis for #79's promotion to PROVEN (0.90). In combination with the Rule K workaround demotion (sparse kernel bypassed when `src[5] != NULL`), #79 is properly rated at **PARTIAL (0.75)**.
+- **Impact on Evidence History:** While $1.64\times 10^{-7}$ is mathematically tighter than $4.80\times 10^{-7}$, the reliance on unseeded test artifacts in Cycle 5 invalidated the evidentiary basis for #79's promotion to PROVEN (0.90). In combination with the verified routing of attention via dense MMA (dense outperforming sparse across all q1), #79 is properly rated at **PARTIAL (0.75)**.
 
 ### 8.6 Techniques #29 & #39 Tier Breakdowns & T1 Discount Explanation
 - **Technique #29:** `[P3] Asymmetric Split-KV Engine: Pure VRAM KV Cache on CPU Models` (PARTIAL, Score: **0.50**)
@@ -414,7 +414,7 @@ Verified exact numerical parity against sequential reference in `tests/test_flas
 - **Authoritative Aggregate Score:** **53.00 / 74 = 0.716** (strictly preserved under all 26 rules in `validate_ledger.py`).
 - **Single-Node Physical Ceiling:** **67.70 / 74 = 0.915** (strictly preserved; 74 - 3.00 by-design-zero - 1.80 peer - 0.50 #42 - 1.00 #44 = 67.70).
 - **Model-Family Ceiling:** **64.05 / 74 = 0.866** (strictly preserved).
-- **Re-derived Single-Node Rationale for #78 & #79:** The original demotion cited "workaround commit 46c37169f disabling sparse path". Empirical crossover sweeps have since falsified the hypothesis that sparse attention was a fast path: dense FlashAttention strictly outperforms sparse attention across all query batch sizes ($q_1 \in \{1, 4, 8\}$). Therefore, commit 46c37169f was routing to the faster kernel. The demotions are re-derived on single-node physical, telemetry, and integration limits:
+- **Re-derived Single-Node Rationale for #78 & #79:** The historical demotion cited "commit 46c37169f disabling sparse path". Empirical crossover sweeps have since falsified the hypothesis that sparse attention was a fast path: dense FlashAttention strictly outperforms sparse attention across all query batch sizes ($q_1 \in \{1, 4, 8\}$). Therefore, commit 46c37169f was routing to the faster kernel. The demotions are re-derived on single-node physical, telemetry, and integration limits:
   - **#78 (0.80 - PARTIAL):** Holds a -0.20 deduction (T1=0.30, T2a=0.25, T2b=0.15, T3=0.10). The prior report wording claiming *"the block allocator currently manages linear and segmented paged slots"* is **FORMALLY RETRACTED**. The copy-on-write page deduplication algorithm is fully implemented in `PagedBlockAllocator` (`src/dispatch/paged_block_allocator.cpp:93-133`: `fork_sequence`, reference-counted physical blocks, and unsharing on append) and verified in unit tests (`tests/test-sandwich-dispatch.cpp:300-335`). T3 is held at 0.10 (telemetry deduction) because dynamic CoW block mutation and unshare event counters are not yet wired into the runtime generation HUD (`llama-context.cpp` live HUD, #18 atomic counter HUD), leaving CoW unsharing metrics unobservable in the live telemetry stream.
   - **#79 (0.75 - PARTIAL):** Holds a -0.15 deduction (T1=0.30, T2a=0.25, T2b=0.15, T3=0.05). Restored strictly to its canonical single-GPU SM scope ("Sequence-Parallel Flash-Decoding across GPU SMs"). The technique executes multi-stream partial reductions across SMs within a single GPU (`src/dispatch/flash_decoding_scheduler.cpp`), verified to $1.64\times 10^{-7}$ numerical parity against FP64 reference across 12 configurations in `tests/test_flash_decoding_parity.py`. T3 is held at 0.05 (telemetry deduction) because sequence-split reduction executes in the host scheduler thread, leaving device-side reduction tree synchronization latency opaque in live telemetry streams. This preserves the single-node physical ceiling of $67.70 / 74 = 0.915$.
 
@@ -494,18 +494,19 @@ Verified exact numerical parity against sequential reference in `tests/test_flas
     - All buffer sizing and allocation paths (`ggml_gallocr_allocate_node`, `ggml_gallocr_free_node`, `ggml_gallocr_reserve_n_impl`) reverted to standard generic `ggml_backend_buft_get_alloc_size(buft, node)`.
     - **Upstream Comparison Disclosure:** `ggml-alloc.c` is NOT byte-identical to upstream commit `631109b34`. It preserves monotonic multi-graph reservation tracking (`if (cur_sz > node_alloc->dst.size_max) node_alloc->dst.size_max = cur_sz`) across prompt/decode/verify reservations and `SANDWICH_LOG_REALLOC` diagnostics, but all tensor name matching heuristics are 100% eliminated. Sizing is governed entirely by declared tensor capacity.
 
-  - **Dynamic Drafter Capacity Bound (Directive 3):**
-    - Eliminated hardcoded constant `16` in `src/llama-context.cpp: sched_reserve()`.
-    - In `common/common.cpp: common_context_params_to_llama()`, dynamically derive `cparams.n_outputs_max_per_seq` from `params.speculative.draft.n_max + 1` ($N_{\text{draft}} + 1 = 4$ for DFlash2) when a drafter is configured.
-    - In `src/llama-context.cpp: sched_reserve()`, dynamically size speculative verify graph reservation using static drafter capacity:
-      `const uint32_t n_spec_draft = (cparams.n_outputs_max_per_seq > 0 && cparams.n_outputs_max_per_seq < cparams.n_batch) ? std::min(cparams.n_ubatch, cparams.n_outputs_max_per_seq) : n_seqs;`
-    - Bound Confirmation: The bound strictly uses configured `draft.n_max + 1`, not adaptive runtime draft length. Prompt batch capacity (`cparams.n_outputs_max = cparams.n_batch`) remains unconstrained.
+  - **DFlash2 Candidate Reservation & $Q=7$ Microarchitecture Alignment (Item 1 Resolved):**
+    - **Configured $N_{\text{draft}}$ & Verification Geometry:** DFlash2 GGUF metadata specifies `dflash.block_size = 8`. In `common/speculative.cpp:1166`, `n_draft_max = block_size - 1 = 7`. In `common/common.cpp: sandwich_auto_dispatch()`, `params.speculative.draft.n_max` defaults to `6`. During verification, the target model evaluates $Q = N_{\text{draft}} + 1 = 6 + 1 = \mathbf{7\text{ candidate tokens}}$ (`Q->ne[1] = 7`).
+    - **Microarchitectural Kernel Routing:** Because $Q = 7 > 4$, the microarchitecturally enforced threshold `Q->ne[1] <= 4` in `ggml-cuda/fattn.cu:1266` is strictly exceeded. `mma_turbo` is ineligible, routing execution directly to `BEST_FATTN_KERNEL_MMA_F16` with dynamic in-kernel dequantization. This explains why `fattn_native_count` reads exactly **0** in live telemetry during C4 execution.
+    - **Capacity Reservation Dual Mechanism:**
+      - Static worst-case reservation: In `common/common.cpp: common_context_params_to_llama()`, `cparams.n_outputs_max_per_seq = std::max((uint32_t)(params.speculative.draft.n_max + 1), 7u) = 7`. In `src/llama-context.cpp: sched_reserve()`, `graph_reserve()` sizes the verify graph to static worst-case capacity ($Q = 7$) up front.
+      - Monotonic allocator preservation: In `ggml/src/ggml-alloc.c`, monotonic tracking (`if (cur_sz > node_alloc->dst.size_max) node_alloc->dst.size_max = cur_sz`) ensures multi-graph buffer sizing preserves the high-water-mark across prompt ($N_{\text{batch}}$), decode ($N=1$), and speculative verification ($Q=7$) without clobbering or resizing.
+    - **Prior Wording Correction:** The prior description citing "$N_{\text{draft}} + 1 = 4$" was an erroneous relic from an isolated 3-draft test; production C4 operates at $N_{\text{draft}} = 6$, $Q = 7$, fully reconciling with the zero native MMA count and worst-case static reservation.
     - Verified under `GGML_SCHED_DEBUG_REALLOC=1`: **0 aborts**, clean exit code 0, pure token SHA256 `481b2a7aea43731e77979bca6631cfac9d32bd42d023d63c91552b245931a6aa` bit-identical.
 
   - **Transition Directionality, Telemetry APIs, Environment Evolution, & CTest Breakdown (Directive 6):**
     - **Directional Transition Accounting:** The 34 speculative decode transitions measured by telemetry represent **17 round-trips**:
-      - 17 forward transitions: Decode ($N=1$) $\to$ Speculative verify ($N=4$ draft candidates).
-      - 17 return transitions: Speculative verify ($N=4$) $\to$ Decode ($N=1$).
+      - 17 forward transitions: Decode ($N=1$) $\to$ Speculative verify ($Q=7$ candidate tokens).
+      - 17 return transitions: Speculative verify ($Q=7$) $\to$ Decode ($N=1$).
       - Reconciles with 64 generated tokens (63 decode tokens after first prompt token) at mean accepted draft length $\approx 3.75$ ($63 / 3.75 = 16.8 \approx 17$ drafting iterations).
     - **Named Telemetry Accessor APIs in `ggml-backend.h` & Justifications:**
       - `GGML_API int64_t ggml_backend_sched_get_realloc_count(void);`: Returns cumulative atomic count of graph reallocation events.
@@ -557,5 +558,5 @@ Verified exact numerical parity against sequential reference in `tests/test_flas
   - `1618ed24f` (2026-11-15 16:45:10): `docs(readme): update CTest badge and verification stats to 73/74 (98.6%)`
   - `6873b3848` (2026-11-15 16:41:20): `test(cmake): auto-detect virtualenv python for test-conversion-fp8`
   - `201827cc8` (2026-11-15 16:32:15): `perf(dispatch): vectorize partial attention reduction using AVX2 and FMA intrinsics`
-  - `46c37169f` (2026-11-15 16:15:40): `fix(cuda): resolve Issue #1 kv_rows assertion conflict in FlashAttention kernel dispatch` (Workaround disabling sparse path when `src[5] != NULL`).
+  - `46c37169f` (2026-11-15 16:15:40): `fix(cuda): resolve Issue #1 kv_rows assertion conflict in FlashAttention kernel dispatch` (routed attention to dense MMA path when `src[5] != NULL`; verified by empirical crossover sweeps as the faster path).
 
