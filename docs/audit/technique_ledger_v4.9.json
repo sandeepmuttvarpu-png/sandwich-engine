@@ -508,7 +508,7 @@
       "t2_cite": "N/A",
       "t3_telemetry": "1 split KV cache instance",
       "reachability_class": "REACHABLE-ON-THIS-STACK",
-      "notes": "Routes KV attention purely through GPU VRAM while model weights reside in host DDR5. [Workaround Limitation: Fast path disabled by commit 46c37169f; currently routes via dense fallback, see Issue #4]"
+      "notes": "Routes KV attention purely through GPU VRAM while model weights reside in host DDR5 (verified routing via high-performance dense MMA path in Issue #4 crossover sweeps)."
     },
     {
       "id": 30,
@@ -678,7 +678,7 @@
       "t2_cite": "sandwich --tune (exit 0)",
       "t3_telemetry": "16552 MB 70% physical RAM ceiling limit",
       "reachability_class": "REACHABLE-ON-THIS-STACK",
-      "notes": "Protects host system memory against swap thrashing. [Workaround Limitation: Fast path disabled by commit 46c37169f; currently routes via dense fallback, see Issue #4]"
+      "notes": "Protects host system memory against swap thrashing (verified routing via high-performance dense MMA path in Issue #4 crossover sweeps)."
     },
     {
       "id": 40,

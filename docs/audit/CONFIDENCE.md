@@ -57,6 +57,8 @@
 | **C4** (Config_4_FullStack_With_Drafter) | Full Stack: Config 3 + Speculative Drafter (-md DFlash2 -ngld 0) | 459.10 ± 1.97 | 25.34 ± 0.26 | 1.87 | 0.00 | 8.23 | 2.49 | 0.18 | 12.77s |
 | **C5** (Config_5_Drafter_Alone_On_Baseline) | Baseline + Speculative Drafter (-md DFlash2 -ngld 0, f16 KV, no MoE cache) | 493.48 ± 2.84 | 21.18 ± 0.55 | 1.61 | 0.00 | 7.66 | 2.97 | 0.18 | 12.42s |
 
+*(Historical baseline note: C1–C5 ablation measured under initial test environment: Linux 6.18-zen, NVIDIA 620.70.06 driver, unpinned system threads. On the current software stack Linux 7.3.5 / NVIDIA 620.73.04 with clean system libraries, pre-regression baseline a7c9e6e26 runs at 24.12 ± 0.54 t/s and current main runs at 24.58 ± 0.20 t/s, statistically indistinguishable; see Section 8.8).*
+
 ### Rigorous Statistical Significance & Synergy Propagation Analysis
 
 1. **Speculative Drafter Decode Acceleration (C4 vs C1):**
@@ -453,46 +455,76 @@ Verified exact numerical parity against sequential reference in `tests/test_flas
     - Unmeasured benefit figure ("<0.05 ms") dropped: keeping the $Q \le 4$ gate is justified on the clean microarchitectural fact that attention is only 2.1% of the decode budget. Speculative verification at $Q > 4$ (routing through `BEST_FATTN_KERNEL_MMA_F16` with dynamic dequantization) executes in <1 ms, so even a hypothetical 2x kernel win returns at most ~1% of decode throughput. **Preserving the $Q \le 4$ gate is the optimal engineering decision.**
   - **Side-by-Side Arm Benchmark on Current Software Stack (Directives 1, 4, 5):**
     - Protocol: $n=5$ interleaved repetitions with 4s cooling delay on completely idle GPU (2 MiB / 8,151 MiB VRAM), executed on the identical host environment: Linux 7.3.5-arch1-1 (SMP PREEMPT_DYNAMIC x86_64), NVIDIA Driver 620.73.04 (CUDA UMD 13.5, Toolkit 13.5.37), `LD_LIBRARY_PATH=/opt/cuda/lib64` (zero local library overrides).
-    - Statistical Benchmark Results ($n=5$ interleaved repetitions):
-      | Benchmark Arm | Commit Hash / Description | Decode Throughput ($t_{\text{dec}}$) | Decode Wall-Time ($T_{\text{dec}}$) | Prefill Throughput ($t_{\text{pref}}$) | Peak VRAM (Bytes) | Peak VRAM (MiB) | Bit-Identical SHA256 Match |
-      | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-      | **Arm A (Pre-Regression Baseline)** | `a7c9e6e26` (commit before `46c37169f`) | $24.12 \pm 0.54\text{ t/s}$ (w/o warm-up: $24.35 \pm 0.17$) | $2.588 \pm 0.018\text{ s}$ | $464.3 \pm 0.6\text{ t/s}$ | 6,935,543,808 B | 6,614.25 MiB | 5/5 MATCH (`481b2a7a...`) |
-      | **Arm B (Current Main Post-Fix)** | `main` (clean generic allocator + dynamic reserve) | $24.58 \pm 0.20\text{ t/s}$ | $2.562 \pm 0.021\text{ s}$ | $465.1 \pm 0.4\text{ t/s}$ | 6,935,543,808 B | 6,614.25 MiB | 5/5 MATCH (`481b2a7a...`) |
-      | **Comparative Delta ($\text{Arm B} - \text{Arm A}$)** | Net impact of current codebase | $\mathbf{+0.23\text{ t/s}}$ ($\sigma_{\text{comb}} = 0.26\text{ t/s}$) | $\mathbf{-26\text{ ms}}$ (faster) | $\mathbf{+0.8\text{ t/s}}$ | $\mathbf{0\text{ bytes}}$ | $\mathbf{0.00\text{ MiB}}$ | 10/10 MATCH |
+    - **Raw Benchmark Measurements Across $n=5$ Interleaved Repetitions:**
+      | Run | Arm A (`a7c9e6e26`) Prefill (t/s) | Arm A Decode (t/s) | Arm A Decode Time (s) | Arm A Implied Tokens | Arm B (`main`) Prefill (t/s) | Arm B Decode (t/s) | Arm B Decode Time (s) | Arm B Implied Tokens | Peak VRAM (Bytes) | SHA256 Match |
+      | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+      | **1** | 454.3 (cold load 9.42s) | 23.2 | 2.72 | 63.10 | 463.9 (load 2.26s) | 24.8 | 2.54 | 62.99 | 6,935,543,808 B | 100% (`481b2a7a...`) |
+      | **2** | 466.0 (load 1.76s) | 24.6 | 2.56 | 62.98 | 469.6 (load 1.77s) | 24.8 | 2.54 | 62.99 | 6,935,543,808 B | 100% (`481b2a7a...`) |
+      | **3** | 468.7 (load 1.79s) | 24.3 | 2.59 | 62.94 | 463.1 (load 1.80s) | 24.4 | 2.58 | 62.95 | 6,935,543,808 B | 100% (`481b2a7a...`) |
+      | **4** | 469.0 (load 1.81s) | 24.3 | 2.59 | 62.94 | 469.1 (load 1.82s) | 24.5 | 2.57 | 62.97 | 6,935,543,808 B | 100% (`481b2a7a...`) |
+      | **5** | 466.4 (load 1.81s) | 24.2 | 2.61 | 63.16 | 470.2 (load 1.78s) | 24.4 | 2.58 | 62.95 | 6,935,543,808 B | 100% (`481b2a7a...`) |
 
-    - **220 ms Deficit Formally Resolved: FALSIFIED AS CODE DEFECT (ENVIRONMENT DRIFT):**
-      - The historical 25.34 t/s baseline was measured on an older Linux kernel and older NVIDIA driver without library overrides on an idle system.
-      - The 24.12 t/s comparison arm was measured across a major software stack shift (Linux 7.3.5 / NVIDIA 620.73.04).
-      - When pre-regression baseline commit `a7c9e6e26` is compiled and run on the CURRENT stack under identical conditions, it yields $24.35 \pm 0.17\text{ t/s}$ ($2.588\text{ s}$). Current `main` post-reserve fix yields $24.58 \pm 0.20\text{ t/s}$ ($2.562\text{ s}$), running 26 ms *faster* than the pre-regression codebase.
-      - The 220 ms regression never existed as a code defect; it was 100% environment drift across OS/kernel/driver versions. The deficit is formally closed as **FALSIFIED AS CODE DEFECT (ENVIRONMENT DRIFT)**.
-    - **Exact Byte-Level Peak VRAM (Directive 4):**
-      - Measured peak VRAM via `cudaMemGetInfo` at 50 ms resolution is exactly **6,935,543,808 bytes** ($6,614.25\text{ MiB}$), identical across both Arm A and Arm B ($\Delta = 0\text{ bytes}$).
-      - Headroom under the 7,100 MiB Wayland compositor guard threshold: $7,100 \times 1024^2 - 6,935,543,808 = \mathbf{509,343,744\text{ bytes}}$ ($\mathbf{485.75\text{ MiB}}$ headroom).
+    - **Token Count & Timing Reconciliation:**
+      - In earlier reporting, Arm A throughput was reported as $24.12 \pm 0.54\text{ t/s}$ (mean of all 5 runs including cold Run 1: 23.2 t/s) while decode time was reported as $2.588 \pm 0.021\text{ s}$ (mean of warm runs 2–5, excluding Run 1). Multiplying those mismatched means produced $24.12 \times 2.588 = 62.42\text{ tokens}$.
+      - Reconciled consistently across all 5 runs:
+        - Arm A: $24.12 \pm 0.54\text{ t/s} \times 2.614 \pm 0.062\text{ s} = \mathbf{63.05\text{ tokens}}$ ($64 - 1 = 63$).
+        - Arm B: $24.58 \pm 0.20\text{ t/s} \times 2.562 \pm 0.020\text{ s} = \mathbf{62.97\text{ tokens}}$ ($64 - 1 = 63$).
+      - Reconciled consistently across warm runs 2–5:
+        - Arm A: $24.35 \pm 0.17\text{ t/s} \times 2.588 \pm 0.021\text{ s} = \mathbf{63.01\text{ tokens}}$.
+        - Arm B: $24.53 \pm 0.19\text{ t/s} \times 2.568 \pm 0.019\text{ s} = \mathbf{62.97\text{ tokens}}$.
+      - Both arms produce exactly 63 decode tokens following 1 prompt evaluation token.
+
+    - **Statistical Significance & Deficit Disposition (Directive 1 & 5):**
+      - **Outcome: STATISTICALLY INDISTINGUISHABLE.**
+      - Decode Time Comparison:
+        - All 5 runs: $\Delta T = 2.562 - 2.614 = -52\text{ ms}$; combined $\sigma_{\text{comb}} = \sqrt{0.0619^2 + 0.0205^2} = 65.2\text{ ms}$; $2\sigma_{\text{comb}} = 130.4\text{ ms}$. $52\text{ ms} < 130.4\text{ ms}$ ($z = 0.80$, not significant).
+        - Warm runs (2–5): $\Delta T = 2.568 - 2.588 = -20\text{ ms}$; combined $\sigma_{\text{comb}} = \sqrt{0.0206^2 + 0.0189^2} = 28.0\text{ ms}$; $2\sigma_{\text{comb}} = 55.9\text{ ms}$. $20\text{ ms} < 55.9\text{ ms}$ ($z = 0.71$, not significant).
+      - Throughput Comparison:
+        - All 5 runs: $\Delta t = 24.58 - 24.12 = +0.46\text{ t/s}$; combined $\sigma_{\text{comb}} = \sqrt{0.536^2 + 0.205^2} \approx 0.58\text{ t/s}$; $2\sigma_{\text{comb}} = 1.15\text{ t/s}$. $0.46\text{ t/s} < 1.15\text{ t/s}$ ($z = 0.80$, not significant).
+        - Warm runs (2–5): $\Delta t = 24.53 - 24.35 = +0.18\text{ t/s}$; combined $\sigma_{\text{comb}} = \sqrt{0.173^2 + 0.189^2} = 0.256\text{ t/s}$; $2\sigma_{\text{comb}} = 0.512\text{ t/s}$. $0.18\text{ t/s} < 0.512\text{ t/s}$ ($z = 0.70$, not significant).
+      - **Conclusion:** There is no measurable decode performance difference between pre-regression baseline `a7c9e6e26` and current `main` on the same software environment. The historical 220 ms regression is **FORMALLY FALSIFIED AS A CODE DEFECT (ENVIRONMENT DRIFT)**. Claims of "26 ms faster" are retracted as within the 2σ noise gate.
+
+    - **Exact Byte-Level Peak VRAM & Headroom (Directive 4 & 5):**
+      - Physical VRAM Peak: Exactly **6,935,543,808 bytes** ($6,614.25\text{ MiB}$ via `cudaMemGetInfo`), identical across both Arm A and Arm B ($\Delta = 0\text{ bytes}$).
+      - Wayland Compositor Guard Threshold: $7,100\text{ MiB} = 7,100 \times 1,048,576 = \mathbf{7,444,889,600\text{ bytes}}$.
+      - Exact Headroom: $7,444,889,600 - 6,935,543,808 = \mathbf{509,345,792\text{ bytes}}$ ($\mathbf{485.75\text{ MiB}}$). (The prior report's 509,343,744 bytes was a 2,048-byte arithmetic slip and is corrected here).
+
   - **Purge of Tensor-Name String Matching in Generic Allocator (Directive 2):**
     - In `ggml/src/ggml-alloc.c`, completely removed all node name inspection (`strstr(tensor->name, "out_ids")`) and helper function `ggml_gallocr_tensor_alloc_size`.
     - All buffer sizing and allocation paths (`ggml_gallocr_allocate_node`, `ggml_gallocr_free_node`, `ggml_gallocr_reserve_n_impl`) reverted to standard generic `ggml_backend_buft_get_alloc_size(buft, node)`.
-    - Allocation sizing is now driven 100% by declared tensor geometry and capacity, leaving the generic allocator free of model-specific or layer-specific string matching.
+    - **Upstream Comparison Disclosure:** `ggml-alloc.c` is NOT byte-identical to upstream commit `631109b34`. It preserves monotonic multi-graph reservation tracking (`if (cur_sz > node_alloc->dst.size_max) node_alloc->dst.size_max = cur_sz`) across prompt/decode/verify reservations and `SANDWICH_LOG_REALLOC` diagnostics, but all tensor name matching heuristics are 100% eliminated. Sizing is governed entirely by declared tensor capacity.
+
   - **Dynamic Drafter Capacity Bound (Directive 3):**
     - Eliminated hardcoded constant `16` in `src/llama-context.cpp: sched_reserve()`.
-    - In `common/common.cpp: common_context_params_to_llama()`, dynamically derive `cparams.n_outputs_max_per_seq` from `params.speculative.draft.n_max + 1` ($N_{\text{draft}} + 1$) when a drafter is configured.
-    - In `src/llama-context.cpp: sched_reserve()`, dynamically size speculative verify graph reservation:
+    - In `common/common.cpp: common_context_params_to_llama()`, dynamically derive `cparams.n_outputs_max_per_seq` from `params.speculative.draft.n_max + 1` ($N_{\text{draft}} + 1 = 4$ for DFlash2) when a drafter is configured.
+    - In `src/llama-context.cpp: sched_reserve()`, dynamically size speculative verify graph reservation using static drafter capacity:
       `const uint32_t n_spec_draft = (cparams.n_outputs_max_per_seq > 0 && cparams.n_outputs_max_per_seq < cparams.n_batch) ? std::min(cparams.n_ubatch, cparams.n_outputs_max_per_seq) : n_seqs;`
+    - Bound Confirmation: The bound strictly uses configured `draft.n_max + 1`, not adaptive runtime draft length. Prompt batch capacity (`cparams.n_outputs_max = cparams.n_batch`) remains unconstrained.
     - Verified under `GGML_SCHED_DEBUG_REALLOC=1`: **0 aborts**, clean exit code 0, pure token SHA256 `481b2a7aea43731e77979bca6631cfac9d32bd42d023d63c91552b245931a6aa` bit-identical.
-  - **Transition Directionality, Telemetry APIs, CTest Delta, & Environment Tags (Directive 6):**
+
+  - **Transition Directionality, Telemetry APIs, Environment Evolution, & CTest Breakdown (Directive 6):**
     - **Directional Transition Accounting:** The 34 speculative decode transitions measured by telemetry represent **17 round-trips**:
       - 17 forward transitions: Decode ($N=1$) $\to$ Speculative verify ($N=4$ draft candidates).
       - 17 return transitions: Speculative verify ($N=4$) $\to$ Decode ($N=1$).
       - Reconciles with 64 generated tokens (63 decode tokens after first prompt token) at mean accepted draft length $\approx 3.75$ ($63 / 3.75 = 16.8 \approx 17$ drafting iterations).
-    - **Sanitized Telemetry Accessor APIs in `ggml-backend.h`:**
-      - Added minimal, non-invasive accessor signatures: `ggml_backend_sched_get_realloc_count(sched)`, `ggml_backend_sched_get_realloc_total_us(sched)`, and `ggml_backend_sched_reset_stats(sched)`.
-      - Justification: Enables zero-overhead diagnostic telemetry in production and testing harnesses without exposing internal scheduling internals or modifying graph structures. Counters are internal atomics within `ggml_backend_sched`.
-    - **CTest Duration Delta Resolution ($118.8\text{s} \to 129.9\text{s}$):**
-      - The delta is isolated entirely to `test-backend-ops` (19,724 ops across multiple backends). Under parallel execution (`ctest -j8`), CPU thread contention and kernel scheduling jitter on single-core CPU ops in `test-backend-ops` cause execution times to fluctuate between 110s and 125s. The graph reservation in `llama-context.cpp` affects only `llama_context` graph initialization and adds 0 ms to `test-backend-ops` (which does not use `llama_context`).
-    - **Environment Declarations:**
-      - OS / Kernel: `Linux victus 7.3.5-arch1-1 #1 SMP PREEMPT_DYNAMIC x86_64`
-      - NVIDIA Driver: `620.73.04` (CUDA UMD 13.5, Toolkit 13.5.37)
-      - `LD_LIBRARY_PATH`: `/opt/cuda/lib64` (clean system library path, no local overrides)
-      - GPU State: NVIDIA GeForce RTX 5050 Mobile (8,151 MiB), idle at 2 MiB / 0% utilization prior to benchmark start.
+    - **Named Telemetry Accessor APIs in `ggml-backend.h` & Justifications:**
+      - `GGML_API int64_t ggml_backend_sched_get_realloc_count(void);`: Returns cumulative atomic count of graph reallocation events.
+      - `GGML_API int64_t ggml_backend_sched_get_realloc_total_us(void);`: Returns cumulative atomic microsecond wall time spent in reallocations.
+      - `GGML_API void ggml_backend_sched_reset_realloc_stats(void);`: Resets atomic counters between benchmark/inference phases.
+      - *Justification:* Implemented via lock-free atomics (`std::atomic<int64_t>`) in `ggml-backend.cpp`. Provides zero-overhead runtime diagnostics without modifying graph layouts or leaking internal allocator structs to consumers.
+    - **Environment Stack Reconciliation (Directive 4):**
+      - Historical Environment (Baseline 25.34 t/s): Linux `6.18-zen`, temporary driver extract `620.70.06` under local `LD_LIBRARY_PATH=~/.local/lib/nvidia-620.70.06`. Tagged as historical.
+      - Current Software Stack: Arch Linux `7.3.5-arch1-1` (SMP PREEMPT_DYNAMIC x86_64), official distro NVIDIA open kernel module `620.73.04` in `/usr/lib/libcuda.so.1`, system CUDA 13.5 in `/opt/cuda/lib64/libcudart.so.13`.
+      - Library Override Status: `LD_LIBRARY_PATH` local override is **completely inactive** (`LD_LIBRARY_PATH=/opt/cuda/lib64`). Binaries link directly to clean system libraries.
+    - **Per-Test CTest Timings Across All 76 Tests (120.19s Total):**
+      Under parallel execution (`ctest -j8`), test #51 `test-backend-ops` (19,724 ops) is the sole bottleneck at 120.19 sec:
+      - Test #51 (`test-backend-ops`): **120.19 s**
+      - Test #33 (`test-llama-context`): **84.58 s**
+      - Test #36 (`test-jinja-py`): **43.87 s**
+      - Test #16 (`test-tokenizers-ggml-vocabs`): **16.50 s**
+      - Test #72 (`test-quant-type-selection`): **9.99 s**
+      - Remaining 71 Tests: **< 7.0 s each** (cumulative 45.4 s across 71 tests).
+      CTest wall-time jitter ($114\text{s} \to 129\text{s}$) across runs is entirely CPU thread contention on single-threaded ops in `test-backend-ops` while running concurrently with `test-llama-context`.
   - **Qwen3.6-35B Census Routing:**
     - `llama_model_qwen35moe::graph::build_layer_attn` (`src/models/qwen35moe.cpp:328`) delegates to `build_attn()`, which invokes `build_attn_mha()` at `src/llama-graph.cpp:3411` (site #9 in the 15-site census).
   - **Real Bug Fixed & Post-Fix NMSE Resolution:**
