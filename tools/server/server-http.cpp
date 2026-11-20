@@ -6,6 +6,7 @@
 
 #include <cpp-httplib/httplib.h>
 
+#include <filesystem>
 #include <functional>
 #include <future>
 #include <memory>
@@ -375,10 +376,28 @@ bool server_http_context::init_listener(const common_params & params) {
         SRV_INF("%s", "Use --ui/--no-ui (or deprecated --webui/--no-webui) to enable/disable\n");
     } else {
         // register static assets routes
-        if (!params.public_path.empty()) {
+        std::string effective_path = params.public_path;
+        if (effective_path.empty()) {
+            const std::vector<std::string> search_dirs = {
+                "build/tools/ui/dist",
+                "tools/ui/dist",
+                "../build/tools/ui/dist",
+                "/home/sandeep/dev/sandwich/sandwich-engine/build/tools/ui/dist"
+            };
+            for (const auto & dir : search_dirs) {
+                std::error_code ec;
+                if (std::filesystem::exists(dir, ec) && std::filesystem::is_directory(dir, ec)) {
+                    effective_path = dir;
+                    SRV_INF("Auto-detected Web UI static assets at: %s\n", effective_path.c_str());
+                    break;
+                }
+            }
+        }
+
+        if (!effective_path.empty()) {
             // Set the base directory for serving static files
-            if (const auto is_found = srv->set_mount_point(params.api_prefix + "/", params.public_path); !is_found) {
-                SRV_ERR("static assets path not found: %s\n", params.public_path.c_str());
+            if (const auto is_found = srv->set_mount_point(params.api_prefix + "/", effective_path); !is_found) {
+                SRV_ERR("static assets path not found: %s\n", effective_path.c_str());
                 return false;
             }
         } else {
