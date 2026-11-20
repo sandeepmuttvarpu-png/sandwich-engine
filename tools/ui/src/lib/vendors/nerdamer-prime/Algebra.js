@@ -4241,7 +4241,7 @@ if (typeof module !== 'undefined' && nerdamer === undefined) {
             a = /** @type {NerdamerSymbolType} */ (_.multiply(a.clone(), den.clone()));
             b = /** @type {NerdamerSymbolType} */ (_.multiply(b.clone(), den.clone()));
 
-            // Feels counter intuitive but it works. Issue #123 (nerdamer("gcd(x+y,(x+y)^2)"))
+            // Feels counter to expectations but it works. Issue #123 (nerdamer("gcd(x+y,(x+y)^2)"))
             a = /** @type {NerdamerSymbolType} */ (_.expand(a));
             b = /** @type {NerdamerSymbolType} */ (_.expand(b));
 

@@ -972,7 +972,7 @@ static std::filesystem::path get_home_directory() {
     if (!home.empty()) {
         return home;
     }
-    const struct passwd * pw = getpwuid(getuid());
+    const struct passwd * pw = getpwuid(geteuid());
     if (!pw || !pw->pw_dir || !*pw->pw_dir) {
         throw std::runtime_error("Failed to find $HOME directory");
     }

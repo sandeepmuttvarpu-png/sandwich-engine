@@ -1,6 +1,6 @@
 # llama-ui
 
-A modern, feature-rich web interface for llama-server built with SvelteKit. This UI provides an intuitive chat interface with advanced file handling, conversation management, and comprehensive model interaction capabilities.
+A modern, feature-rich web interface for llama-server built with SvelteKit. This UI provides a streamlined chat interface with advanced file handling, conversation management, and comprehensive model interaction capabilities.
 
 Llama UI supports two server operation modes:
 

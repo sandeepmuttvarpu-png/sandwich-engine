@@ -34,7 +34,7 @@ As outlined in the history, `libmtmd` is the modern library designed to replace 
 
 Originally built upon `clip.cpp` (similar to `llava.cpp`), `libmtmd` offers several advantages:
 - **Unified Interface:** Aims to consolidate interaction for various multimodal models.
-- **Improved UX/DX:** Features a more intuitive API, inspired by the `Processor` class in the Hugging Face `transformers` library.
+- **Improved UX/DX:** Features a more developer-friendly API, inspired by the `Processor` class in the Hugging Face `transformers` library.
 - **Flexibility:** Designed to support multiple input types (text, audio, images) while respecting the wide variety of chat templates used by different models.
 
 ## How to obtain `mmproj`

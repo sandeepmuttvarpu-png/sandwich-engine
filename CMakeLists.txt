@@ -274,6 +274,7 @@ endif()
 # Sandwich Smart-Dispatch & Auto-Tuning Engine
 if (LLAMA_BUILD_COMMON AND LLAMA_BUILD_TOOLS)
     add_subdirectory(src/dispatch)
+    add_subdirectory(src/tui)
 endif()
 
 # Standalone libmtmd build without pulling in the rest of the tools/ tree.

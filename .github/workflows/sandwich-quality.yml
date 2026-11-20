@@ -24,10 +24,10 @@ jobs:
             python docs/audit/validate_ledger.py --ledger docs/audit/technique_ledger.json
           fi
 
-      - name: Check TUI and dispatch headers
+      - name: Check dispatch headers
         run: |
-          test -f src/dispatch/tui_wizard.hpp
-          test -f src/dispatch/tui_wizard.cpp
+          test -f src/dispatch/router.hpp
+          test -f src/dispatch/hardware_profiler.hpp
           test -f src/dispatch/flash_decoding_scheduler.hpp
           test -f src/dispatch/flash_decoding_scheduler.cpp
 
