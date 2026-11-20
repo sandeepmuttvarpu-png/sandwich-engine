@@ -3,7 +3,6 @@ set(TARGET sandwich-tui)
 add_executable(${TARGET}
     main.cpp
     strata_tui.cpp
-    sandwich_tui_backend.cpp
 )
 
 target_include_directories(${TARGET} PRIVATE

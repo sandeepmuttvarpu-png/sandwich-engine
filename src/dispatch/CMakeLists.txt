@@ -12,14 +12,17 @@ add_library(${TARGET} STATIC
     flash_decoding_scheduler.cpp
     gpudirect_storage.cpp
     router.cpp
+    ${PROJECT_SOURCE_DIR}/src/tui/sandwich_tui_backend.cpp
 )
 
 target_include_directories(${TARGET} PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
+    ${PROJECT_SOURCE_DIR}/src/tui
     ${PROJECT_SOURCE_DIR}/tools/cli
     ${PROJECT_SOURCE_DIR}/tools/server
     ${PROJECT_SOURCE_DIR}/common
     ${PROJECT_SOURCE_DIR}/include
+    ${PROJECT_SOURCE_DIR}/ggml/include
 )
 
 target_link_libraries(${TARGET} PUBLIC

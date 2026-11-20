@@ -6,6 +6,7 @@
 #include "paged_block_allocator.hpp"
 #include "flash_decoding_scheduler.hpp"
 #include "gpudirect_storage.hpp"
+#include "sandwich_tui_backend.h"
 
 #include <cstdio>
 #include <cstdlib>
@@ -505,6 +506,75 @@ static void test_gpudirect_storage() {
     printf("  [PASS] test_gpudirect_storage\n");
 }
 
+static void test_strata_backend() {
+    printf("[test_strata_backend] Starting...\n");
+
+    // 1. Model & Drafter Discovery
+    auto models = sandwich::tui::strata_discover_models();
+    SANDWICH_TEST_CHECK(!models.empty());
+    printf("  Discovered %zu models (Default: %s)\n", models.size(), models[0].c_str());
+
+    auto drafters = sandwich::tui::strata_discover_drafters();
+    SANDWICH_TEST_CHECK(!drafters.empty());
+    printf("  Discovered %zu drafters (Default: %s)\n", drafters.size(), drafters[0].c_str());
+
+    // 2. Hardware Telemetry & Memory Wrappers
+    uint64_t free_vram = 0, total_vram = 0;
+    sandwich::tui::strata_get_vram_usage(free_vram, total_vram);
+    SANDWICH_TEST_CHECK(total_vram > 0);
+    printf("  VRAM: Total=%zu MB, Free=%zu MB\n", (size_t)(total_vram / (1024*1024)), (size_t)(free_vram / (1024*1024)));
+
+    sandwich::tui::StrataTelemetry telem = sandwich::tui::strata_get_telemetry();
+    SANDWICH_TEST_CHECK(telem.vram_total_mib > 0.0);
+    printf("  Telemetry HUD: VRAM=%.1f/%.1f MiB, Decode=%.2f tok/s, Latency=%.1f ms\n",
+           telem.vram_used_mib, telem.vram_total_mib, telem.decode_tokens_per_sec, telem.latency_ms);
+
+    // 3. Auto-Dispatch Command Synthesis
+    sandwich::tui::StrataInferenceConfig auto_cfg;
+    auto_cfg.model_path = models[0];
+    auto_cfg.auto_mode = true;
+    auto_cfg.n_ctx = 4096;
+    auto_cfg.n_threads = 6;
+    auto_cfg.n_gpu_layers = 14;
+
+    std::string auto_cmd = sandwich::tui::strata_construct_cli_command(auto_cfg);
+    SANDWICH_TEST_CHECK(auto_cmd.find("--sandwich-auto") != std::string::npos);
+    SANDWICH_TEST_CHECK(auto_cmd.find("-m ") != std::string::npos);
+    printf("  Auto-Dispatch Command synthesized: %s\n", auto_cmd.c_str());
+
+    // 4. Manual Configuration Command Synthesis
+    sandwich::tui::StrataInferenceConfig manual_cfg;
+    manual_cfg.model_path = models[0];
+    manual_cfg.auto_mode = false;
+    manual_cfg.n_ctx = 4096;
+    manual_cfg.n_threads = 6;
+    manual_cfg.n_gpu_layers = 14;
+    manual_cfg.drafter_path = drafters[0];
+    manual_cfg.drafter_gpu_layers = 99;
+    manual_cfg.moe_cache_slots = 16;
+    manual_cfg.moe_warm_ram_mb = 16552;
+    manual_cfg.ctk = "turbo4";
+    manual_cfg.ctv = "turbo4";
+    manual_cfg.io_uring = true;
+    manual_cfg.moe_2q = true;
+    manual_cfg.moe_exchange_rot = true;
+
+    std::string manual_cmd = sandwich::tui::strata_construct_cli_command(manual_cfg);
+    SANDWICH_TEST_CHECK(manual_cmd.find("-ngl 14") != std::string::npos);
+    SANDWICH_TEST_CHECK(manual_cmd.find("-t 6") != std::string::npos);
+    SANDWICH_TEST_CHECK(manual_cmd.find("-c 4096") != std::string::npos);
+    SANDWICH_TEST_CHECK(manual_cmd.find("-ngld 99") != std::string::npos);
+    SANDWICH_TEST_CHECK(manual_cmd.find("--moe-cache-slots 16") != std::string::npos);
+    SANDWICH_TEST_CHECK(manual_cmd.find("--moe-warm-ram-mb 16552") != std::string::npos);
+    SANDWICH_TEST_CHECK(manual_cmd.find("-ctk turbo4") != std::string::npos);
+    SANDWICH_TEST_CHECK(manual_cmd.find("--io-uring") != std::string::npos);
+    SANDWICH_TEST_CHECK(manual_cmd.find("--moe-2q") != std::string::npos);
+    SANDWICH_TEST_CHECK(manual_cmd.find("--moe-exchange-rot") != std::string::npos);
+    printf("  Manual Configuration Command synthesized successfully.\n");
+
+    printf("  [PASS] test_strata_backend\n");
+}
+
 int main() {
     printf("=== Running sandwich.cpp Dispatch Subsystem Unit Tests ===\n");
     test_ram_estimator();
@@ -515,6 +585,7 @@ int main() {
     test_paged_block_allocator();
     test_flash_decoding_scheduler();
     test_gpudirect_storage();
+    test_strata_backend();
     printf("=== All Sandwich Dispatch Tests Passed Successfully! ===\n");
     return 0;
 }
