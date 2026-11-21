@@ -5,9 +5,14 @@ All notable changes to Sandwich Engine will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - UI Overhaul
+## [Unreleased] - UI Overhaul & Architecture Tooling
 
 ### Added
+- **Server Web UI Auto-Mount:**
+  - Enhanced `llama-server` HTTP listener to automatically search and mount pre-compiled SvelteKit assets (`build/tools/ui/dist`) when `--path` is omitted.
+  - Added dedicated one-line launcher script `scripts/launch_web.sh`.
+- **Responsive Strata TUI Terminal Handling:**
+  - Added terminal size geometry checks (`cols < 70 || rows < 20`) with warning banners in `src/tui/strata_tui.cpp` to prevent text truncation or ANSI escape wrapping on small terminal windows.
 - **Strata Terminal User Interface (TUI):**
   - Integrated MIT-licensed Strata TUI modernized for Sandwich Engine (`sandwich-tui` and `sandwich --tui`).
   - Added ANSI 24-bit truecolor styling, raw POSIX termios non-blocking keyboard controls, model selector, and dual-mode inference screens.
@@ -19,7 +24,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Re-wired primary `sandwich` binary to dynamically dispatch to `sandwich-tui` when invoked without arguments or with `--tui`.
   - Added automated environment checker and launcher script `scripts/launch_tui.sh`.
   - Added comprehensive user guide and keymap documentation in `docs/tui_user_guide.md`.
-  - Added unit test suite `test_strata_backend()` in `tests/test-sandwich-dispatch.cpp` verifying backend telemetry, model discovery, and parameter synthesis.
+  - Added `scripts/bench_summary.py` CLI tool for computing warm-4 vs. all-5 throughput, cold start delta, sample standard deviation σ, and 2σ significance tests.
+  - Authored comprehensive 3-Tier MoE Memory Architecture specification in `docs/architecture/moe_3tier_memory.md`.
+  - Added unit test suite `test_strata_backend()` in `tests/test-sandwich-dispatch.cpp` verifying backend telemetry, model discovery, whitespace path quoting, and parameter synthesis.
 
 ### Removed
 - **Legacy DUI/TUI Implementation:**
