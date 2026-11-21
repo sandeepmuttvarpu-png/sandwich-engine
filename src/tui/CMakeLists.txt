@@ -13,10 +13,12 @@ target_include_directories(${TARGET} PRIVATE
     ${PROJECT_SOURCE_DIR}/common
     ${PROJECT_SOURCE_DIR}/include
     ${PROJECT_SOURCE_DIR}/ggml/include
+    ${PROJECT_SOURCE_DIR}/vendor/cpp-httplib
 )
 
 target_link_libraries(${TARGET} PRIVATE
     sandwich-dispatch
+    cpp-httplib
     llama-cli-impl
     llama-common
     llama

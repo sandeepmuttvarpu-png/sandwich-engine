@@ -604,6 +604,24 @@ static void test_strata_backend() {
     SANDWICH_TEST_CHECK(def_cfg.moe_exchange_rot == true);
     printf("  Config invariant defaults verified.\n");
 
+    // 8. Architecture MoE vs Dense Classification
+    SANDWICH_TEST_CHECK(!sandwich::tui::strata_is_model_moe("/home/sandeep/ai-models/dense/dolphin-2.8-mistral-7b-v02-GGUF/dolphin-2.8-mistral-7b-v02-Q4_K_S.gguf"));
+    SANDWICH_TEST_CHECK(sandwich::tui::strata_is_model_moe("/home/sandeep/ai-models/moe/Qwen3.6-35B-A3B-MTP-GGUF/Qwen3.6-35B-A3B-UD-IQ3_XXS.gguf"));
+    printf("  Model MoE vs Dense classification verified.\n");
+
+    // 9. Terminal Markdown-LITE Formatter & OSC52 Copy Sequences
+    std::string md_sample = "Here is **bold** text and `inline code`.\n```\nint y = 42;\n```";
+    std::string formatted_md = sandwich::tui::strata_format_markdown_lite(md_sample);
+    SANDWICH_TEST_CHECK(formatted_md.find("\033[1m") != std::string::npos);
+    SANDWICH_TEST_CHECK(formatted_md.find("\033[7m") != std::string::npos);
+    SANDWICH_TEST_CHECK(formatted_md.find("┌─── code") != std::string::npos);
+    SANDWICH_TEST_CHECK(formatted_md.find("└────────") != std::string::npos);
+
+    std::string osc52 = sandwich::tui::strata_make_osc52_copy_sequence("echo 'sandwich'");
+    SANDWICH_TEST_CHECK(osc52.rfind("\033]52;c;", 0) == 0);
+    SANDWICH_TEST_CHECK(osc52.back() == '\a');
+    printf("  Terminal Markdown-LITE formatter & OSC52 clipboard sequence verified.\n");
+
     printf("  [PASS] test_strata_backend\n");
 }
 

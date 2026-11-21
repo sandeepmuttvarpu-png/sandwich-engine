@@ -23,10 +23,12 @@ target_include_directories(${TARGET} PUBLIC
     ${PROJECT_SOURCE_DIR}/common
     ${PROJECT_SOURCE_DIR}/include
     ${PROJECT_SOURCE_DIR}/ggml/include
+    ${PROJECT_SOURCE_DIR}/vendor/cpp-httplib
 )
 
 target_link_libraries(${TARGET} PUBLIC
     nlohmann
+    cpp-httplib
     llama-cli-impl
     llama-common
     llama
