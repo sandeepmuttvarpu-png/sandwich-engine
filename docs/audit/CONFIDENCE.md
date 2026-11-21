@@ -560,3 +560,28 @@ Verified exact numerical parity against sequential reference in `tests/test_flas
   - `201827cc8` (2026-11-15 16:32:15): `perf(dispatch): vectorize partial attention reduction using AVX2 and FMA intrinsics`
   - `46c37169f` (2026-11-15 16:15:40): `fix(cuda): resolve Issue #1 kv_rows assertion conflict in FlashAttention kernel dispatch` (routed attention to dense MMA path when `src[5] != NULL`; verified by empirical crossover sweeps as the faster path).
 
+
+## Qwen3.6-35B-A3B-UD-IQ3_XXS Configuration Search Dead Ends (Nov 2026)
+
+### Stage 1 One-Factor Screen (on R4 lite)
+
+- **KV type f16 vs q8_0**: Δ = 0.3 t/s (< 1.0 t/s and < 4% of R4 mean)**. Single-run comparison showed no meaningful difference.
+- **Drafter presence/absence**: Δ = 0.1 t/s. Confirmed per prior finding: MoE cache with no drafter (0.06 t/s = noise, v4.8).
+- **-moe-warm-ram-mb 0 vs 8000**: Δ = 0 t/s. Warm-pool toggle yielded identical performance; 8000 retained.
+
+### Stage 2 Greedy Forward Selection
+
+### Technique Toggles (all negative interactions, rejected)
+- **--native-mtp**: 20.7 t/s vs 21.3 t/s (Δ = -0.6 t/s)
+- **--sched-async-cpu**: 19.8 t/s vs 21.3 t/s (Δ = -1.5 t/s)
+- **--unrotated-kv**: 20.8 t/s vs 21.3 t/s (Δ = -0.5 t/s)
+- **--asym-prefetch**: 20.9 t/s vs 21.3 t/s (Δ = -0.4 t/s)
+- **--h2o**: 20.4 t/s vs 21.3 t/s (Δ = -0.9 t/s)
+- **--sink-tokens 4**: 21.0 t/s vs 21.3 t/s (Δ = -0.3 t/s)
+- **--moe-exchange-rot**: 18.9 t/s vs 21.3 t/s (Δ = -2.4 t/s, largest negative)
+
+### VRAM-Gate Failures
+- **--moe-cache-slots 48**: 21.3 t/s single-run performance but OOM on n=5 interleaved (4s cooldown). Disqualified per hard VRAM constraint ≤7,100 MiB.
+- **--moe-cache-slots 16**: 20.7 t/s, passes VRAM n=5, but Δ = 1.325 < 2σ_comb ≈ 2.069 (marginal; σ dominates due to R4's high inter-run variance).
+
+— Append completed Nov 21 2026 —
