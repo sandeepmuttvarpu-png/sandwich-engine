@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased] - UI Overhaul & Architecture Tooling
 
 ### Added
+- **Rebuilt Web GUI (Port 8080):**
+  - Rebuilt modern web GUI from scratch in `public/` matching the Strata dark-slate and teal/emerald design aesthetic.
+  - Features real-time telemetry HUD displaying GPU VRAM, Host RAM RSS, decode/prefill speed (tokens/sec), latency (ms), and MoE cache hit-rate.
+  - Implemented token-by-token streaming chat interface with markdown rendering, syntax-highlighted code blocks, and copy buttons.
+  - Integrated dual-mode dispatch settings panel supporting Auto-Dispatch (`sandwich_auto_dispatch`) and Manual Mode (custom `-ngl`, `-t`, `-c`, `-md`, `-ngld`, `--moe-cache-slots`, `--moe-warm-ram-mb`, `-ctk`/`-ctv`, `--io-uring`).
 - **Developer & User Documentation:**
   - Added Strata TUI Backend C++ API reference in `docs/api/strata_backend_api.md`.
   - Added power-user CLI cheatsheet and flag reference in `docs/guides/cli_cheatsheet.md`.

@@ -379,6 +379,9 @@ bool server_http_context::init_listener(const common_params & params) {
         std::string effective_path = params.public_path;
         if (effective_path.empty()) {
             const std::vector<std::string> search_dirs = {
+                "public",
+                "../public",
+                "/home/sandeep/dev/sandwich/sandwich-engine/public",
                 "build/tools/ui/dist",
                 "tools/ui/dist",
                 "../build/tools/ui/dist",

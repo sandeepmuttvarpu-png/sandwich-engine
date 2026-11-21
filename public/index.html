@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sandwich Engine — Universal Inference & Telemetry</title>
+  <link rel="icon" type="image/svg+xml" href="assets/logo.svg">
+  <link rel="stylesheet" href="css/main.css">
+  <link rel="stylesheet" href="css/chat.css">
+  <link rel="stylesheet" href="css/dashboard.css">
+  <link rel="stylesheet" href="css/settings.css">
+</head>
+<body>
+
+  <!-- Top Application Header -->
+  <header class="app-header">
+    <div class="brand-section">
+      <img src="assets/logo.svg" alt="Sandwich Engine Logo" class="brand-logo">
+      <div class="brand-title">
+        Sandwich Engine
+        <span class="brand-badge">v0.9.0-dev</span>
+      </div>
+    </div>
+
+    <div class="header-actions">
+      <div class="status-indicator">
+        <span id="status-dot" class="status-dot loading"></span>
+        <span id="status-text">Connecting...</span>
+      </div>
+
+      <button id="btn-toggle-sidebar" class="btn btn-icon active" title="Toggle Dispatch Settings">
+        <svg class="icon-svg" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+      </button>
+
+      <button id="btn-clear-chat" class="btn btn-icon" title="Clear Conversation">
+        <svg class="icon-svg" viewBox="0 0 24 24"><path d="M3 6h18m-2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+      </button>
+
+      <button id="btn-toggle-telemetry" class="btn btn-icon active" title="Toggle Telemetry HUD">
+        <svg class="icon-svg" viewBox="0 0 24 24"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Viewport Layout -->
+  <div class="app-container">
+
+    <!-- Left Sidebar: Settings & Dispatch Configuration -->
+    <aside id="sidebar-panel" class="sidebar-panel">
+      <div class="sidebar-header">
+        <span class="sidebar-title">Dispatch Configuration</span>
+      </div>
+
+      <div class="sidebar-content">
+        <!-- Mode Switcher -->
+        <div class="mode-switch-tabs">
+          <button id="tab-mode-auto" class="mode-tab-btn active">Auto-Dispatch</button>
+          <button id="tab-mode-manual" class="mode-tab-btn">Manual Mode</button>
+        </div>
+
+        <!-- Auto-Dispatch Settings Group -->
+        <div id="auto-settings-group">
+          <div class="form-group">
+            <label class="form-label">Target Model <span class="tag">Auto</span></label>
+            <select id="settings-select-model" class="form-select">
+              <option value="/home/sandeep/ai-models/dense/dolphin-2.8-mistral-7b-v02-GGUF/dolphin-2.8-mistral-7b-v02-Q4_K_S.gguf">dolphin-2.8-mistral-7b-v02-Q4_K_S.gguf</option>
+              <option value="/home/sandeep/ai-models/moe/Qwen3.6-35B-A3B-MTP-GGUF/Qwen3.6-35B-A3B-UD-IQ3_XXS.gguf">Qwen3.6-35B-A3B-UD-IQ3_XXS.gguf (MoE)</option>
+              <option value="/home/sandeep/ai-models/dense/NVIDIA-Nemotron-3-Nano-4B-GGUF/NVIDIA-Nemotron-3-Nano-4B-Q6_K.gguf">Nemotron-3-Nano-4B-Q6_K.gguf</option>
+            </select>
+          </div>
+
+          <div class="form-group" style="margin-top: 12px;">
+            <label class="form-label">Context Window (Tokens)</label>
+            <input type="number" id="settings-input-ctx" class="form-input" value="4096" step="512">
+          </div>
+
+          <div class="form-group" style="margin-top: 12px;">
+            <label class="form-label">Compute Threads <span class="tag">6 P-cores</span></label>
+            <input type="number" id="settings-input-threads" class="form-input" value="6" min="1" max="16">
+          </div>
+
+          <div class="form-group" style="margin-top: 12px;">
+            <label class="form-label">GPU Offload Layers</label>
+            <input type="number" id="settings-input-gpu-layers" class="form-input" value="14" min="0" max="99">
+          </div>
+        </div>
+
+        <!-- Manual Mode Settings Group -->
+        <div id="manual-settings-group" style="display: none;">
+          <div class="form-group">
+            <label class="form-label">Model Path (-m)</label>
+            <input type="text" id="settings-input-model" class="form-input" value="/home/sandeep/ai-models/moe/Qwen3.6-35B-A3B-MTP-GGUF/Qwen3.6-35B-A3B-UD-IQ3_XXS.gguf">
+          </div>
+
+          <div class="form-group" style="margin-top: 10px;">
+            <label class="form-label">Speculative Drafter (-md)</label>
+            <input type="text" id="settings-input-drafter" class="form-input" value="/home/sandeep/ai-models/drafters/Qwen3.6-35B-A3B-DFlash2-GGUF/Qwen3.6-35B-A3B-DFlash2-Q4_K_M.gguf">
+          </div>
+
+          <div class="form-group" style="margin-top: 10px;">
+            <label class="form-label">Drafter GPU Layers (-ngld)</label>
+            <input type="number" id="settings-input-drafter-layers" class="form-input" value="99">
+          </div>
+
+          <div class="form-group" style="margin-top: 10px;">
+            <label class="form-label">MoE Cache Slots (--moe-cache-slots)</label>
+            <input type="number" id="settings-input-cache-slots" class="form-input" value="16">
+          </div>
+
+          <div class="form-group" style="margin-top: 10px;">
+            <label class="form-label">Warm RAM Pool MiB (--moe-warm-ram-mb)</label>
+            <input type="number" id="settings-input-warm-ram" class="form-input" value="16552">
+          </div>
+
+          <div class="form-group" style="margin-top: 10px;">
+            <label class="form-label">KV Quantization (-ctk / -ctv)</label>
+            <select id="settings-select-ctk" class="form-select">
+              <option value="turbo4">turbo4 (Lloyd-Max 4-bit)</option>
+              <option value="turbo2">turbo2 (Polar 2-bit)</option>
+              <option value="q8_0">q8_0 (8-bit quantization)</option>
+              <option value="f16">f16 (Full Precision)</option>
+            </select>
+          </div>
+
+          <div style="margin-top: 14px; display: flex; flex-direction: column; gap: 8px;">
+            <label class="checkbox-row">
+              <input type="checkbox" id="settings-check-io-uring" checked>
+              <span>Linux io_uring direct NVMe DMA</span>
+            </label>
+            <label class="checkbox-row">
+              <input type="checkbox" id="settings-check-moe-2q" checked>
+              <span>Two-Queue (2Q) Cache Policy</span>
+            </label>
+            <label class="checkbox-row">
+              <input type="checkbox" id="settings-check-moe-rot" checked>
+              <span>Zero-Copy Rotational Swapping</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Synthesized CLI Command Box -->
+        <div class="cli-preview-box" style="margin-top: auto;">
+          <div class="cli-preview-header">
+            <span>CLI Synthesized Command</span>
+            <button id="btn-copy-cli" class="code-copy-btn">📋 Copy</button>
+          </div>
+          <div id="cli-preview-text" class="cli-preview-text">./build/bin/sandwich -m ... --sandwich-auto</div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Center: Main Chat Area -->
+    <main class="chat-viewport">
+      <div id="chat-messages" class="chat-messages">
+
+        <!-- Welcome Hero Screen -->
+        <div id="welcome-screen" class="welcome-screen">
+          <img src="assets/logo.svg" alt="Sandwich Engine" class="welcome-logo">
+          <h1 class="welcome-title">Sandwich Engine</h1>
+          <p class="welcome-subtitle">
+            Asymmetric 3-Tier MoE inference engine with real-time hardware telemetry and TurboQuant Lloyd-Max KV compression.
+          </p>
+
+          <div class="quick-prompts">
+            <div class="prompt-card" data-prompt="Explain how Sandwich Engine's 3-Tier MoE memory hierarchy works on consumer hardware.">
+              <div class="prompt-card-title">3-Tier MoE Memory</div>
+              <div class="prompt-card-desc">VRAM Hot Slab, DDR5 Warm Pool, and NVMe io_uring.</div>
+            </div>
+            <div class="prompt-card" data-prompt="What is TurboQuant Lloyd-Max KV cache compression and what are its memory savings?">
+              <div class="prompt-card-title">TurboQuant Lloyd-Max</div>
+              <div class="prompt-card-desc">75% context reduction with zero perplexity loss.</div>
+            </div>
+            <div class="prompt-card" data-prompt="How does DFlash2 speculative decoding achieve zero latency on an RTX 5050 Mobile?">
+              <div class="prompt-card-title">Speculative Assistant</div>
+              <div class="prompt-card-desc">100% VRAM-pinned draft generation at 180+ tok/s.</div>
+            </div>
+            <div class="prompt-card" data-prompt="Write a Python script that benchmarks single-token decode latency and throughput.">
+              <div class="prompt-card-title">Benchmark Script</div>
+              <div class="prompt-card-desc">Measure prefill vs decode tokens/second.</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Chat Input Area -->
+      <div class="chat-input-area">
+        <div class="input-box-wrapper">
+          <textarea id="chat-textarea" class="chat-textarea" placeholder="Type a message... (Enter to send, Shift+Enter for newline)" rows="1"></textarea>
+          <div class="input-actions-bar">
+            <span class="input-hint">Sandwich Engine Universal Dispatch</span>
+            <div class="input-buttons">
+              <button id="btn-stop" class="btn btn-stop">■ Stop</button>
+              <button id="btn-send" class="btn btn-primary">Send ➔</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- Right Sidebar: Real-Time Telemetry HUD -->
+    <aside id="telemetry-panel" class="telemetry-panel">
+      <div class="telemetry-header">
+        <span class="telemetry-title">
+          <span class="telemetry-pulse"></span>
+          Live Telemetry HUD
+        </span>
+      </div>
+
+      <div class="telemetry-content">
+        <!-- Hardware Profile Badge -->
+        <div class="hw-badge-card">
+          <div class="hw-badge-title">
+            <svg class="icon-svg" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/></svg>
+            Host Workstation Specs
+          </div>
+          <div class="hw-badge-row">
+            <span>Machine</span>
+            <span class="val">HP Victus 15</span>
+          </div>
+          <div class="hw-badge-row">
+            <span>CPU</span>
+            <span class="val">i7-13620H (6P+4E)</span>
+          </div>
+          <div class="hw-badge-row">
+            <span>GPU</span>
+            <span class="val">RTX 5050 Mobile (8GB)</span>
+          </div>
+          <div class="hw-badge-row">
+            <span>Arch</span>
+            <span class="val">sm_120 Blackwell</span>
+          </div>
+        </div>
+
+        <!-- GPU VRAM Gauge -->
+        <div class="metric-card">
+          <div class="metric-header">
+            <span class="metric-label">NVIDIA GPU VRAM</span>
+            <span id="telem-vram-val" class="metric-value highlight-teal">4,618 MiB</span>
+          </div>
+          <div class="progress-track">
+            <div id="telem-vram-bar" class="progress-fill fill-teal" style="width: 56.6%;"></div>
+          </div>
+          <div class="metric-subtext">
+            <span>Allocation</span>
+            <span id="telem-vram-pct">56.6%</span>
+          </div>
+        </div>
+
+        <!-- Host RAM Gauge -->
+        <div class="metric-card">
+          <div class="metric-header">
+            <span class="metric-label">Host RAM (Resident RSS)</span>
+            <span id="telem-ram-val" class="metric-value highlight-cyan">4.8 GB</span>
+          </div>
+          <div class="progress-track">
+            <div id="telem-ram-bar" class="progress-fill fill-cyan" style="width: 20.3%;"></div>
+          </div>
+          <div class="metric-subtext">
+            <span>Capacity: 24,192 MiB</span>
+            <span id="telem-ram-pct">20.3%</span>
+          </div>
+        </div>
+
+        <!-- 2x2 Mini Metrics Grid -->
+        <div class="metric-grid-2x2">
+          <div class="mini-metric-card">
+            <div class="mini-metric-label">Decode Speed</div>
+            <div id="telem-decode-val" class="mini-metric-value highlight-emerald">—</div>
+          </div>
+          <div class="mini-metric-card">
+            <div class="mini-metric-label">Prefill Speed</div>
+            <div id="telem-prefill-val" class="mini-metric-value highlight-teal">—</div>
+          </div>
+          <div class="mini-metric-card">
+            <div class="mini-metric-label">Latency (Per Tok)</div>
+            <div id="telem-latency-val" class="mini-metric-value highlight-cyan">—</div>
+          </div>
+          <div class="mini-metric-card">
+            <div class="mini-metric-label">MoE Cache Hit</div>
+            <div id="telem-moe-hit-val" class="mini-metric-value highlight-amber">98.4%</div>
+          </div>
+        </div>
+
+        <!-- Context Window Gauge -->
+        <div class="metric-card">
+          <div class="metric-header">
+            <span class="metric-label">Context Window</span>
+            <span id="telem-ctx-val" class="metric-value" style="font-size: 13px;">0 / 4096</span>
+          </div>
+          <div class="progress-track">
+            <div id="telem-ctx-bar" class="progress-fill fill-emerald" style="width: 2%;"></div>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+  </div>
+
+  <!-- Bottom App Footer -->
+  <footer class="app-footer">
+    <div class="footer-left">
+      <div class="footer-stat">Engine: <span class="val">sandwich.cpp 0.9.0-dev</span></div>
+      <div class="footer-stat">Backend: <span class="val">CUDA 13.5 (sm_120)</span></div>
+      <div class="footer-stat">Memory: <span class="val">3-Tier Asymmetric MoE</span></div>
+    </div>
+    <div class="footer-right">
+      <div class="footer-stat">Port: <span class="val">8080</span></div>
+      <div class="footer-stat">KV Cache: <span class="val">TurboQuant 4-Bit</span></div>
+    </div>
+  </footer>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

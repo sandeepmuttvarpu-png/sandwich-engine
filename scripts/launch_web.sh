@@ -8,7 +8,10 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
-UI_DIST="${ROOT_DIR}/build/tools/ui/dist"
+UI_DIST="${ROOT_DIR}/public"
+if [ ! -d "${UI_DIST}" ]; then
+    UI_DIST="${ROOT_DIR}/build/tools/ui/dist"
+fi
 
 MODEL="${1:-/home/sandeep/ai-models/dense/dolphin-2.8-mistral-7b-v02-GGUF/dolphin-2.8-mistral-7b-v02-Q4_K_S.gguf}"
 PORT="${2:-8080}"

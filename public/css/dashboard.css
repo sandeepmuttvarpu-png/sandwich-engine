@@ -1,0 +1,182 @@
+/* ==============================================================================
+   Sandwich Engine Web GUI — Telemetry Dashboard Stylesheet
+   Real-Time Hardware & Cache Metrics HUD (Technique #18 & Dynamic Watermarking)
+   ============================================================================== */
+
+.telemetry-panel {
+  width: var(--telemetry-width);
+  height: 100%;
+  background: var(--bg-surface);
+  border-left: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  flex-shrink: 0;
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), margin-right 0.3s ease;
+  z-index: 10;
+}
+
+.telemetry-panel.collapsed {
+  margin-right: calc(-1 * var(--telemetry-width));
+}
+
+.telemetry-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.telemetry-title {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent-emerald);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.telemetry-pulse {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent-emerald);
+  box-shadow: 0 0 6px rgba(16, 185, 129, 0.8);
+  animation: telemetryBlink 1.5s infinite;
+}
+
+@keyframes telemetryBlink {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+
+.telemetry-content {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* Hardware Environment Badge */
+.hw-badge-card {
+  background: var(--bg-input);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  font-size: 12px;
+}
+
+.hw-badge-title {
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.hw-badge-row {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 4px;
+  color: var(--text-dim);
+}
+.hw-badge-row .val {
+  color: var(--text-main);
+  font-family: var(--font-mono);
+}
+
+/* Telemetry Gauge Cards */
+.metric-card {
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.metric-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.metric-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.metric-value {
+  font-size: 16px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  color: var(--text-main);
+}
+
+.metric-value.highlight-teal { color: var(--accent-teal); }
+.metric-value.highlight-emerald { color: var(--accent-emerald); }
+.metric-value.highlight-cyan { color: var(--accent-cyan); }
+.metric-value.highlight-amber { color: var(--accent-amber); }
+
+/* Progress Bars */
+.progress-track {
+  width: 100%;
+  height: 7px;
+  background: var(--bg-input);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  position: relative;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.progress-fill {
+  height: 100%;
+  border-radius: var(--radius-full);
+  transition: width 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.progress-fill.fill-teal { background: linear-gradient(90deg, #0d9488, #14b8a6); }
+.progress-fill.fill-cyan { background: linear-gradient(90deg, #0891b2, #06b6d4); }
+.progress-fill.fill-emerald { background: linear-gradient(90deg, #059669, #10b981); }
+.progress-fill.fill-amber { background: linear-gradient(90deg, #d97706, #f59e0b); }
+
+.metric-subtext {
+  font-size: 11px;
+  color: var(--text-dim);
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+}
+
+/* 2x2 Grid for Secondary Telemetry */
+.metric-grid-2x2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.mini-metric-card {
+  background: var(--bg-input);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 10px;
+}
+
+.mini-metric-label {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-bottom: 2px;
+}
+
+.mini-metric-value {
+  font-size: 14px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  color: var(--text-main);
+}
