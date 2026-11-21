@@ -590,6 +590,20 @@ static void test_strata_backend() {
     SANDWICH_TEST_CHECK(edge_cmd.find("-md \"/tmp/drafter with spaces.gguf\"") != std::string::npos);
     printf("  Whitespace path quoting verified in command synthesis.\n");
 
+    // 7. Config and Telemetry Invariant Defaults
+    sandwich::tui::StrataInferenceConfig def_cfg;
+    SANDWICH_TEST_CHECK(def_cfg.auto_mode == true);
+    SANDWICH_TEST_CHECK(def_cfg.n_ctx == 4096);
+    SANDWICH_TEST_CHECK(def_cfg.n_threads == 6);
+    SANDWICH_TEST_CHECK(def_cfg.n_gpu_layers == 14);
+    SANDWICH_TEST_CHECK(def_cfg.drafter_gpu_layers == 99);
+    SANDWICH_TEST_CHECK(def_cfg.ctk == "turbo4");
+    SANDWICH_TEST_CHECK(def_cfg.ctv == "turbo4");
+    SANDWICH_TEST_CHECK(def_cfg.io_uring == true);
+    SANDWICH_TEST_CHECK(def_cfg.moe_2q == true);
+    SANDWICH_TEST_CHECK(def_cfg.moe_exchange_rot == true);
+    printf("  Config invariant defaults verified.\n");
+
     printf("  [PASS] test_strata_backend\n");
 }
 
