@@ -148,6 +148,17 @@ void StrataTUI::render_setup_screen() {
 
     std::cout << "\033[2J\033[H"; // Clear screen
 
+    if (cols < 70 || rows < 20) {
+        std::cout << "\033[2;2H" << CLR_AMBER << CLR_BOLD
+                  << "⚠  TERMINAL WINDOW TOO SMALL (" << cols << "x" << rows << ")" << CLR_RESET;
+        std::cout << "\033[4;2H" << CLR_SLATE_FG
+                  << "Please resize your terminal window to at least " << CLR_TEAL << "80x24" << CLR_SLATE_FG
+                  << " to render the Strata TUI interface." << CLR_RESET;
+        std::cout << "\033[6;2H" << CLR_MUTED << "Press [Q] to quit." << CLR_RESET;
+        std::cout << std::flush;
+        return;
+    }
+
     // Top Header Banner
     std::cout << "\033[1;1H" << CLR_CARD_BG << CLR_BOLD << CLR_TEAL
               << " 🥪 SANDWICH ENGINE ── STRATA TUI "
@@ -236,6 +247,17 @@ void StrataTUI::render_inference_screen() {
     get_terminal_size(rows, cols);
 
     std::cout << "\033[2J\033[H"; // Clear screen
+
+    if (cols < 70 || rows < 20) {
+        std::cout << "\033[2;2H" << CLR_AMBER << CLR_BOLD
+                  << "⚠  TERMINAL WINDOW TOO SMALL (" << cols << "x" << rows << ")" << CLR_RESET;
+        std::cout << "\033[4;2H" << CLR_SLATE_FG
+                  << "Please resize your terminal window to at least " << CLR_TEAL << "80x24" << CLR_SLATE_FG
+                  << " to view the live inference telemetry dashboard." << CLR_RESET;
+        std::cout << "\033[6;2H" << CLR_MUTED << "Press [S] to stop or [Q] to quit." << CLR_RESET;
+        std::cout << std::flush;
+        return;
+    }
 
     // Top Header
     std::cout << "\033[1;1H" << CLR_CARD_BG << CLR_BOLD << CLR_TEAL
