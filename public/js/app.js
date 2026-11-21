@@ -74,6 +74,16 @@ document.addEventListener('DOMContentLoaded', () => {
   chatCtrl.onStreamToken = () => {
     dashboardCtrl.recordStreamToken();
   };
+  chatCtrl.onPromptSent = (promptTokens) => {
+    dashboardCtrl.metrics.contextUsed += promptTokens;
+    dashboardCtrl.render();
+  };
+  chatCtrl.onStreamDone = (timings) => {
+    dashboardCtrl.setFinalTimings(timings);
+  };
+  chatCtrl.onChatCleared = () => {
+    dashboardCtrl.resetStreamMetrics();
+  };
 
   // Toggle Sidebar
   if (elements.btnToggleSidebar && elements.sidebarPanel) {
@@ -114,8 +124,20 @@ document.addEventListener('DOMContentLoaded', () => {
     elements.selectModel.addEventListener('change', () => {
       elements.inputModel.value = elements.selectModel.value;
       settingsCtrl.syncFromInputs();
+      dashboardCtrl.onModelChange(elements.selectModel.value);
     });
   }
+  if (elements.inputModel) {
+    elements.inputModel.addEventListener('change', () => {
+      dashboardCtrl.onModelChange(elements.inputModel.value);
+    });
+    elements.inputModel.addEventListener('input', () => {
+      dashboardCtrl.onModelChange(elements.inputModel.value);
+    });
+  }
+
+  // Initialize Dashboard with selected model architecture
+  dashboardCtrl.onModelChange(settingsCtrl.config.modelPath);
 
   // Connectivity Health Checker
   async function checkConnection() {

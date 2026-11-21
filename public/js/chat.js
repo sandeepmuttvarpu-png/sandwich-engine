@@ -76,6 +76,11 @@ export class ChatController {
     this.appendMessage('user', promptText);
     this.messages.push({ role: 'user', content: promptText });
 
+    if (this.onPromptSent) {
+      const estPromptTokens = Math.max(1, Math.round(promptText.length / 4));
+      this.onPromptSent(estPromptTokens);
+    }
+
     // Prepare assistant message bubble
     const assistantBubble = this.appendMessage('assistant', '');
     const contentEl = assistantBubble.querySelector('.bubble-text');
@@ -140,6 +145,10 @@ export class ChatController {
           metaEl.innerHTML = `<span class="badge">${statsText}</span>`;
           assistantBubble.appendChild(metaEl);
 
+          if (this.onStreamDone) {
+            this.onStreamDone(timings);
+          }
+
           if (this.autoScroll) {
             this.scrollToBottom();
           }
@@ -195,6 +204,9 @@ export class ChatController {
     if (this.elements.welcomeScreen) {
       this.elements.messagesContainer.appendChild(this.elements.welcomeScreen);
       this.elements.welcomeScreen.style.display = 'block';
+    }
+    if (this.onChatCleared) {
+      this.onChatCleared();
     }
   }
 
