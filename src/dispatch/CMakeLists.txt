@@ -11,6 +11,7 @@ add_library(${TARGET} STATIC
     paged_block_allocator.cpp
     flash_decoding_scheduler.cpp
     gpudirect_storage.cpp
+    plugin_loader.cpp
     router.cpp
     ${PROJECT_SOURCE_DIR}/src/tui/sandwich_tui_backend.cpp
 )
@@ -33,6 +34,7 @@ target_link_libraries(${TARGET} PUBLIC
     llama-common
     llama
     ${CMAKE_THREAD_LIBS_INIT}
+    ${CMAKE_DL_LIBS}
 )
 
 target_compile_features(${TARGET} PUBLIC cxx_std_17)

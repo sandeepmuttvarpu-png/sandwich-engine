@@ -14,6 +14,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added environment controls: `SANDWICH_KERNEL_CACHE` (cache path override), `SANDWICH_AUTOTUNE_DISABLE`, and `SANDWICH_AUTOTUNE_INVALIDATE`.
   - Persistence uses an atomic temp-file-plus-rename write with a schema guard; malformed records are skipped rather than treated as fatal.
   - Added unit test `tests/test-sandwich-autotune.cpp` covering power-of-two bucketing, fingerprint stability and sensitivity, store/lookup/persistence round-trips, the disable switch, and malformed/schema-guarded input.
+- **Plugin Kernels via the CUDA Driver API:**
+  - Added `src/dispatch/plugin_loader.{hpp,cpp}`, which loads `.cubin` or PTX kernel images at runtime with `cuModuleLoad` / `cuModuleLoadData`, resolves symbols with `cuModuleGetFunction`, and launches with `cuLaunchKernel`. Plugins are addressed by name and launched through a plain argument array, so there is no C++ ABI coupling and externally built kernels can be imported without a source merge.
+  - `libcuda` is opened with `dlopen` rather than linked, so the engine still builds and runs on CPU-only or non-NVIDIA hosts; plugin use degrades to a `driver_unavailable` status with a diagnostic message instead of failing at link time.
+  - Added a name-to-module `Registry` for runtime lookup, with replacement-on-duplicate semantics and borrowed-pointer access.
+  - Added unit test `tests/test-sandwich-plugin.cpp`, which verifies the driverless degradation path, PTX JIT load, symbol resolution success and failure, kernel launch and synchronisation, rejection of malformed images, and registry lifecycle.
 - **Rebuilt Web GUI (Port 8080):**
   - Rebuilt modern web GUI from scratch in `public/` matching the Strata dark-slate and teal/emerald design aesthetic.
   - Features real-time telemetry HUD displaying GPU VRAM, Host RAM RSS, decode/prefill speed (tokens/sec), latency (ms), and MoE cache hit-rate.
