@@ -184,6 +184,14 @@ std::vector<std::string> strata_discover_drafters() {
     return drafters;
 }
 
+static std::string quote_if_needed(const std::string & s) {
+    if (s.empty()) return s;
+    if (s.find(' ') != std::string::npos && (s.front() != '\"' || s.back() != '\"')) {
+        return "\"" + s + "\"";
+    }
+    return s;
+}
+
 std::string strata_construct_cli_command(const StrataInferenceConfig & config) {
     std::ostringstream cmd;
     cmd << "./build/bin/llama-cli";
@@ -199,27 +207,27 @@ std::string strata_construct_cli_command(const StrataInferenceConfig & config) {
         // Auto-tune under the hood
         sandwich_auto_dispatch(params);
 
-        cmd << " -m " << config.model_path;
+        cmd << " -m " << quote_if_needed(config.model_path);
         cmd << " -ngl " << params.n_gpu_layers;
         cmd << " -t " << params.cpuparams.n_threads;
         cmd << " -c " << params.n_ctx;
         cmd << " --sandwich-auto";
 
         if (!params.speculative.draft.mparams.path.empty()) {
-            cmd << " -md " << params.speculative.draft.mparams.path;
+            cmd << " -md " << quote_if_needed(params.speculative.draft.mparams.path);
             cmd << " -ngld " << params.speculative.draft.n_gpu_layers;
         }
         cmd << " -ctk turbo4 -ctv turbo4";
         cmd << " -p \"" << config.prompt << "\"";
     } else {
         // Manual Configuration
-        cmd << " -m " << config.model_path;
+        cmd << " -m " << quote_if_needed(config.model_path);
         cmd << " -ngl " << config.n_gpu_layers;
         cmd << " -t " << config.n_threads;
         cmd << " -c " << config.n_ctx;
 
         if (!config.drafter_path.empty()) {
-            cmd << " -md " << config.drafter_path;
+            cmd << " -md " << quote_if_needed(config.drafter_path);
             cmd << " -ngld " << config.drafter_gpu_layers;
         }
 

@@ -572,6 +572,24 @@ static void test_strata_backend() {
     SANDWICH_TEST_CHECK(manual_cmd.find("--moe-exchange-rot") != std::string::npos);
     printf("  Manual Configuration Command synthesized successfully.\n");
 
+    // 5. Host RAM usage and Telemetry Bounds Validation
+    uint64_t rss_bytes = sandwich::tui::strata_get_ram_usage();
+    SANDWICH_TEST_CHECK(rss_bytes > 0);
+    printf("  Host RAM RSS measured: %zu MB\n", (size_t)(rss_bytes / (1024 * 1024)));
+
+    SANDWICH_TEST_CHECK(telem.moe_cache_hit_rate_pct >= 0.0 && telem.moe_cache_hit_rate_pct <= 100.0);
+    SANDWICH_TEST_CHECK(telem.vram_used_mib >= 0.0);
+    SANDWICH_TEST_CHECK(telem.ram_rss_mib >= 0.0);
+
+    // 6. Path handling edge cases with whitespace quoting
+    sandwich::tui::StrataInferenceConfig edge_cfg = manual_cfg;
+    edge_cfg.model_path = "/tmp/test model with spaces.gguf";
+    edge_cfg.drafter_path = "/tmp/drafter with spaces.gguf";
+    std::string edge_cmd = sandwich::tui::strata_construct_cli_command(edge_cfg);
+    SANDWICH_TEST_CHECK(edge_cmd.find("-m \"/tmp/test model with spaces.gguf\"") != std::string::npos);
+    SANDWICH_TEST_CHECK(edge_cmd.find("-md \"/tmp/drafter with spaces.gguf\"") != std::string::npos);
+    printf("  Whitespace path quoting verified in command synthesis.\n");
+
     printf("  [PASS] test_strata_backend\n");
 }
 
