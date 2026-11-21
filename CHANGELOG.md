@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased] - UI Overhaul & Architecture Tooling
 
 ### Added
+- **Autotuning & Persistent Kernel Cache:**
+  - Added a header-only, dependency-free kernel variant cache in `ggml/src/ggml-cuda/sandwich-kernel-cache.cuh`, keyed by an FNV-1a fingerprint of device compute capability, head dimension, query count, GQA ratio, K/V dtypes, power-of-two-bucketed KV length, and mask/bias presence.
+  - `ggml_cuda_get_best_fattn_kernel` now consults the cache as an *override* of the existing heuristic. The heuristic remains authoritative on a cache miss, when autotuning is disabled, or when the cached variant is invalid for the current tensor, so a cold or corrupt cache can never make the engine slower than its compiled-in default.
+  - Added environment controls: `SANDWICH_KERNEL_CACHE` (cache path override), `SANDWICH_AUTOTUNE_DISABLE`, and `SANDWICH_AUTOTUNE_INVALIDATE`.
+  - Persistence uses an atomic temp-file-plus-rename write with a schema guard; malformed records are skipped rather than treated as fatal.
+  - Added unit test `tests/test-sandwich-autotune.cpp` covering power-of-two bucketing, fingerprint stability and sensitivity, store/lookup/persistence round-trips, the disable switch, and malformed/schema-guarded input.
 - **Rebuilt Web GUI (Port 8080):**
   - Rebuilt modern web GUI from scratch in `public/` matching the Strata dark-slate and teal/emerald design aesthetic.
   - Features real-time telemetry HUD displaying GPU VRAM, Host RAM RSS, decode/prefill speed (tokens/sec), latency (ms), and MoE cache hit-rate.

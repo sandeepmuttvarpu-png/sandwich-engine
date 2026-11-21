@@ -6,6 +6,7 @@
 #include "fattn-tile.cuh"
 #include "fattn-vec.cuh"
 #include "fattn.cuh"
+#include "sandwich-kernel-cache.cuh"
 
 #include <atomic>
 
@@ -929,7 +930,7 @@ static bool ggml_cuda_fattn_kv_type_supported(const ggml_type type) {
 
 // ncols1/ncols2 receive the tile shape when the return value is
 // BEST_FATTN_KERNEL_MMA_NATIVE; they are untouched otherwise.
-static best_fattn_kernel ggml_cuda_get_best_fattn_kernel(
+static best_fattn_kernel ggml_cuda_get_best_fattn_kernel_heuristic(
         const int device, const ggml_tensor * dst, int * ncols1 = nullptr, int * ncols2 = nullptr) {
 #ifndef FLASH_ATTN_AVAILABLE
     GGML_UNUSED(device); GGML_UNUSED(dst);
@@ -1143,6 +1144,66 @@ static best_fattn_kernel ggml_cuda_get_best_fattn_kernel(
         }
     }
     return BEST_FATTN_KERNEL_TILE;
+}
+
+// Autotune override. The persistent kernel cache may replace the heuristic winner
+// with a variant that was measured faster for this exact problem. The heuristic
+// stays authoritative whenever the cache is empty, disabled, or the cached variant
+// is not valid for the current tensor, so a cold or corrupt cache can never make
+// the engine slower than its compiled-in default.
+static best_fattn_kernel ggml_cuda_get_best_fattn_kernel(
+        const int device, const ggml_tensor * dst, int * ncols1 = nullptr, int * ncols2 = nullptr) {
+    const best_fattn_kernel heuristic = ggml_cuda_get_best_fattn_kernel_heuristic(device, dst, ncols1, ncols2);
+    if (heuristic == BEST_FATTN_KERNEL_NONE) {
+        return heuristic; // unsupported configuration: never override
+    }
+
+    const ggml_tensor * Q    = dst->src[0];
+    const ggml_tensor * K    = dst->src[1];
+    const ggml_tensor * V    = dst->src[2];
+    const ggml_tensor * mask = dst->src[3];
+
+    if (Q == nullptr || K == nullptr || V == nullptr || K->ne[2] == 0) {
+        return heuristic;
+    }
+
+    float max_bias = 0.0f;
+    memcpy(&max_bias, (const float *) dst->op_params + 1, sizeof(float));
+
+    const int cc  = ggml_cuda_info().devices[device].cc;
+    const int gqa = (int) (Q->ne[2] / K->ne[2]);
+
+    // ggml encodes the compute capability as 100*major + 10*minor (e.g. 1200 for sm_120).
+    const uint64_t fp = sandwich::autotune::fingerprint_fattn(
+        cc / 100, (cc % 100) / 10,
+        (int) K->ne[0], (int) Q->ne[1], gqa,
+        (int) K->type, (int) V->type,
+        (int) K->ne[1],
+        mask != nullptr, max_bias != 0.0f);
+
+    sandwich::autotune::entry cached;
+    if (!sandwich::autotune::Cache::instance().lookup(sandwich::autotune::family::fattn, fp, cached)) {
+        return heuristic;
+    }
+
+    switch (cached.variant) {
+        case BEST_FATTN_KERNEL_TILE:
+            return BEST_FATTN_KERNEL_TILE;
+        case BEST_FATTN_KERNEL_MMA_F16:
+            return BEST_FATTN_KERNEL_MMA_F16;
+        case BEST_FATTN_KERNEL_VEC:
+            // The vector kernel only exists for some (head_dim, K, V) triples.
+            if (ggml_cuda_get_fattn_vec_case((int) Q->ne[0], K->type, V->type) != nullptr) {
+                return BEST_FATTN_KERNEL_VEC;
+            }
+            return heuristic;
+        case BEST_FATTN_KERNEL_MMA_NATIVE:
+            // The native path has extra preconditions evaluated inside the heuristic;
+            // only accept it when the heuristic already agreed.
+            return heuristic;
+        default:
+            return heuristic;
+    }
 }
 
 size_t ggml_cuda_flash_attn_ext_get_alloc_size(int device, const ggml_tensor * dst) {
