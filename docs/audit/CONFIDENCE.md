@@ -606,10 +606,18 @@ not evidence and must be re-tested on true C4 at n=3 before any is trusted:
   7,056 MiB, only 44 MiB under guard.
 - **KV `f16`:** real regression, 26.85 t/s. `turbo4` and `q8_0` tie with identical SHA.
 - **`--native-mtp`:** incompatible with an external `-md` drafter (MTP context creation fails).
-- **`--sandwich-auto`:** crashes 5/5 at load with `CUDA error: misaligned address` (SIGABRT) on this
-  build, independent of KV type, context size, and `--no-sandwich-predict`. Separate defect, not a
-  config rejection.
+- **`--sandwich-auto`:** previously crashed 5/5 at load with `CUDA error: misaligned address` (SIGABRT);
+  fixed via defensive validation in dispatch (turbo MMA no longer auto-enabled for head_dim >= 256;
+  VRAM pinning falls back to `-ngld 0` when it would exceed the guard). Not a config rejection.
 - Raw per-run evidence: `scripts/benchmarks/config_search/raw/*.json`; report:
   `scripts/benchmarks/config_search/runner_report.md`.
 
 - Append corrected Nov 22 2026. Supersedes the Nov 21 2026 append.
+
+### `-ngld 99` recommended default for 8 GB GPUs (VRAM headroom note)
+- On 8 GB GPUs, prefer `-ngld 99` (VRAM-pinned drafter): best SAFE decode 30.73 +/- 0.21 t/s with
+  6,576 MiB peak VRAM, leaving **524 MiB headroom** below the 7,100 MiB compositor guard (slots 16).
+- `--sandwich-auto` load crash fixed via defensive flag-combination validation in dispatch (commit
+  `fix(dispatch): prevent --sandwich-auto crash on load with defensive validation`): turbo MMA is no
+  longer auto-enabled for head_dim >= 256; VRAM pinning falls back to `-ngld 0` when it would exceed
+  the guard; constructed command line is logged for auditability. Safe fallback preserves load.
