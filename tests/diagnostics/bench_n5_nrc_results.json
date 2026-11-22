@@ -1,0 +1,61 @@
+{
+  "runs": [
+    {
+      "rep": 1,
+      "prefill_ts": 490.0,
+      "decode_ts": 31.3,
+      "wall_s": 12.25,
+      "peak_vram_mib": 7056,
+      "vmhwm_mib": 13936,
+      "sha": "481b2a7aea43731e77979bca6631cfac9d32bd42d023d63c91552b245931a6aa",
+      "sha_match": true
+    },
+    {
+      "rep": 2,
+      "prefill_ts": 491.0,
+      "decode_ts": 33.4,
+      "wall_s": 12.03,
+      "peak_vram_mib": 7056,
+      "vmhwm_mib": 13936,
+      "sha": "481b2a7aea43731e77979bca6631cfac9d32bd42d023d63c91552b245931a6aa",
+      "sha_match": true
+    },
+    {
+      "rep": 3,
+      "prefill_ts": 478.6,
+      "decode_ts": 31.1,
+      "wall_s": 12.54,
+      "peak_vram_mib": 7056,
+      "vmhwm_mib": 13936,
+      "sha": "481b2a7aea43731e77979bca6631cfac9d32bd42d023d63c91552b245931a6aa",
+      "sha_match": true
+    },
+    {
+      "rep": 4,
+      "prefill_ts": 484.5,
+      "decode_ts": 31.3,
+      "wall_s": 12.25,
+      "peak_vram_mib": 7056,
+      "vmhwm_mib": 13936,
+      "sha": "481b2a7aea43731e77979bca6631cfac9d32bd42d023d63c91552b245931a6aa",
+      "sha_match": true
+    },
+    {
+      "rep": 5,
+      "prefill_ts": 483.3,
+      "decode_ts": 31.1,
+      "wall_s": 12.27,
+      "peak_vram_mib": 7056,
+      "vmhwm_mib": 13936,
+      "sha": "481b2a7aea43731e77979bca6631cfac9d32bd42d023d63c91552b245931a6aa",
+      "sha_match": true
+    }
+  ],
+  "warm_mean_decode_ts": 31.73,
+  "warm_std_decode_ts": 1.12,
+  "warm_mean_prefill_ts": 484.35,
+  "warm_std_prefill_ts": 5.11,
+  "all_sha_matched": true,
+  "max_peak_vram_mib": 7056,
+  "max_vmhwm_mib": 13936
+}

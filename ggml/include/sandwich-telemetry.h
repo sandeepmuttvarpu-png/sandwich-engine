@@ -54,6 +54,7 @@ GGML_API void sandwich_telemetry_record_hits(uint64_t hits);
 GGML_API void sandwich_telemetry_record_misses(uint64_t misses);
 GGML_API void sandwich_telemetry_record_prefill_evals(uint64_t hits, uint64_t misses);
 GGML_API void sandwich_telemetry_record_expert(int32_t il, int32_t expert_id);
+GGML_API void sandwich_telemetry_record_nrc(int nrc);
 
 GGML_API sandwich_telemetry_stats_t sandwich_telemetry_get_stats(void);
 GGML_API void sandwich_telemetry_reset(void);

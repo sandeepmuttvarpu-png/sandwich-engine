@@ -23,6 +23,10 @@ static std::atomic<int> g_current_phase{SANDWICH_PHASE_DECODE};
 static std::atomic<uint64_t> g_gpu_calls_prefill{0};
 static std::atomic<uint64_t> g_gpu_calls_decode{0};
 
+// NRC sequential batching histogram
+static std::atomic<uint64_t> g_nrc_hist_prefill[9] = {};
+static std::atomic<uint64_t> g_nrc_hist_decode[9]  = {};
+
 static std::mutex g_freq_mutex;
 static std::unordered_map<uint64_t, int64_t> g_expert_freqs;
 
@@ -75,6 +79,15 @@ void sandwich_telemetry_record_expert(int32_t il, int32_t expert_id) {
     const uint64_t key = (static_cast<uint64_t>(il) << 32) | static_cast<uint32_t>(expert_id);
     std::lock_guard<std::mutex> lock(g_freq_mutex);
     g_expert_freqs[key]++;
+}
+
+void sandwich_telemetry_record_nrc(int nrc) {
+    if (nrc < 1 || nrc > 8) return;
+    if (g_current_phase.load(std::memory_order_relaxed) == (int)SANDWICH_PHASE_PREFILL) {
+        g_nrc_hist_prefill[nrc].fetch_add(1, std::memory_order_relaxed);
+    } else {
+        g_nrc_hist_decode[nrc].fetch_add(1, std::memory_order_relaxed);
+    }
 }
 
 int64_t sandwich_telemetry_get_expert_freq(int32_t il, int32_t expert_id) {
@@ -142,6 +155,9 @@ void sandwich_telemetry_reset(void) {
     g_decode_hot_hits.store(0, std::memory_order_relaxed);
     g_decode_cold_misses.store(0, std::memory_order_relaxed);
     g_gpu_calls_decode.store(0, std::memory_order_relaxed);
+    for (int i = 0; i <= 8; ++i) {
+        g_nrc_hist_decode[i].store(0, std::memory_order_relaxed);
+    }
     // Prefill counters (g_prefill_hot_hits, g_prefill_cold_misses, g_gpu_calls_prefill)
     // and cumulative totals (g_cum_hot_hits, g_cum_cold_misses) are preserved across
     // internal context resets so whole-session telemetry accurately captures prompt prefill.
@@ -159,6 +175,10 @@ void sandwich_telemetry_reset_all(void) {
     g_gpu_calls_prefill.store(0, std::memory_order_relaxed);
     g_gpu_calls_decode.store(0, std::memory_order_relaxed);
     g_warmup_tokens.store(0, std::memory_order_relaxed);
+    for (int i = 0; i <= 8; ++i) {
+        g_nrc_hist_prefill[i].store(0, std::memory_order_relaxed);
+        g_nrc_hist_decode[i].store(0, std::memory_order_relaxed);
+    }
     g_last_printed_evals = 0;
     std::lock_guard<std::mutex> lock(g_freq_mutex);
     g_expert_freqs.clear();
@@ -202,6 +222,33 @@ void sandwich_telemetry_print(void) {
         fprintf(stderr, "   Post-Repack Hot Hits           : %10" PRIu64 " (%.2f%%)\n", stats.hot_hits, stats.hit_rate_pct);
         fprintf(stderr, "   Post-Repack Cold Misses        : %10" PRIu64 " (%.2f%%)\n", stats.cold_misses, 100.0 - stats.hit_rate_pct);
     }
+
+    uint64_t total_nrc_prefill = 0;
+    uint64_t total_nrc_decode = 0;
+    for (int i = 1; i <= 8; ++i) {
+        total_nrc_prefill += g_nrc_hist_prefill[i].load(std::memory_order_relaxed);
+        total_nrc_decode  += g_nrc_hist_decode[i].load(std::memory_order_relaxed);
+    }
+    if (total_nrc_prefill > 0 || total_nrc_decode > 0) {
+        fprintf(stderr, "   --- NRC Sequential Batching Histogram ---\n");
+        if (total_nrc_prefill > 0) {
+            fprintf(stderr, "   Prefill NRC Invocations (total %10" PRIu64 "): [nrc=1: %" PRIu64 ", nrc=2: %" PRIu64 ", nrc=4: %" PRIu64 ", nrc=8: %" PRIu64 "]\n",
+                    total_nrc_prefill,
+                    g_nrc_hist_prefill[1].load(std::memory_order_relaxed),
+                    g_nrc_hist_prefill[2].load(std::memory_order_relaxed),
+                    g_nrc_hist_prefill[4].load(std::memory_order_relaxed),
+                    g_nrc_hist_prefill[8].load(std::memory_order_relaxed));
+        }
+        if (total_nrc_decode > 0) {
+            fprintf(stderr, "   Decode NRC Invocations  (total %10" PRIu64 "): [nrc=1: %" PRIu64 ", nrc=2: %" PRIu64 ", nrc=4: %" PRIu64 ", nrc=8: %" PRIu64 "]\n",
+                    total_nrc_decode,
+                    g_nrc_hist_decode[1].load(std::memory_order_relaxed),
+                    g_nrc_hist_decode[2].load(std::memory_order_relaxed),
+                    g_nrc_hist_decode[4].load(std::memory_order_relaxed),
+                    g_nrc_hist_decode[8].load(std::memory_order_relaxed));
+        }
+    }
+
     fprintf(stderr, "   Hot-Pack Hit Rate (Host-Resident Layers 13..40): %10.2f%%\n", stats.cum_hit_rate_pct);
     fprintf(stderr, "=======================================================\n");
     fprintf(stderr, "\n");

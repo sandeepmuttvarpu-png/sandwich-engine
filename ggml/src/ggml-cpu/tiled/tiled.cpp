@@ -1234,6 +1234,10 @@ bool ggml_compute_forward_mul_mat_id_tiled(
     if (params->use_ref) {
         return false;
     }
+    // IQ3_S and IQ2_S use fused vec_dot with hoisted grid unpack and sequential nrc amortization
+    if (dst->src[0]->type == GGML_TYPE_IQ3_S || dst->src[0]->type == GGML_TYPE_IQ2_S) {
+        return false;
+    }
     if (!ggml_tiled_supported(dst->src[0], dst->src[1])) {
         return false;
     }

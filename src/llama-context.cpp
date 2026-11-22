@@ -3550,6 +3550,7 @@ ggml_status llama_context::graph_compute(
             ggml_cgraph * gf,
                    bool   batched,
                 int64_t   n_tokens) {
+    GGML_UNUSED(n_tokens);
     int n_threads        = batched ? cparams.n_threads_batch : cparams.n_threads;
     ggml_threadpool_t tp = batched ? threadpool_batch        : threadpool;
 

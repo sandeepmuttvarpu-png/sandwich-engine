@@ -1548,40 +1548,147 @@ static void ggml_compute_forward_mul_mat_id_one_chunk(
     const int64_t blck_0 = 16;
     const int64_t blck_1 = 16;
 
-    float tmp[16];
+    if (type != GGML_TYPE_IQ3_S && type != GGML_TYPE_IQ2_S) {
+        float tmp[16];
 
-    for (int64_t iir1 = ir1_start; iir1 < ir1_end; iir1 += blck_1) {
-        for (int64_t iir0 = ir0_start; iir0 < ir0_end; iir0 += blck_0) {
-            for (int64_t ir1 = iir1; ir1 < iir1 + blck_1 && ir1 < ir1_end; ++ir1) {
-                const int64_t _i12 = ir1; // logical row index for this expert
+        for (int64_t iir1 = ir1_start; iir1 < ir1_end; iir1 += blck_1) {
+            for (int64_t iir0 = ir0_start; iir0 < ir0_end; iir0 += blck_0) {
+                for (int64_t ir1 = iir1; ir1 < iir1 + blck_1 && ir1 < ir1_end; ++ir1) {
+                    const int64_t _i12 = ir1; // logical row index for this expert
 
-                struct mmid_row_mapping row_mapping = MMID_MATRIX_ROW(cur_a, _i12);
-                const int id       = row_mapping.i1; // selected expert index
+                    struct mmid_row_mapping row_mapping = MMID_MATRIX_ROW(cur_a, _i12);
+                    const int id       = row_mapping.i1; // selected expert index
 
-                const int64_t  i11 = id % ne11;
-                const int64_t  i12 = row_mapping.i2; // row index in src1
+                    const int64_t  i11 = id % ne11;
+                    const int64_t  i12 = row_mapping.i2; // row index in src1
 
-                const int64_t  i1 = id;  // selected expert index
-                const int64_t  i2 = i12; // row
+                    const int64_t  i1 = id;  // selected expert index
+                    const int64_t  i2 = i12; // row
 
-                // desc: when src1 is not a contiguous memory block we have to calculate the offset using the strides
-                //       if it is, then we have either copied the data to params->wdata and made it contiguous or we are using
-                //       the original src1 data pointer, so we should index using the indices directly
-                // TODO: this is a bit of a hack, we should probably have a better way to handle this
-                const char * src1_col = (const char *) wdata +
-                    (src1_cont || src1->type != vec_dot_type
-                    ? (i11      + i12*ne11)*row_size
-                    : (i11*nb11 + i12*nb12));
+                    // desc: when src1 is not a contiguous memory block we have to calculate the offset using the strides
+                    //       if it is, then we have either copied the data to params->wdata and made it contiguous or we are using
+                    //       the original src1 data pointer, so we should index using the indices directly
+                    // TODO: this is a bit of a hack, we should probably have a better way to handle this
+                    const char * src1_col = (const char *) wdata +
+                        (src1_cont || src1->type != vec_dot_type
+                        ? (i11      + i12*ne11)*row_size
+                        : (i11*nb11 + i12*nb12));
 
-                float * dst_col = (float *) ((char *) dst->data + (i1*nb1 + i2*nb2));
+                    float * dst_col = (float *) ((char *) dst->data + (i1*nb1 + i2*nb2));
 
-                for (int64_t ir0 = iir0; ir0 < iir0 + blck_0 && ir0 < ir0_end; ++ir0) {
-                    vec_dot(ne00, &tmp[ir0 - iir0], 0, src0_cur + ir0*nb01, 0, src1_col, 0, 1);
+                    for (int64_t ir0 = iir0; ir0 < iir0 + blck_0 && ir0 < ir0_end; ++ir0) {
+                        vec_dot(ne00, &tmp[ir0 - iir0], 0, src0_cur + ir0*nb01, 0, src1_col, 0, 1);
+                    }
+
+                    memcpy(&dst_col[iir0], tmp, (MIN(iir0 + blck_0, ir0_end) - iir0)*sizeof(float));
                 }
-
-                memcpy(&dst_col[iir0], tmp, (MIN(iir0 + blck_0, ir0_end) - iir0)*sizeof(float));
             }
         }
+        return;
+    }
+
+    // IQ3_S / IQ2_S: group tokens into sequential batches to amortize expensive grid unpacking
+    int64_t ir1 = ir1_start;
+    while (ir1 < ir1_end) {
+        const int64_t rem = ir1_end - ir1;
+        const int cur_nrc = (rem >= 8) ? 8 : ((rem >= 4) ? 4 : ((rem >= 2) ? 2 : 1));
+
+        sandwich_telemetry_record_nrc(cur_nrc);
+
+        if (cur_nrc == 1) {
+            const int64_t _i12 = ir1;
+            struct mmid_row_mapping row_mapping = MMID_MATRIX_ROW(cur_a, _i12);
+            const int id       = row_mapping.i1;
+            const int64_t  i11 = id % ne11;
+            const int64_t  i12 = row_mapping.i2;
+            const int64_t  i1  = id;
+            const int64_t  i2  = i12;
+
+            const char * src1_col = (const char *) wdata +
+                (src1_cont || src1->type != vec_dot_type
+                ? (i11      + i12*ne11)*row_size
+                : (i11*nb11 + i12*nb12));
+
+            float * dst_col = (float *) ((char *) dst->data + (i1*nb1 + i2*nb2));
+            float tmp[16];
+
+            for (int64_t iir0 = ir0_start; iir0 < ir0_end; iir0 += blck_0) {
+                const int64_t r_end = MIN(iir0 + blck_0, ir0_end);
+                for (int64_t ir0 = iir0; ir0 < r_end; ++ir0) {
+                    vec_dot(ne00, &tmp[ir0 - iir0], 0, src0_cur + ir0*nb01, 0, src1_col, 0, 1);
+                }
+                memcpy(&dst_col[iir0], tmp, (r_end - iir0)*sizeof(float));
+            }
+
+            ir1 += 1;
+            continue;
+        }
+
+        const char * src1_cols[8];
+        float * dst_cols[8];
+
+        for (int c = 0; c < cur_nrc; ++c) {
+            const int64_t _i12 = ir1 + c;
+            struct mmid_row_mapping row_mapping = MMID_MATRIX_ROW(cur_a, _i12);
+            const int id       = row_mapping.i1;
+            const int64_t  i11 = id % ne11;
+            const int64_t  i12 = row_mapping.i2;
+            const int64_t  i1  = id;
+            const int64_t  i2  = i12;
+
+            src1_cols[c] = (const char *) wdata +
+                (src1_cont || src1->type != vec_dot_type
+                ? (i11      + i12*ne11)*row_size
+                : (i11*nb11 + i12*nb12));
+
+            dst_cols[c] = (float *) ((char *) dst->data + (i1*nb1 + i2*nb2));
+        }
+
+        bool is_contig = true;
+        for (int c = 1; c < cur_nrc; ++c) {
+            if (src1_cols[c] != src1_cols[0] + c * row_size) {
+                is_contig = false;
+                break;
+            }
+        }
+
+        const void * vy_batch = NULL;
+        size_t by_batch = row_size;
+        char stack_buf[65536];
+        char * heap_buf = NULL;
+
+        if (is_contig) {
+            vy_batch = src1_cols[0];
+        } else {
+            const size_t needed = cur_nrc * row_size;
+            char * buf = (needed <= sizeof(stack_buf)) ? stack_buf : (heap_buf = (char *)malloc(needed));
+            for (int c = 0; c < cur_nrc; ++c) {
+                memcpy(buf + c * row_size, src1_cols[c], row_size);
+            }
+            vy_batch = buf;
+        }
+
+        float tmp[16 * 8];
+
+        for (int64_t iir0 = ir0_start; iir0 < ir0_end; iir0 += blck_0) {
+            const int64_t r_end = MIN(iir0 + blck_0, ir0_end);
+            const int64_t nrows = r_end - iir0;
+
+            for (int64_t ir0 = iir0; ir0 < r_end; ++ir0) {
+                const int64_t r = ir0 - iir0;
+                vec_dot(ne00, &tmp[r], 16, src0_cur + ir0*nb01, 0, vy_batch, by_batch, cur_nrc);
+            }
+
+            for (int c = 0; c < cur_nrc; ++c) {
+                memcpy(&dst_cols[c][iir0], &tmp[c * 16], nrows * sizeof(float));
+            }
+        }
+
+        if (heap_buf) {
+            free(heap_buf);
+        }
+
+        ir1 += cur_nrc;
     }
 }
 
@@ -1771,7 +1878,11 @@ static void ggml_compute_forward_mul_mat_id(
         int64_t nchunk0 = (nr0 + chunk_size - 1) / chunk_size;
         int64_t nchunk1 = (nr1 + chunk_size - 1) / chunk_size;
 
-        if (nchunk0 * nchunk1 < nth * 4 || disable_chunking) {
+        if (type == GGML_TYPE_IQ3_S || type == GGML_TYPE_IQ2_S) {
+            // Expert-major token grouping: preserve token batches within expert chunks to maximize nrc amortization
+            nchunk0 = nth;
+            nchunk1 = 1;
+        } else if (nchunk0 * nchunk1 < nth * 4 || disable_chunking) {
             nchunk0 = nr0 > nr1 ? nth : 1;
             nchunk1 = nr0 > nr1 ? 1 : nth;
         }
