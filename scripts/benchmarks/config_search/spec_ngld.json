@@ -1,0 +1,49 @@
+{
+  "reps": 5,
+  "cooldown": 4,
+  "interleave": true,
+  "configs": [
+    {
+      "name": "c4_ngld0",
+      "flags": [
+        "-ctk",
+        "turbo4",
+        "-ctv",
+        "turbo4",
+        "--turbo-kvran",
+        "-fa",
+        "-md",
+        "/home/sandeep/ai-models/drafters/Qwen3.6-35B-A3B-DFlash2-GGUF/Qwen3.6-35B-A3B-DFlash2-Q4_K_M.gguf",
+        "-ngld",
+        "0",
+        "--io-uring",
+        "--moe-2q",
+        "--moe-cache-slots",
+        "8",
+        "--moe-warm-ram-mb",
+        "8000"
+      ]
+    },
+    {
+      "name": "c4_ngld99",
+      "flags": [
+        "-ctk",
+        "turbo4",
+        "-ctv",
+        "turbo4",
+        "--turbo-kvran",
+        "-fa",
+        "-md",
+        "/home/sandeep/ai-models/drafters/Qwen3.6-35B-A3B-DFlash2-GGUF/Qwen3.6-35B-A3B-DFlash2-Q4_K_M.gguf",
+        "-ngld",
+        "99",
+        "--io-uring",
+        "--moe-2q",
+        "--moe-cache-slots",
+        "8",
+        "--moe-warm-ram-mb",
+        "8000"
+      ]
+    }
+  ]
+}

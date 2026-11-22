@@ -1,0 +1,888 @@
+{
+  "generated": "2026-11-22T12:52:59",
+  "gpu": "RTX 5050 Mobile 8151 MiB, driver 620.73.04",
+  "protocol": {
+    "guard_vram_mib": 7100,
+    "guard_vmhwm_mib": 16552,
+    "cooldown_s": 4,
+    "warm_discard": 1
+  },
+  "configs": {
+    "WIN": {
+      "flags": [
+        "-ctk",
+        "turbo4",
+        "-ctv",
+        "turbo4",
+        "--turbo-kvran",
+        "-fa",
+        "-md",
+        "/home/sandeep/ai-models/drafters/Qwen3.6-35B-A3B-DFlash2-GGUF/Qwen3.6-35B-A3B-DFlash2-Q4_K_M.gguf",
+        "-ngld",
+        "99",
+        "--io-uring",
+        "--moe-2q",
+        "--moe-cache-slots",
+        "16",
+        "--moe-warm-ram-mb",
+        "8000"
+      ],
+      "runs": [
+        {
+          "config": "WIN",
+          "rep": 1,
+          "ok": true,
+          "rc": 0,
+          "wall_s": 12.181,
+          "peak_vram_mib": 6576,
+          "vmhwm_mib": 13936,
+          "prefill_ts": 469.2,
+          "decode_ts": 29.9,
+          "prefill_s": 8.06,
+          "decode_s": 2.1,
+          "pure_sha": "481b2a7aea43731e77979bca6631cfac9d32bd42d023d63c91552b245931a6aa",
+          "sha_match": true
+        },
+        {
+          "config": "WIN",
+          "rep": 2,
+          "ok": true,
+          "rc": 0,
+          "wall_s": 12.126,
+          "peak_vram_mib": 6576,
+          "vmhwm_mib": 13936,
+          "prefill_ts": 471.3,
+          "decode_ts": 30.1,
+          "prefill_s": 8.02,
+          "decode_s": 2.09,
+          "pure_sha": "481b2a7aea43731e77979bca6631cfac9d32bd42d023d63c91552b245931a6aa",
+          "sha_match": true
+        },
+        {
+          "config": "WIN",
+          "rep": 3,
+          "ok": true,
+          "rc": 0,
+          "wall_s": 12.128,
+          "peak_vram_mib": 6576,
+          "vmhwm_mib": 13936,
+          "prefill_ts": 468.0,
+          "decode_ts": 30.8,
+          "prefill_s": 8.08,
+          "decode_s": 2.04,
+          "pure_sha": "481b2a7aea43731e77979bca6631cfac9d32bd42d023d63c91552b245931a6aa",
+          "sha_match": true
+        }
+      ],
+      "summary": {
+        "n_total": 3,
+        "n_ok": 3,
+        "n_warm": 2,
+        "decode_mean": 30.45,
+        "decode_sd": 0.495,
+        "decode_runs": [
+          30.1,
+          30.8
+        ],
+        "peak_vram_mib": 6576,
+        "vmhwm_mib": 13936,
+        "sha_all_match": true,
+        "vram_gate": true,
+        "vmhwm_gate": true,
+        "failed_runs": 0
+      }
+    },
+    "t_native_mtp": {
+      "flags": [
+        "-ctk",
+        "turbo4",
+        "-ctv",
+        "turbo4",
+        "--turbo-kvran",
+        "-fa",
+        "-md",
+        "/home/sandeep/ai-models/drafters/Qwen3.6-35B-A3B-DFlash2-GGUF/Qwen3.6-35B-A3B-DFlash2-Q4_K_M.gguf",
+        "-ngld",
+        "99",
+        "--io-uring",
+        "--moe-2q",
+        "--moe-cache-slots",
+        "16",
+        "--moe-warm-ram-mb",
+        "8000",
+        "--native-mtp"
+      ],
+      "runs": [
+        {
+          "config": "t_native_mtp",
+          "rep": 1,
+          "ok": false,
+          "rc": 1,
+          "wall_s": 1.909,
+          "peak_vram_mib": 5844,
+          "vmhwm_mib": 13913,
+          "error": "0.01.610.987 E common_speculative_init_result: failed to create MTP context\n0.01.610.999 E srv    load_model: failed to create MTP context\n0.01.611.590 E srv  server_run_i: exiting due to model loading error\nllama_server exited with code 1\n"
+        },
+        {
+          "config": "t_native_mtp",
+          "rep": 2,
+          "ok": false,
+          "rc": 1,
+          "wall_s": 1.851,
+          "peak_vram_mib": 5844,
+          "vmhwm_mib": 13913,
+          "error": "0.01.603.360 E common_speculative_init_result: failed to create MTP context\n0.01.603.371 E srv    load_model: failed to create MTP context\n0.01.603.875 E srv  server_run_i: exiting due to model loading error\nllama_server exited with code 1\n"
+        },
+        {
+          "config": "t_native_mtp",
+          "rep": 3,
+          "ok": false,
+          "rc": 1,
+          "wall_s": 1.856,
+          "peak_vram_mib": 5844,
+          "vmhwm_mib": 13913,
+          "error": "0.01.605.987 E common_speculative_init_result: failed to create MTP context\n0.01.605.998 E srv    load_model: failed to create MTP context\n0.01.606.520 E srv  server_run_i: exiting due to model loading error\nllama_server exited with code 1\n"
+        }
+      ],
+      "summary": {
+        "n": 0,
+        "fatal": "no successful runs"
+      }
+    },
+    "t_sched_async_cpu": {
+      "flags": [
+        "-ctk",
+        "turbo4",
+        "-ctv",
+        "turbo4",
+        "--turbo-kvran",
+        "-fa",
+        "-md",
+        "/home/sandeep/ai-models/drafters/Qwen3.6-35B-A3B-DFlash2-GGUF/Qwen3.6-35B-A3B-DFlash2-Q4_K_M.gguf",
+        "-ngld",
+        "99",
+        "--io-uring",
+        "--moe-2q",
+        "--moe-cache-slots",
+        "16",
+        "--moe-warm-ram-mb",
+        "8000",
+        "--sched-async-cpu"
+      ],
+      "runs": [
+        {
+          "config": "t_sched_async_cpu",
+          "rep": 1,
+          "ok": true,
+          "rc": 0,
+          "wall_s": 12.046,
+          "peak_vram_mib": 6576,
+          "vmhwm_mib": 13936,
+          "prefill_ts": 477.2,
+          "decode_ts": 29.8,
+          "prefill_s": 7.92,
+          "decode_s": 2.11,
+          "pure_sha": "481b2a7aea43731e77979bca6631cfac9d32bd42d023d63c91552b245931a6aa",
+          "sha_match": true
+        },
+        {
+          "config": "t_sched_async_cpu",
+          "rep": 2,
+          "ok": true,
+          "rc": 0,
+          "wall_s": 12.06,
+          "peak_vram_mib": 6576,
+          "vmhwm_mib": 13936,
+          "prefill_ts": 471.5,
+          "decode_ts": 30.5,
+          "prefill_s": 8.02,
+          "decode_s": 2.07,
+          "pure_sha": "481b2a7aea43731e77979bca6631cfac9d32bd42d023d63c91552b245931a6aa",
+          "sha_match": true
+        },
+        {
+          "config": "t_sched_async_cpu",
+          "rep": 3,
+          "ok": true,
+          "rc": 0,
+          "wall_s": 12.333,
+          "peak_vram_mib": 6576,
+          "vmhwm_mib": 13936,
+          "prefill_ts": 467.3,
+          "decode_ts": 28.1,
+          "prefill_s": 8.09,
+          "decode_s": 2.24,
+          "pure_sha": "481b2a7aea43731e77979bca6631cfac9d32bd42d023d63c91552b245931a6aa",
+          "sha_match": true
+        }
+      ],
+      "summary": {
+        "n_total": 3,
+        "n_ok": 3,
+        "n_warm": 2,
+        "decode_mean": 29.3,
+        "decode_sd": 1.697,
+        "decode_runs": [
+          30.5,
+          28.1
+        ],
+        "peak_vram_mib": 6576,
+        "vmhwm_mib": 13936,
+        "sha_all_match": true,
+        "vram_gate": true,
+        "vmhwm_gate": true,
+        "failed_runs": 0
+      }
+    },
+    "t_unrotated_kv": {
+      "flags": [
+        "-ctk",
+        "turbo4",
+        "-ctv",
+        "turbo4",
+        "--turbo-kvran",
+        "-fa",
+        "-md",
+        "/home/sandeep/ai-models/drafters/Qwen3.6-35B-A3B-DFlash2-GGUF/Qwen3.6-35B-A3B-DFlash2-Q4_K_M.gguf",
+        "-ngld",
+        "99",
+        "--io-uring",
+        "--moe-2q",
+        "--moe-cache-slots",
+        "16",
+        "--moe-warm-ram-mb",
+        "8000",
+        "--unrotated-kv"
+      ],
+      "runs": [
+        {
+          "config": "t_unrotated_kv",
+          "rep": 1,
+          "ok": true,
+          "rc": 0,
+          "wall_s": 12.022,
+          "peak_vram_mib": 6576,
+          "vmhwm_mib": 13936,
+          "prefill_ts": 477.4,
+          "decode_ts": 30.0,
+          "prefill_s": 7.92,
+          "decode_s": 2.1,
+          "pure_sha": "481b2a7aea43731e77979bca6631cfac9d32bd42d023d63c91552b245931a6aa",
+          "sha_match": true
+        },
+        {
+          "config": "t_unrotated_kv",
+          "rep": 2,
+          "ok": true,
+          "rc": 0,
+          "wall_s": 12.133,
+          "peak_vram_mib": 6576,
+          "vmhwm_mib": 13936,
+          "prefill_ts": 470.0,
+          "decode_ts": 30.4,
+          "prefill_s": 8.04,
+          "decode_s": 2.07,
+          "pure_sha": "481b2a7aea43731e77979bca6631cfac9d32bd42d023d63c91552b245931a6aa",
+          "sha_match": true
+        },
+        {
+          "config": "t_unrotated_kv",
+          "rep": 3,
+          "ok": true,
+          "rc": 0,
+          "wall_s": 12.498,
+          "peak_vram_mib": 6576,
+          "vmhwm_mib": 13936,
+          "prefill_ts": 457.9,
+          "decode_ts": 29.0,
+          "prefill_s": 8.25,
+          "decode_s": 2.17,
+          "pure_sha": "481b2a7aea43731e77979bca6631cfac9d32bd42d023d63c91552b245931a6aa",
+          "sha_match": true
+        }
+      ],
+      "summary": {
+        "n_total": 3,
+        "n_ok": 3,
+        "n_warm": 2,
+        "decode_mean": 29.7,
+        "decode_sd": 0.99,
+        "decode_runs": [
+          30.4,
+          29.0
+        ],
+        "peak_vram_mib": 6576,
+        "vmhwm_mib": 13936,
+        "sha_all_match": true,
+        "vram_gate": true,
+        "vmhwm_gate": true,
+        "failed_runs": 0
+      }
+    },
+    "t_asym_prefetch": {
+      "flags": [
+        "-ctk",
+        "turbo4",
+        "-ctv",
+        "turbo4",
+        "--turbo-kvran",
+        "-fa",
+        "-md",
+        "/home/sandeep/ai-models/drafters/Qwen3.6-35B-A3B-DFlash2-GGUF/Qwen3.6-35B-A3B-DFlash2-Q4_K_M.gguf",
+        "-ngld",
+        "99",
+        "--io-uring",
+        "--moe-2q",
+        "--moe-cache-slots",
+        "16",
+        "--moe-warm-ram-mb",
+        "8000",
+        "--asym-prefetch"
+      ],
+      "runs": [
+        {
+          "config": "t_asym_prefetch",
+          "rep": 1,
+          "ok": true,
+          "rc": 0,
+          "wall_s": 12.266,
+          "peak_vram_mib": 6576,
+          "vmhwm_mib": 13936,
+          "prefill_ts": 467.4,
+          "decode_ts": 29.1,
+          "prefill_s": 8.09,
+          "decode_s": 2.16,
+          "pure_sha": "481b2a7aea43731e77979bca6631cfac9d32bd42d023d63c91552b245931a6aa",
+          "sha_match": true
+        },
+        {
+          "config": "t_asym_prefetch",
+          "rep": 2,
+          "ok": true,
+          "rc": 0,
+          "wall_s": 12.026,
+          "peak_vram_mib": 6576,
+          "vmhwm_mib": 13936,
+          "prefill_ts": 473.2,
+          "decode_ts": 31.0,
+          "prefill_s": 7.99,
+          "decode_s": 2.03,
+          "pure_sha": "481b2a7aea43731e77979bca6631cfac9d32bd42d023d63c91552b245931a6aa",
+          "sha_match": true
+        },
+        {
+          "config": "t_asym_prefetch",
+          "rep": 3,
+          "ok": true,
+          "rc": 0,
+          "wall_s": 12.597,
+          "peak_vram_mib": 6576,
+          "vmhwm_mib": 13936,
+          "prefill_ts": 463.5,
+          "decode_ts": 27.4,
+          "prefill_s": 8.16,
+          "decode_s": 2.3,
+          "pure_sha": "481b2a7aea43731e77979bca6631cfac9d32bd42d023d63c91552b245931a6aa",
+          "sha_match": true
+        }
+      ],
+      "summary": {
+        "n_total": 3,
+        "n_ok": 3,
+        "n_warm": 2,
+        "decode_mean": 29.2,
+        "decode_sd": 2.546,
+        "decode_runs": [
+          31.0,
+          27.4
+        ],
+        "peak_vram_mib": 6576,
+        "vmhwm_mib": 13936,
+        "sha_all_match": true,
+        "vram_gate": true,
+        "vmhwm_gate": true,
+        "failed_runs": 0
+      }
+    },
+    "t_h2o": {
+      "flags": [
+        "-ctk",
+        "turbo4",
+        "-ctv",
+        "turbo4",
+        "--turbo-kvran",
+        "-fa",
+        "-md",
+        "/home/sandeep/ai-models/drafters/Qwen3.6-35B-A3B-DFlash2-GGUF/Qwen3.6-35B-A3B-DFlash2-Q4_K_M.gguf",
+        "-ngld",
+        "99",
+        "--io-uring",
+        "--moe-2q",
+        "--moe-cache-slots",
+        "16",
+        "--moe-warm-ram-mb",
+        "8000",
+        "--h2o"
+      ],
+      "runs": [
+        {
+          "config": "t_h2o",
+          "rep": 1,
+          "ok": true,
+          "rc": 0,
+          "wall_s": 12.158,
+          "peak_vram_mib": 6576,
+          "vmhwm_mib": 13936,
+          "prefill_ts": 475.0,
+          "decode_ts": 29.6,
+          "prefill_s": 7.96,
+          "decode_s": 2.13,
+          "pure_sha": "481b2a7aea43731e77979bca6631cfac9d32bd42d023d63c91552b245931a6aa",
+          "sha_match": true
+        },
+        {
+          "config": "t_h2o",
+          "rep": 2,
+          "ok": true,
+          "rc": 0,
+          "wall_s": 12.132,
+          "peak_vram_mib": 6576,
+          "vmhwm_mib": 13936,
+          "prefill_ts": 469.2,
+          "decode_ts": 30.2,
+          "prefill_s": 8.06,
+          "decode_s": 2.08,
+          "pure_sha": "481b2a7aea43731e77979bca6631cfac9d32bd42d023d63c91552b245931a6aa",
+          "sha_match": true
+        },
+        {
+          "config": "t_h2o",
+          "rep": 3,
+          "ok": true,
+          "rc": 0,
+          "wall_s": 12.5,
+          "peak_vram_mib": 6576,
+          "vmhwm_mib": 13936,
+          "prefill_ts": 465.6,
+          "decode_ts": 27.3,
+          "prefill_s": 8.12,
+          "decode_s": 2.31,
+          "pure_sha": "481b2a7aea43731e77979bca6631cfac9d32bd42d023d63c91552b245931a6aa",
+          "sha_match": true
+        }
+      ],
+      "summary": {
+        "n_total": 3,
+        "n_ok": 3,
+        "n_warm": 2,
+        "decode_mean": 28.75,
+        "decode_sd": 2.051,
+        "decode_runs": [
+          30.2,
+          27.3
+        ],
+        "peak_vram_mib": 6576,
+        "vmhwm_mib": 13936,
+        "sha_all_match": true,
+        "vram_gate": true,
+        "vmhwm_gate": true,
+        "failed_runs": 0
+      }
+    },
+    "t_sink_tokens4": {
+      "flags": [
+        "-ctk",
+        "turbo4",
+        "-ctv",
+        "turbo4",
+        "--turbo-kvran",
+        "-fa",
+        "-md",
+        "/home/sandeep/ai-models/drafters/Qwen3.6-35B-A3B-DFlash2-GGUF/Qwen3.6-35B-A3B-DFlash2-Q4_K_M.gguf",
+        "-ngld",
+        "99",
+        "--io-uring",
+        "--moe-2q",
+        "--moe-cache-slots",
+        "16",
+        "--moe-warm-ram-mb",
+        "8000",
+        "--sink-tokens",
+        "4"
+      ],
+      "runs": [
+        {
+          "config": "t_sink_tokens4",
+          "rep": 1,
+          "ok": true,
+          "rc": 0,
+          "wall_s": 12.114,
+          "peak_vram_mib": 6576,
+          "vmhwm_mib": 13936,
+          "prefill_ts": 468.8,
+          "decode_ts": 30.9,
+          "prefill_s": 8.06,
+          "decode_s": 2.04,
+          "pure_sha": "481b2a7aea43731e77979bca6631cfac9d32bd42d023d63c91552b245931a6aa",
+          "sha_match": true
+        },
+        {
+          "config": "t_sink_tokens4",
+          "rep": 2,
+          "ok": true,
+          "rc": 0,
+          "wall_s": 12.138,
+          "peak_vram_mib": 6576,
+          "vmhwm_mib": 13936,
+          "prefill_ts": 469.9,
+          "decode_ts": 30.3,
+          "prefill_s": 8.04,
+          "decode_s": 2.08,
+          "pure_sha": "481b2a7aea43731e77979bca6631cfac9d32bd42d023d63c91552b245931a6aa",
+          "sha_match": true
+        },
+        {
+          "config": "t_sink_tokens4",
+          "rep": 3,
+          "ok": true,
+          "rc": 0,
+          "wall_s": 12.638,
+          "peak_vram_mib": 6576,
+          "vmhwm_mib": 13936,
+          "prefill_ts": 459.5,
+          "decode_ts": 27.1,
+          "prefill_s": 8.23,
+          "decode_s": 2.33,
+          "pure_sha": "481b2a7aea43731e77979bca6631cfac9d32bd42d023d63c91552b245931a6aa",
+          "sha_match": true
+        }
+      ],
+      "summary": {
+        "n_total": 3,
+        "n_ok": 3,
+        "n_warm": 2,
+        "decode_mean": 28.7,
+        "decode_sd": 2.263,
+        "decode_runs": [
+          30.3,
+          27.1
+        ],
+        "peak_vram_mib": 6576,
+        "vmhwm_mib": 13936,
+        "sha_all_match": true,
+        "vram_gate": true,
+        "vmhwm_gate": true,
+        "failed_runs": 0
+      }
+    },
+    "t_moe_exchange_rot": {
+      "flags": [
+        "-ctk",
+        "turbo4",
+        "-ctv",
+        "turbo4",
+        "--turbo-kvran",
+        "-fa",
+        "-md",
+        "/home/sandeep/ai-models/drafters/Qwen3.6-35B-A3B-DFlash2-GGUF/Qwen3.6-35B-A3B-DFlash2-Q4_K_M.gguf",
+        "-ngld",
+        "99",
+        "--io-uring",
+        "--moe-2q",
+        "--moe-cache-slots",
+        "16",
+        "--moe-warm-ram-mb",
+        "8000",
+        "--moe-exchange-rot"
+      ],
+      "runs": [
+        {
+          "config": "t_moe_exchange_rot",
+          "rep": 1,
+          "ok": true,
+          "rc": 0,
+          "wall_s": 12.142,
+          "peak_vram_mib": 6576,
+          "vmhwm_mib": 13936,
+          "prefill_ts": 471.2,
+          "decode_ts": 29.9,
+          "prefill_s": 8.02,
+          "decode_s": 2.11,
+          "pure_sha": "481b2a7aea43731e77979bca6631cfac9d32bd42d023d63c91552b245931a6aa",
+          "sha_match": true
+        },
+        {
+          "config": "t_moe_exchange_rot",
+          "rep": 2,
+          "ok": true,
+          "rc": 0,
+          "wall_s": 12.185,
+          "peak_vram_mib": 6576,
+          "vmhwm_mib": 13936,
+          "prefill_ts": 466.6,
+          "decode_ts": 30.0,
+          "prefill_s": 8.1,
+          "decode_s": 2.1,
+          "pure_sha": "481b2a7aea43731e77979bca6631cfac9d32bd42d023d63c91552b245931a6aa",
+          "sha_match": true
+        },
+        {
+          "config": "t_moe_exchange_rot",
+          "rep": 3,
+          "ok": true,
+          "rc": 0,
+          "wall_s": 12.16,
+          "peak_vram_mib": 6576,
+          "vmhwm_mib": 13936,
+          "prefill_ts": 471.1,
+          "decode_ts": 29.7,
+          "prefill_s": 8.02,
+          "decode_s": 2.12,
+          "pure_sha": "481b2a7aea43731e77979bca6631cfac9d32bd42d023d63c91552b245931a6aa",
+          "sha_match": true
+        }
+      ],
+      "summary": {
+        "n_total": 3,
+        "n_ok": 3,
+        "n_warm": 2,
+        "decode_mean": 29.85,
+        "decode_sd": 0.212,
+        "decode_runs": [
+          30.0,
+          29.7
+        ],
+        "peak_vram_mib": 6576,
+        "vmhwm_mib": 13936,
+        "sha_all_match": true,
+        "vram_gate": true,
+        "vmhwm_gate": true,
+        "failed_runs": 0
+      }
+    },
+    "t_warm0": {
+      "flags": [
+        "-ctk",
+        "turbo4",
+        "-ctv",
+        "turbo4",
+        "--turbo-kvran",
+        "-fa",
+        "-md",
+        "/home/sandeep/ai-models/drafters/Qwen3.6-35B-A3B-DFlash2-GGUF/Qwen3.6-35B-A3B-DFlash2-Q4_K_M.gguf",
+        "-ngld",
+        "99",
+        "--io-uring",
+        "--moe-2q",
+        "--moe-cache-slots",
+        "16",
+        "--moe-warm-ram-mb",
+        "0"
+      ],
+      "runs": [
+        {
+          "config": "t_warm0",
+          "rep": 1,
+          "ok": false,
+          "rc": 1,
+          "wall_s": 0.11,
+          "peak_vram_mib": 93,
+          "vmhwm_mib": 308,
+          "error": "error while handling argument \"--moe-warm-ram-mb\": invalid value\n\nusage:\n--moe-warm-ram-mb N                     Phase 12 Tier 2 WARM DDR5 RAM pool budget in MiB (default: 12288)\n                                        (env: LLAMA_ARG_MOE_WARM_RAM_MB)\n\n\nto show complete usage, run with -h\n"
+        },
+        {
+          "config": "t_warm0",
+          "rep": 2,
+          "ok": false,
+          "rc": 1,
+          "wall_s": 0.068,
+          "peak_vram_mib": 93,
+          "vmhwm_mib": 243,
+          "error": "error while handling argument \"--moe-warm-ram-mb\": invalid value\n\nusage:\n--moe-warm-ram-mb N                     Phase 12 Tier 2 WARM DDR5 RAM pool budget in MiB (default: 12288)\n                                        (env: LLAMA_ARG_MOE_WARM_RAM_MB)\n\n\nto show complete usage, run with -h\n"
+        },
+        {
+          "config": "t_warm0",
+          "rep": 3,
+          "ok": false,
+          "rc": 1,
+          "wall_s": 0.074,
+          "peak_vram_mib": 93,
+          "vmhwm_mib": 221,
+          "error": "error while handling argument \"--moe-warm-ram-mb\": invalid value\n\nusage:\n--moe-warm-ram-mb N                     Phase 12 Tier 2 WARM DDR5 RAM pool budget in MiB (default: 12288)\n                                        (env: LLAMA_ARG_MOE_WARM_RAM_MB)\n\n\nto show complete usage, run with -h\n"
+        }
+      ],
+      "summary": {
+        "n": 0,
+        "fatal": "no successful runs"
+      }
+    },
+    "t_kv_f16": {
+      "flags": [
+        "-ctk",
+        "f16",
+        "-ctv",
+        "f16",
+        "--turbo-kvran",
+        "-fa",
+        "-md",
+        "/home/sandeep/ai-models/drafters/Qwen3.6-35B-A3B-DFlash2-GGUF/Qwen3.6-35B-A3B-DFlash2-Q4_K_M.gguf",
+        "-ngld",
+        "99",
+        "--io-uring",
+        "--moe-2q",
+        "--moe-cache-slots",
+        "16",
+        "--moe-warm-ram-mb",
+        "8000"
+      ],
+      "runs": [
+        {
+          "config": "t_kv_f16",
+          "rep": 1,
+          "ok": true,
+          "rc": 0,
+          "wall_s": 12.339,
+          "peak_vram_mib": 6576,
+          "vmhwm_mib": 13936,
+          "prefill_ts": 478.2,
+          "decode_ts": 26.2,
+          "prefill_s": 7.9,
+          "decode_s": 2.41,
+          "pure_sha": "481b2a7aea43731e77979bca6631cfac9d32bd42d023d63c91552b245931a6aa",
+          "sha_match": true
+        },
+        {
+          "config": "t_kv_f16",
+          "rep": 2,
+          "ok": true,
+          "rc": 0,
+          "wall_s": 12.265,
+          "peak_vram_mib": 6576,
+          "vmhwm_mib": 13936,
+          "prefill_ts": 478.1,
+          "decode_ts": 27.0,
+          "prefill_s": 7.91,
+          "decode_s": 2.34,
+          "pure_sha": "481b2a7aea43731e77979bca6631cfac9d32bd42d023d63c91552b245931a6aa",
+          "sha_match": true
+        },
+        {
+          "config": "t_kv_f16",
+          "rep": 3,
+          "ok": true,
+          "rc": 0,
+          "wall_s": 12.306,
+          "peak_vram_mib": 6576,
+          "vmhwm_mib": 13936,
+          "prefill_ts": 477.5,
+          "decode_ts": 26.7,
+          "prefill_s": 7.92,
+          "decode_s": 2.36,
+          "pure_sha": "481b2a7aea43731e77979bca6631cfac9d32bd42d023d63c91552b245931a6aa",
+          "sha_match": true
+        }
+      ],
+      "summary": {
+        "n_total": 3,
+        "n_ok": 3,
+        "n_warm": 2,
+        "decode_mean": 26.85,
+        "decode_sd": 0.212,
+        "decode_runs": [
+          27.0,
+          26.7
+        ],
+        "peak_vram_mib": 6576,
+        "vmhwm_mib": 13936,
+        "sha_all_match": true,
+        "vram_gate": true,
+        "vmhwm_gate": true,
+        "failed_runs": 0
+      }
+    },
+    "t_kv_q8_0": {
+      "flags": [
+        "-ctk",
+        "q8_0",
+        "-ctv",
+        "q8_0",
+        "--turbo-kvran",
+        "-fa",
+        "-md",
+        "/home/sandeep/ai-models/drafters/Qwen3.6-35B-A3B-DFlash2-GGUF/Qwen3.6-35B-A3B-DFlash2-Q4_K_M.gguf",
+        "-ngld",
+        "99",
+        "--io-uring",
+        "--moe-2q",
+        "--moe-cache-slots",
+        "16",
+        "--moe-warm-ram-mb",
+        "8000"
+      ],
+      "runs": [
+        {
+          "config": "t_kv_q8_0",
+          "rep": 1,
+          "ok": true,
+          "rc": 0,
+          "wall_s": 12.003,
+          "peak_vram_mib": 6586,
+          "vmhwm_mib": 13936,
+          "prefill_ts": 477.2,
+          "decode_ts": 30.2,
+          "prefill_s": 7.92,
+          "decode_s": 2.09,
+          "pure_sha": "481b2a7aea43731e77979bca6631cfac9d32bd42d023d63c91552b245931a6aa",
+          "sha_match": true
+        },
+        {
+          "config": "t_kv_q8_0",
+          "rep": 2,
+          "ok": true,
+          "rc": 0,
+          "wall_s": 12.062,
+          "peak_vram_mib": 6586,
+          "vmhwm_mib": 13936,
+          "prefill_ts": 472.5,
+          "decode_ts": 30.5,
+          "prefill_s": 8.0,
+          "decode_s": 2.06,
+          "pure_sha": "481b2a7aea43731e77979bca6631cfac9d32bd42d023d63c91552b245931a6aa",
+          "sha_match": true
+        },
+        {
+          "config": "t_kv_q8_0",
+          "rep": 3,
+          "ok": true,
+          "rc": 0,
+          "wall_s": 11.929,
+          "peak_vram_mib": 6586,
+          "vmhwm_mib": 13936,
+          "prefill_ts": 481.1,
+          "decode_ts": 30.4,
+          "prefill_s": 7.86,
+          "decode_s": 2.07,
+          "pure_sha": "481b2a7aea43731e77979bca6631cfac9d32bd42d023d63c91552b245931a6aa",
+          "sha_match": true
+        }
+      ],
+      "summary": {
+        "n_total": 3,
+        "n_ok": 3,
+        "n_warm": 2,
+        "decode_mean": 30.45,
+        "decode_sd": 0.071,
+        "decode_runs": [
+          30.5,
+          30.4
+        ],
+        "peak_vram_mib": 6586,
+        "vmhwm_mib": 13936,
+        "sha_all_match": true,
+        "vram_gate": true,
+        "vmhwm_gate": true,
+        "failed_runs": 0
+      }
+    }
+  }
+}

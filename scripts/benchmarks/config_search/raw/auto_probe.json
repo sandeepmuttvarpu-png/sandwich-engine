@@ -1,0 +1,87 @@
+{
+  "generated": "2026-11-22T13:02:07",
+  "gpu": "RTX 5050 Mobile 8151 MiB, driver 620.73.04",
+  "protocol": {
+    "guard_vram_mib": 7100,
+    "guard_vmhwm_mib": 16552,
+    "cooldown_s": 2,
+    "warm_discard": 1
+  },
+  "configs": {
+    "auto_turbo4": {
+      "flags": [
+        "--sandwich-auto",
+        "-ctk",
+        "turbo4",
+        "-ctv",
+        "turbo4"
+      ],
+      "runs": [
+        {
+          "config": "auto_turbo4",
+          "rep": 1,
+          "ok": false,
+          "rc": -6,
+          "wall_s": 52.715,
+          "peak_vram_mib": 4536,
+          "vmhwm_mib": 18697,
+          "error": "/home/sandeep/dev/sandwich/sandwich-engine/ggml/src/ggml-cuda/ggml-cuda.cu:114: CUDA error\n0.13.409.757 E CUDA error: misaligned address\n0.13.409.761 E   current device: 0, in function ggml_cuda_kernel_launch at /home/sandeep/dev/sandwich/sandwich-engine/ggml/src/ggml-cuda/template-instances/../common.cuh:1731\n0.13.409.762 E   cudaGetLastError()\n",
+          "error_class": "CUDA error"
+        }
+      ],
+      "summary": {
+        "n": 0,
+        "fatal": "no successful runs"
+      }
+    },
+    "auto_f16kv": {
+      "flags": [
+        "--sandwich-auto",
+        "-ctk",
+        "f16",
+        "-ctv",
+        "f16"
+      ],
+      "runs": [
+        {
+          "config": "auto_f16kv",
+          "rep": 1,
+          "ok": false,
+          "rc": -6,
+          "wall_s": 45.402,
+          "peak_vram_mib": 4536,
+          "vmhwm_mib": 18081,
+          "error": "/home/sandeep/dev/sandwich/sandwich-engine/ggml/src/ggml-cuda/ggml-cuda.cu:114: CUDA error\n0.16.341.550 E CUDA error: misaligned address\n0.16.341.557 E   current device: 0, in function ggml_cuda_kernel_launch at /home/sandeep/dev/sandwich/sandwich-engine/ggml/src/ggml-cuda/template-instances/../common.cuh:1731\n0.16.341.557 E   cudaGetLastError()\n",
+          "error_class": "CUDA error"
+        }
+      ],
+      "summary": {
+        "n": 0,
+        "fatal": "no successful runs"
+      }
+    },
+    "auto_nopredict": {
+      "flags": [
+        "--sandwich-auto",
+        "--no-sandwich-predict"
+      ],
+      "runs": [
+        {
+          "config": "auto_nopredict",
+          "rep": 1,
+          "ok": false,
+          "rc": -6,
+          "wall_s": 44.542,
+          "peak_vram_mib": 4536,
+          "vmhwm_mib": 18675,
+          "error": "/home/sandeep/dev/sandwich/sandwich-engine/ggml/src/ggml-cuda/ggml-cuda.cu:114: CUDA error\n0.14.231.683 E CUDA error: misaligned address\n0.14.231.685 E   current device: 0, in function ggml_cuda_kernel_launch at /home/sandeep/dev/sandwich/sandwich-engine/ggml/src/ggml-cuda/template-instances/../common.cuh:1731\n0.14.231.685 E   cudaGetLastError()\n",
+          "error_class": "CUDA error"
+        }
+      ],
+      "summary": {
+        "n": 0,
+        "fatal": "no successful runs"
+      }
+    }
+  }
+}

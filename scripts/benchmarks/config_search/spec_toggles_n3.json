@@ -1,0 +1,246 @@
+{
+  "reps": 3,
+  "cooldown": 4,
+  "interleave": true,
+  "configs": [
+    {
+      "name": "WIN",
+      "flags": [
+        "-ctk",
+        "turbo4",
+        "-ctv",
+        "turbo4",
+        "--turbo-kvran",
+        "-fa",
+        "-md",
+        "/home/sandeep/ai-models/drafters/Qwen3.6-35B-A3B-DFlash2-GGUF/Qwen3.6-35B-A3B-DFlash2-Q4_K_M.gguf",
+        "-ngld",
+        "99",
+        "--io-uring",
+        "--moe-2q",
+        "--moe-cache-slots",
+        "16",
+        "--moe-warm-ram-mb",
+        "8000"
+      ]
+    },
+    {
+      "name": "t_native_mtp",
+      "flags": [
+        "-ctk",
+        "turbo4",
+        "-ctv",
+        "turbo4",
+        "--turbo-kvran",
+        "-fa",
+        "-md",
+        "/home/sandeep/ai-models/drafters/Qwen3.6-35B-A3B-DFlash2-GGUF/Qwen3.6-35B-A3B-DFlash2-Q4_K_M.gguf",
+        "-ngld",
+        "99",
+        "--io-uring",
+        "--moe-2q",
+        "--moe-cache-slots",
+        "16",
+        "--moe-warm-ram-mb",
+        "8000",
+        "--native-mtp"
+      ]
+    },
+    {
+      "name": "t_sched_async_cpu",
+      "flags": [
+        "-ctk",
+        "turbo4",
+        "-ctv",
+        "turbo4",
+        "--turbo-kvran",
+        "-fa",
+        "-md",
+        "/home/sandeep/ai-models/drafters/Qwen3.6-35B-A3B-DFlash2-GGUF/Qwen3.6-35B-A3B-DFlash2-Q4_K_M.gguf",
+        "-ngld",
+        "99",
+        "--io-uring",
+        "--moe-2q",
+        "--moe-cache-slots",
+        "16",
+        "--moe-warm-ram-mb",
+        "8000",
+        "--sched-async-cpu"
+      ]
+    },
+    {
+      "name": "t_unrotated_kv",
+      "flags": [
+        "-ctk",
+        "turbo4",
+        "-ctv",
+        "turbo4",
+        "--turbo-kvran",
+        "-fa",
+        "-md",
+        "/home/sandeep/ai-models/drafters/Qwen3.6-35B-A3B-DFlash2-GGUF/Qwen3.6-35B-A3B-DFlash2-Q4_K_M.gguf",
+        "-ngld",
+        "99",
+        "--io-uring",
+        "--moe-2q",
+        "--moe-cache-slots",
+        "16",
+        "--moe-warm-ram-mb",
+        "8000",
+        "--unrotated-kv"
+      ]
+    },
+    {
+      "name": "t_asym_prefetch",
+      "flags": [
+        "-ctk",
+        "turbo4",
+        "-ctv",
+        "turbo4",
+        "--turbo-kvran",
+        "-fa",
+        "-md",
+        "/home/sandeep/ai-models/drafters/Qwen3.6-35B-A3B-DFlash2-GGUF/Qwen3.6-35B-A3B-DFlash2-Q4_K_M.gguf",
+        "-ngld",
+        "99",
+        "--io-uring",
+        "--moe-2q",
+        "--moe-cache-slots",
+        "16",
+        "--moe-warm-ram-mb",
+        "8000",
+        "--asym-prefetch"
+      ]
+    },
+    {
+      "name": "t_h2o",
+      "flags": [
+        "-ctk",
+        "turbo4",
+        "-ctv",
+        "turbo4",
+        "--turbo-kvran",
+        "-fa",
+        "-md",
+        "/home/sandeep/ai-models/drafters/Qwen3.6-35B-A3B-DFlash2-GGUF/Qwen3.6-35B-A3B-DFlash2-Q4_K_M.gguf",
+        "-ngld",
+        "99",
+        "--io-uring",
+        "--moe-2q",
+        "--moe-cache-slots",
+        "16",
+        "--moe-warm-ram-mb",
+        "8000",
+        "--h2o"
+      ]
+    },
+    {
+      "name": "t_sink_tokens4",
+      "flags": [
+        "-ctk",
+        "turbo4",
+        "-ctv",
+        "turbo4",
+        "--turbo-kvran",
+        "-fa",
+        "-md",
+        "/home/sandeep/ai-models/drafters/Qwen3.6-35B-A3B-DFlash2-GGUF/Qwen3.6-35B-A3B-DFlash2-Q4_K_M.gguf",
+        "-ngld",
+        "99",
+        "--io-uring",
+        "--moe-2q",
+        "--moe-cache-slots",
+        "16",
+        "--moe-warm-ram-mb",
+        "8000",
+        "--sink-tokens",
+        "4"
+      ]
+    },
+    {
+      "name": "t_moe_exchange_rot",
+      "flags": [
+        "-ctk",
+        "turbo4",
+        "-ctv",
+        "turbo4",
+        "--turbo-kvran",
+        "-fa",
+        "-md",
+        "/home/sandeep/ai-models/drafters/Qwen3.6-35B-A3B-DFlash2-GGUF/Qwen3.6-35B-A3B-DFlash2-Q4_K_M.gguf",
+        "-ngld",
+        "99",
+        "--io-uring",
+        "--moe-2q",
+        "--moe-cache-slots",
+        "16",
+        "--moe-warm-ram-mb",
+        "8000",
+        "--moe-exchange-rot"
+      ]
+    },
+    {
+      "name": "t_warm0",
+      "flags": [
+        "-ctk",
+        "turbo4",
+        "-ctv",
+        "turbo4",
+        "--turbo-kvran",
+        "-fa",
+        "-md",
+        "/home/sandeep/ai-models/drafters/Qwen3.6-35B-A3B-DFlash2-GGUF/Qwen3.6-35B-A3B-DFlash2-Q4_K_M.gguf",
+        "-ngld",
+        "99",
+        "--io-uring",
+        "--moe-2q",
+        "--moe-cache-slots",
+        "16",
+        "--moe-warm-ram-mb",
+        "0"
+      ]
+    },
+    {
+      "name": "t_kv_f16",
+      "flags": [
+        "-ctk",
+        "f16",
+        "-ctv",
+        "f16",
+        "--turbo-kvran",
+        "-fa",
+        "-md",
+        "/home/sandeep/ai-models/drafters/Qwen3.6-35B-A3B-DFlash2-GGUF/Qwen3.6-35B-A3B-DFlash2-Q4_K_M.gguf",
+        "-ngld",
+        "99",
+        "--io-uring",
+        "--moe-2q",
+        "--moe-cache-slots",
+        "16",
+        "--moe-warm-ram-mb",
+        "8000"
+      ]
+    },
+    {
+      "name": "t_kv_q8_0",
+      "flags": [
+        "-ctk",
+        "q8_0",
+        "-ctv",
+        "q8_0",
+        "--turbo-kvran",
+        "-fa",
+        "-md",
+        "/home/sandeep/ai-models/drafters/Qwen3.6-35B-A3B-DFlash2-GGUF/Qwen3.6-35B-A3B-DFlash2-Q4_K_M.gguf",
+        "-ngld",
+        "99",
+        "--io-uring",
+        "--moe-2q",
+        "--moe-cache-slots",
+        "16",
+        "--moe-warm-ram-mb",
+        "8000"
+      ]
+    }
+  ]
+}

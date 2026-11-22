@@ -1,0 +1,34 @@
+{
+  "reps": 1,
+  "cooldown": 2,
+  "interleave": false,
+  "configs": [
+    {
+      "name": "auto_turbo4",
+      "flags": [
+        "--sandwich-auto",
+        "-ctk",
+        "turbo4",
+        "-ctv",
+        "turbo4"
+      ]
+    },
+    {
+      "name": "auto_f16kv",
+      "flags": [
+        "--sandwich-auto",
+        "-ctk",
+        "f16",
+        "-ctv",
+        "f16"
+      ]
+    },
+    {
+      "name": "auto_nopredict",
+      "flags": [
+        "--sandwich-auto",
+        "--no-sandwich-predict"
+      ]
+    }
+  ]
+}

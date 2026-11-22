@@ -1,0 +1,280 @@
+{
+  "reps": 3,
+  "cooldown": 4,
+  "interleave": true,
+  "configs": [
+    {
+      "name": "s8_w8000",
+      "flags": [
+        "-ctk",
+        "turbo4",
+        "-ctv",
+        "turbo4",
+        "--turbo-kvran",
+        "-fa",
+        "-md",
+        "/home/sandeep/ai-models/drafters/Qwen3.6-35B-A3B-DFlash2-GGUF/Qwen3.6-35B-A3B-DFlash2-Q4_K_M.gguf",
+        "-ngld",
+        "0",
+        "--io-uring",
+        "--moe-2q",
+        "--moe-cache-slots",
+        "8",
+        "--moe-warm-ram-mb",
+        "8000"
+      ]
+    },
+    {
+      "name": "s8_w10000",
+      "flags": [
+        "-ctk",
+        "turbo4",
+        "-ctv",
+        "turbo4",
+        "--turbo-kvran",
+        "-fa",
+        "-md",
+        "/home/sandeep/ai-models/drafters/Qwen3.6-35B-A3B-DFlash2-GGUF/Qwen3.6-35B-A3B-DFlash2-Q4_K_M.gguf",
+        "-ngld",
+        "0",
+        "--io-uring",
+        "--moe-2q",
+        "--moe-cache-slots",
+        "8",
+        "--moe-warm-ram-mb",
+        "10000"
+      ]
+    },
+    {
+      "name": "s8_w12500",
+      "flags": [
+        "-ctk",
+        "turbo4",
+        "-ctv",
+        "turbo4",
+        "--turbo-kvran",
+        "-fa",
+        "-md",
+        "/home/sandeep/ai-models/drafters/Qwen3.6-35B-A3B-DFlash2-GGUF/Qwen3.6-35B-A3B-DFlash2-Q4_K_M.gguf",
+        "-ngld",
+        "0",
+        "--io-uring",
+        "--moe-2q",
+        "--moe-cache-slots",
+        "8",
+        "--moe-warm-ram-mb",
+        "12500"
+      ]
+    },
+    {
+      "name": "s16_w8000",
+      "flags": [
+        "-ctk",
+        "turbo4",
+        "-ctv",
+        "turbo4",
+        "--turbo-kvran",
+        "-fa",
+        "-md",
+        "/home/sandeep/ai-models/drafters/Qwen3.6-35B-A3B-DFlash2-GGUF/Qwen3.6-35B-A3B-DFlash2-Q4_K_M.gguf",
+        "-ngld",
+        "0",
+        "--io-uring",
+        "--moe-2q",
+        "--moe-cache-slots",
+        "16",
+        "--moe-warm-ram-mb",
+        "8000"
+      ]
+    },
+    {
+      "name": "s16_w10000",
+      "flags": [
+        "-ctk",
+        "turbo4",
+        "-ctv",
+        "turbo4",
+        "--turbo-kvran",
+        "-fa",
+        "-md",
+        "/home/sandeep/ai-models/drafters/Qwen3.6-35B-A3B-DFlash2-GGUF/Qwen3.6-35B-A3B-DFlash2-Q4_K_M.gguf",
+        "-ngld",
+        "0",
+        "--io-uring",
+        "--moe-2q",
+        "--moe-cache-slots",
+        "16",
+        "--moe-warm-ram-mb",
+        "10000"
+      ]
+    },
+    {
+      "name": "s16_w12500",
+      "flags": [
+        "-ctk",
+        "turbo4",
+        "-ctv",
+        "turbo4",
+        "--turbo-kvran",
+        "-fa",
+        "-md",
+        "/home/sandeep/ai-models/drafters/Qwen3.6-35B-A3B-DFlash2-GGUF/Qwen3.6-35B-A3B-DFlash2-Q4_K_M.gguf",
+        "-ngld",
+        "0",
+        "--io-uring",
+        "--moe-2q",
+        "--moe-cache-slots",
+        "16",
+        "--moe-warm-ram-mb",
+        "12500"
+      ]
+    },
+    {
+      "name": "s24_w8000",
+      "flags": [
+        "-ctk",
+        "turbo4",
+        "-ctv",
+        "turbo4",
+        "--turbo-kvran",
+        "-fa",
+        "-md",
+        "/home/sandeep/ai-models/drafters/Qwen3.6-35B-A3B-DFlash2-GGUF/Qwen3.6-35B-A3B-DFlash2-Q4_K_M.gguf",
+        "-ngld",
+        "0",
+        "--io-uring",
+        "--moe-2q",
+        "--moe-cache-slots",
+        "24",
+        "--moe-warm-ram-mb",
+        "8000"
+      ]
+    },
+    {
+      "name": "s24_w10000",
+      "flags": [
+        "-ctk",
+        "turbo4",
+        "-ctv",
+        "turbo4",
+        "--turbo-kvran",
+        "-fa",
+        "-md",
+        "/home/sandeep/ai-models/drafters/Qwen3.6-35B-A3B-DFlash2-GGUF/Qwen3.6-35B-A3B-DFlash2-Q4_K_M.gguf",
+        "-ngld",
+        "0",
+        "--io-uring",
+        "--moe-2q",
+        "--moe-cache-slots",
+        "24",
+        "--moe-warm-ram-mb",
+        "10000"
+      ]
+    },
+    {
+      "name": "s24_w12500",
+      "flags": [
+        "-ctk",
+        "turbo4",
+        "-ctv",
+        "turbo4",
+        "--turbo-kvran",
+        "-fa",
+        "-md",
+        "/home/sandeep/ai-models/drafters/Qwen3.6-35B-A3B-DFlash2-GGUF/Qwen3.6-35B-A3B-DFlash2-Q4_K_M.gguf",
+        "-ngld",
+        "0",
+        "--io-uring",
+        "--moe-2q",
+        "--moe-cache-slots",
+        "24",
+        "--moe-warm-ram-mb",
+        "12500"
+      ]
+    },
+    {
+      "name": "s32_w8000",
+      "flags": [
+        "-ctk",
+        "turbo4",
+        "-ctv",
+        "turbo4",
+        "--turbo-kvran",
+        "-fa",
+        "-md",
+        "/home/sandeep/ai-models/drafters/Qwen3.6-35B-A3B-DFlash2-GGUF/Qwen3.6-35B-A3B-DFlash2-Q4_K_M.gguf",
+        "-ngld",
+        "0",
+        "--io-uring",
+        "--moe-2q",
+        "--moe-cache-slots",
+        "32",
+        "--moe-warm-ram-mb",
+        "8000"
+      ]
+    },
+    {
+      "name": "s32_w10000",
+      "flags": [
+        "-ctk",
+        "turbo4",
+        "-ctv",
+        "turbo4",
+        "--turbo-kvran",
+        "-fa",
+        "-md",
+        "/home/sandeep/ai-models/drafters/Qwen3.6-35B-A3B-DFlash2-GGUF/Qwen3.6-35B-A3B-DFlash2-Q4_K_M.gguf",
+        "-ngld",
+        "0",
+        "--io-uring",
+        "--moe-2q",
+        "--moe-cache-slots",
+        "32",
+        "--moe-warm-ram-mb",
+        "10000"
+      ]
+    },
+    {
+      "name": "s32_w12500",
+      "flags": [
+        "-ctk",
+        "turbo4",
+        "-ctv",
+        "turbo4",
+        "--turbo-kvran",
+        "-fa",
+        "-md",
+        "/home/sandeep/ai-models/drafters/Qwen3.6-35B-A3B-DFlash2-GGUF/Qwen3.6-35B-A3B-DFlash2-Q4_K_M.gguf",
+        "-ngld",
+        "0",
+        "--io-uring",
+        "--moe-2q",
+        "--moe-cache-slots",
+        "32",
+        "--moe-warm-ram-mb",
+        "12500"
+      ]
+    },
+    {
+      "name": "s8_w8000_ngld99",
+      "flags": [
+        "-ctk",
+        "turbo4",
+        "-ctv",
+        "turbo4",
+        "--turbo-kvran",
+        "-fa",
+        "-md",
+        "/home/sandeep/ai-models/drafters/Qwen3.6-35B-A3B-DFlash2-GGUF/Qwen3.6-35B-A3B-DFlash2-Q4_K_M.gguf",
+        "-ngld",
+        "99",
+        "--io-uring",
+        "--moe-2q",
+        "--moe-cache-slots",
+        "8",
+        "--moe-warm-ram-mb",
+        "8000"
+      ]
+    }
+  ]
+}

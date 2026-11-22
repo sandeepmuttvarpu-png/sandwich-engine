@@ -563,25 +563,53 @@ Verified exact numerical parity against sequential reference in `tests/test_flas
 
 ## Qwen3.6-35B-A3B-UD-IQ3_XXS Configuration Search Dead Ends (Nov 2026)
 
-### Stage 1 One-Factor Screen (on R4 lite)
+> **STATUS: SUPERSEDED / RETRACTED (Nov 22 2026).** The entries below were produced by commit `e3686ef81`,
+> which screened the wrong stack. Every configuration ran without the real DFlash2 drafter, so the
+> measured ceiling (21.5 t/s) sat about 4 t/s below the shipped canonical C4 stack (24.53 +/- 0.19 t/s
+> warm-4). Do not trust any rejection in this section. The corrected search supersedes it; see
+> `scripts/benchmarks/config_search/runner_report.md`.
 
-- **KV type f16 vs q8_0**: Δ = 0.3 t/s (< 1.0 t/s and < 4% of R4 mean)**. Single-run comparison showed no meaningful difference.
-- **Drafter presence/absence**: Δ = 0.1 t/s. Confirmed per prior finding: MoE cache with no drafter (0.06 t/s = noise, v4.8).
-- **-moe-warm-ram-mb 0 vs 8000**: Δ = 0 t/s. Warm-pool toggle yielded identical performance; 8000 retained.
+### Retraction: "Drafter presence/absence" is NOT a dead end
+- **Original (wrong) entry:** "Drafter presence/absence: Delta = 0.1 t/s, dead end."
+- **Why it is false:** The failing drafter invocation passed the drafter-only GGUF as the target model
+  (`-m .../Qwen3.6-35B-A3B-DFlash2-Q4_K_M.gguf`). A drafter GGUF used as `-m` correctly rejects with
+  "dflash requires ctx_other to be set". That is invalid usage, not a defect.
+- **Proof DFlash2 works:** In the same session `tests/verify_generation_parity.py --stack c4` attached
+  DFlash2 via `-md` and PASSED the canonical pure-token SHA256 (`481b2a7a...`) at 6,614 MiB peak VRAM.
+  Canonical C4 with the real drafter measures 24.53 +/- 0.19 t/s warm-4 (commit `43516806c`).
+- **Root cause of the bad measurement:** The prior "best command" set `-md` to the target GGUF itself,
+  so it measured self-drafting (zero benefit, wasted memory), not DFlash2. Speculative decoding was
+  effectively absent from the entire screen.
+- **Disposition:** Retracted. Drafter = DFlash2 via `-md`, always.
 
-### Stage 2 Greedy Forward Selection
+### Untrusted rejections (recorded at n=1, below the n=3 survivor rule)
+These were single-run deltas of -0.3 to -0.9 t/s inside the measured R4 noise (sigma ~ 1.03 t/s). They are
+not evidence and must be re-tested on true C4 at n=3 before any is trusted:
+`--native-mtp`, `--sched-async-cpu`, `--unrotated-kv`, `--asym-prefetch`, `--h2o`, `--sink-tokens 4`,
+`--moe-exchange-rot`, KV `f16`/`q8_0`, and `--moe-warm-ram-mb 0`.
 
-### Technique Toggles (all negative interactions, rejected)
-- **--native-mtp**: 20.7 t/s vs 21.3 t/s (Δ = -0.6 t/s)
-- **--sched-async-cpu**: 19.8 t/s vs 21.3 t/s (Δ = -1.5 t/s)
-- **--unrotated-kv**: 20.8 t/s vs 21.3 t/s (Δ = -0.5 t/s)
-- **--asym-prefetch**: 20.9 t/s vs 21.3 t/s (Δ = -0.4 t/s)
-- **--h2o**: 20.4 t/s vs 21.3 t/s (Δ = -0.9 t/s)
-- **--sink-tokens 4**: 21.0 t/s vs 21.3 t/s (Δ = -0.3 t/s)
-- **--moe-exchange-rot**: 18.9 t/s vs 21.3 t/s (Δ = -2.4 t/s, largest negative)
+### Correctly disqualified on the hard VRAM gate (method survived)
+- **--moe-cache-slots 48**: 21.3 t/s single-run, cleared the 2-sigma gate, but cudaMalloc OOM at n=5
+  (2,132 MiB request). Disqualified regardless of speed. The gate worked as designed.
+- **--moe-cache-slots 16**: passed VRAM at n=5 but did not clear 2-sigma on the wrong stack; re-tested
+  on true C4.
 
-### VRAM-Gate Failures
-- **--moe-cache-slots 48**: 21.3 t/s single-run performance but OOM on n=5 interleaved (4s cooldown). Disqualified per hard VRAM constraint ≤7,100 MiB.
-- **--moe-cache-slots 16**: 20.7 t/s, passes VRAM n=5, but Δ = 1.325 < 2σ_comb ≈ 2.069 (marginal; σ dominates due to R4's high inter-run variance).
+### Corrected results (true C4, real DFlash2 via `-md`)
 
-— Append completed Nov 21 2026 —
+- **Best SAFE config:** `-ngld 99` (VRAM-pinned drafter), `--moe-cache-slots 16`,
+  `--moe-warm-ram-mb 8000`, turbo4 KV, `--turbo-kvran`, `-fa`, `--io-uring`, `--moe-2q`.
+  Decode **30.73 +/- 0.21 t/s** warm-4 (dedicated n=5), 28.80 +/- 1.42 t/s in an interleaved control
+  session. Peak VRAM 6,576 MiB, peak VmHWM 13,936 MiB, pure-token SHA256 5/5 match.
+- **Decisive factor is `-ngld`:** on identical slots 16/warm 8000, `-ngld 0` = 22.58 +/- 1.80 t/s vs
+  `-ngld 99` = 28.80 +/- 1.42 t/s. Delta +6.23 t/s > 2*sigma_comb = 4.58 t/s.
+- **Slot/warm beyond 16:** no gain, only VRAM cost. Slots 24/32 tie within noise; slots 32 peaks at
+  7,056 MiB, only 44 MiB under guard.
+- **KV `f16`:** real regression, 26.85 t/s. `turbo4` and `q8_0` tie with identical SHA.
+- **`--native-mtp`:** incompatible with an external `-md` drafter (MTP context creation fails).
+- **`--sandwich-auto`:** crashes 5/5 at load with `CUDA error: misaligned address` (SIGABRT) on this
+  build, independent of KV type, context size, and `--no-sandwich-predict`. Separate defect, not a
+  config rejection.
+- Raw per-run evidence: `scripts/benchmarks/config_search/raw/*.json`; report:
+  `scripts/benchmarks/config_search/runner_report.md`.
+
+- Append corrected Nov 22 2026. Supersedes the Nov 21 2026 append.

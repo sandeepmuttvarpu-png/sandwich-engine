@@ -1,0 +1,65 @@
+{
+  "generated": "2026-11-22T12:21:44",
+  "gpu": "RTX 5050 Mobile 8151 MiB, driver 620.73.04",
+  "protocol": {
+    "guard_vram_mib": 7100,
+    "guard_vmhwm_mib": 16552,
+    "cooldown_s": 0.0,
+    "warm_discard": 1
+  },
+  "configs": {
+    "c4_s8_sanity": {
+      "flags": [
+        "-ctk",
+        "turbo4",
+        "-ctv",
+        "turbo4",
+        "--turbo-kvran",
+        "-fa",
+        "-md",
+        "/home/sandeep/ai-models/drafters/Qwen3.6-35B-A3B-DFlash2-GGUF/Qwen3.6-35B-A3B-DFlash2-Q4_K_M.gguf",
+        "-ngld",
+        "0",
+        "--moe-cache-slots",
+        "8",
+        "--moe-warm-ram-mb",
+        "8000",
+        "--io-uring",
+        "--moe-2q"
+      ],
+      "runs": [
+        {
+          "config": "c4_s8_sanity",
+          "rep": 1,
+          "ok": true,
+          "rc": 0,
+          "wall_s": 19.531,
+          "peak_vram_mib": 5894,
+          "vmhwm_mib": 13935,
+          "prefill_ts": 429.5,
+          "decode_ts": 24.3,
+          "prefill_s": 8.8,
+          "decode_s": 2.59,
+          "pure_sha": "481b2a7aea43731e77979bca6631cfac9d32bd42d023d63c91552b245931a6aa",
+          "sha_match": true
+        }
+      ],
+      "summary": {
+        "n_total": 1,
+        "n_ok": 1,
+        "n_warm": 1,
+        "decode_mean": 24.3,
+        "decode_sd": 0.0,
+        "decode_runs": [
+          24.3
+        ],
+        "peak_vram_mib": 5894,
+        "vmhwm_mib": 13935,
+        "sha_all_match": true,
+        "vram_gate": true,
+        "vmhwm_gate": true,
+        "failed_runs": 0
+      }
+    }
+  }
+}

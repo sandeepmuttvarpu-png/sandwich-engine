@@ -1,0 +1,19 @@
+{
+  "reps": 5,
+  "cooldown": 4,
+  "interleave": true,
+  "configs": [
+    {
+      "name": "c4_s8_w8000",
+      "flags": ["-ctk","turbo4","-ctv","turbo4","--turbo-kvran","-fa",
+        "-md","/home/sandeep/ai-models/drafters/Qwen3.6-35B-A3B-DFlash2-GGUF/Qwen3.6-35B-A3B-DFlash2-Q4_K_M.gguf",
+        "-ngld","0","--moe-cache-slots","8","--moe-warm-ram-mb","8000","--io-uring","--moe-2q"]
+    },
+    {
+      "name": "c4_s32_w12500",
+      "flags": ["-ctk","turbo4","-ctv","turbo4","--turbo-kvran","-fa",
+        "-md","/home/sandeep/ai-models/drafters/Qwen3.6-35B-A3B-DFlash2-GGUF/Qwen3.6-35B-A3B-DFlash2-Q4_K_M.gguf",
+        "-ngld","0","--moe-cache-slots","32","--moe-warm-ram-mb","12500","--io-uring","--moe-2q"]
+    }
+  ]
+}

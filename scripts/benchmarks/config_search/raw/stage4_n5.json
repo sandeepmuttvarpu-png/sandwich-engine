@@ -1,0 +1,194 @@
+{
+  "generated": "2026-11-22T12:59:23",
+  "gpu": "RTX 5050 Mobile 8151 MiB, driver 620.73.04",
+  "protocol": {
+    "guard_vram_mib": 7100,
+    "guard_vmhwm_mib": 16552,
+    "cooldown_s": 4,
+    "warm_discard": 1
+  },
+  "configs": {
+    "BEST": {
+      "flags": [
+        "-ctk",
+        "turbo4",
+        "-ctv",
+        "turbo4",
+        "--turbo-kvran",
+        "-fa",
+        "-md",
+        "/home/sandeep/ai-models/drafters/Qwen3.6-35B-A3B-DFlash2-GGUF/Qwen3.6-35B-A3B-DFlash2-Q4_K_M.gguf",
+        "-ngld",
+        "99",
+        "--io-uring",
+        "--moe-2q",
+        "--moe-cache-slots",
+        "16",
+        "--moe-warm-ram-mb",
+        "8000"
+      ],
+      "runs": [
+        {
+          "config": "BEST",
+          "rep": 1,
+          "ok": true,
+          "rc": 0,
+          "wall_s": 12.104,
+          "peak_vram_mib": 6576,
+          "vmhwm_mib": 13936,
+          "prefill_ts": 468.6,
+          "decode_ts": 30.5,
+          "prefill_s": 8.07,
+          "decode_s": 2.06,
+          "pure_sha": "481b2a7aea43731e77979bca6631cfac9d32bd42d023d63c91552b245931a6aa",
+          "sha_match": true
+        },
+        {
+          "config": "BEST",
+          "rep": 2,
+          "ok": true,
+          "rc": 0,
+          "wall_s": 17.842,
+          "peak_vram_mib": 6576,
+          "vmhwm_mib": 13935,
+          "prefill_ts": 459.6,
+          "decode_ts": 30.5,
+          "prefill_s": 8.22,
+          "decode_s": 2.07,
+          "pure_sha": "481b2a7aea43731e77979bca6631cfac9d32bd42d023d63c91552b245931a6aa",
+          "sha_match": true
+        },
+        {
+          "config": "BEST",
+          "rep": 3,
+          "ok": true,
+          "rc": 0,
+          "wall_s": 17.273,
+          "peak_vram_mib": 6576,
+          "vmhwm_mib": 13934,
+          "prefill_ts": 468.4,
+          "decode_ts": 30.6,
+          "prefill_s": 8.07,
+          "decode_s": 2.06,
+          "pure_sha": "481b2a7aea43731e77979bca6631cfac9d32bd42d023d63c91552b245931a6aa",
+          "sha_match": true
+        },
+        {
+          "config": "BEST",
+          "rep": 4,
+          "ok": true,
+          "rc": 0,
+          "wall_s": 15.86,
+          "peak_vram_mib": 6576,
+          "vmhwm_mib": 13935,
+          "prefill_ts": 465.9,
+          "decode_ts": 30.9,
+          "prefill_s": 8.11,
+          "decode_s": 2.04,
+          "pure_sha": "481b2a7aea43731e77979bca6631cfac9d32bd42d023d63c91552b245931a6aa",
+          "sha_match": true
+        },
+        {
+          "config": "BEST",
+          "rep": 5,
+          "ok": true,
+          "rc": 0,
+          "wall_s": 16.635,
+          "peak_vram_mib": 6576,
+          "vmhwm_mib": 13934,
+          "prefill_ts": 461.7,
+          "decode_ts": 30.9,
+          "prefill_s": 8.19,
+          "decode_s": 2.04,
+          "pure_sha": "481b2a7aea43731e77979bca6631cfac9d32bd42d023d63c91552b245931a6aa",
+          "sha_match": true
+        }
+      ],
+      "summary": {
+        "n_total": 5,
+        "n_ok": 5,
+        "n_warm": 4,
+        "decode_mean": 30.725,
+        "decode_sd": 0.206,
+        "decode_runs": [
+          30.5,
+          30.6,
+          30.9,
+          30.9
+        ],
+        "peak_vram_mib": 6576,
+        "vmhwm_mib": 13936,
+        "sha_all_match": true,
+        "vram_gate": true,
+        "vmhwm_gate": true,
+        "failed_runs": 0
+      }
+    },
+    "sandwich_auto": {
+      "flags": [
+        "--sandwich-auto"
+      ],
+      "runs": [
+        {
+          "config": "sandwich_auto",
+          "rep": 1,
+          "ok": false,
+          "rc": -6,
+          "wall_s": 52.315,
+          "peak_vram_mib": 4536,
+          "vmhwm_mib": 17897,
+          "error": "/home/sandeep/dev/sandwich/sandwich-engine/ggml/src/ggml-cuda/ggml-cuda.cu:114: CUDA error\n0.20.953.693 E CUDA error: misaligned address\n0.20.953.696 E   current device: 0, in function ggml_cuda_kernel_launch at /home/sandeep/dev/sandwich/sandwich-engine/ggml/src/ggml-cuda/template-instances/../common.cuh:1731\n0.20.953.696 E   cudaGetLastError()\n",
+          "error_class": "CUDA error"
+        },
+        {
+          "config": "sandwich_auto",
+          "rep": 2,
+          "ok": false,
+          "rc": -6,
+          "wall_s": 40.462,
+          "peak_vram_mib": 4536,
+          "vmhwm_mib": 18029,
+          "error": "/home/sandeep/dev/sandwich/sandwich-engine/ggml/src/ggml-cuda/ggml-cuda.cu:114: CUDA error\n0.10.698.466 E CUDA error: misaligned address\n0.10.698.469 E   current device: 0, in function ggml_cuda_kernel_launch at /home/sandeep/dev/sandwich/sandwich-engine/ggml/src/ggml-cuda/template-instances/../common.cuh:1731\n0.10.698.469 E   cudaGetLastError()\n",
+          "error_class": "CUDA error"
+        },
+        {
+          "config": "sandwich_auto",
+          "rep": 3,
+          "ok": false,
+          "rc": -6,
+          "wall_s": 49.001,
+          "peak_vram_mib": 4536,
+          "vmhwm_mib": 18723,
+          "error": "/home/sandeep/dev/sandwich/sandwich-engine/ggml/src/ggml-cuda/ggml-cuda.cu:114: CUDA error\n0.16.277.620 E CUDA error: misaligned address\n0.16.277.623 E   current device: 0, in function ggml_cuda_kernel_launch at /home/sandeep/dev/sandwich/sandwich-engine/ggml/src/ggml-cuda/template-instances/../common.cuh:1731\n0.16.277.623 E   cudaGetLastError()\n",
+          "error_class": "CUDA error"
+        },
+        {
+          "config": "sandwich_auto",
+          "rep": 4,
+          "ok": false,
+          "rc": -6,
+          "wall_s": 49.063,
+          "peak_vram_mib": 4536,
+          "vmhwm_mib": 17746,
+          "error": "/home/sandeep/dev/sandwich/sandwich-engine/ggml/src/ggml-cuda/ggml-cuda.cu:114: CUDA error\n0.19.163.153 E CUDA error: misaligned address\n0.19.163.156 E   current device: 0, in function ggml_cuda_kernel_launch at /home/sandeep/dev/sandwich/sandwich-engine/ggml/src/ggml-cuda/template-instances/../common.cuh:1731\n0.19.163.156 E   cudaGetLastError()\n",
+          "error_class": "CUDA error"
+        },
+        {
+          "config": "sandwich_auto",
+          "rep": 5,
+          "ok": false,
+          "rc": -6,
+          "wall_s": 54.048,
+          "peak_vram_mib": 4536,
+          "vmhwm_mib": 18245,
+          "error": "0.18.050.713 E CUDA error: misaligned address\n0.18.050.718 E   current device: 0, in function ggml_cuda_kernel_launch at /home/sandeep/dev/sandwich/sandwich-engine/ggml/src/ggml-cuda/template-instances/../common.cuh:1731\n0.18.050.718 /home/sandeep/dev/sandwich/sandwich-engine/ggml/src/ggml-cuda/ggml-cuda.cu:114: CUDA error\nE   cudaGetLastError()\n",
+          "error_class": "CUDA error"
+        }
+      ],
+      "summary": {
+        "n": 0,
+        "fatal": "no successful runs"
+      }
+    }
+  }
+}
