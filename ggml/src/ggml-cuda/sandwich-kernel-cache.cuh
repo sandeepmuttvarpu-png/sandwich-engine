@@ -201,11 +201,45 @@ public:
         return cached_enabled();
     }
 
+    // In-memory trial overrides during autotuning benchmark runs:
+    void set_override(family fam, uint64_t fp, int variant) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        trial_overrides_[Key{fam, fp}] = variant;
+    }
+
+    void clear_overrides() {
+        std::lock_guard<std::mutex> lock(mutex_);
+        trial_overrides_.clear();
+    }
+
+    void remove(family fam, uint64_t fp) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        load_locked();
+        auto it = entries_.find(Key{fam, fp});
+        if (it != entries_.end()) {
+            entries_.erase(it);
+            save_locked();
+        }
+    }
+
     bool lookup(family fam, uint64_t fp, entry & out) {
         if (!enabled()) {
             return false;
         }
         std::lock_guard<std::mutex> lock(mutex_);
+        const auto it_ov = trial_overrides_.find(Key{fam, fp});
+        if (it_ov != trial_overrides_.end()) {
+            if (it_ov->second <= 0) {
+                return false;
+            }
+            out.fingerprint = fp;
+            out.variant     = it_ov->second;
+            out.ncols1      = 0;
+            out.ncols2      = 0;
+            out.us_winner   = 0.0;
+            out.us_baseline = 0.0;
+            return true;
+        }
         load_locked();
         const auto it = entries_.find(Key{fam, fp});
         if (it == entries_.end()) {
@@ -345,6 +379,7 @@ private:
     std::mutex mutex_;
     bool loaded_ = false;
     std::map<Key, entry> entries_;
+    std::map<Key, int> trial_overrides_;
 };
 
 } // namespace autotune

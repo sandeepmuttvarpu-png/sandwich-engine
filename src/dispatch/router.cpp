@@ -1,6 +1,9 @@
 #include "router.hpp"
 #include "hardware_profiler.hpp"
 #include "model_scanner.hpp"
+#include "autotune.hpp"
+#include "common.h"
+#include "../../ggml/src/ggml-cuda/sandwich-kernel-cache.cuh"
 
 #include <iostream>
 #include <iomanip>
@@ -48,6 +51,9 @@ void Router::print_help(const char * progname) {
     std::cout << "\033[1mAUTO-DISPATCH & PROFILING COMMANDS:\033[0m\n";
     std::cout << "  --tune, --profile           Run hardware profiling and display JSON diagnostics\n";
     std::cout << "  --scan-models               Force rescan of local GGUF models into cache\n";
+    std::cout << "  --autotune                  Benchmark FlashAttention kernels and cache >2σ winners\n";
+    std::cout << "  --autotune-disable          Disable kernel autotuning cache lookup & storage\n";
+    std::cout << "  --autotune-invalidate       Clear kernel autotuning cache and re-tune\n";
     std::cout << "  -h, --help                  Show this help overview\n\n";
 
     std::cout << "\033[1mCORE INFERENCE FLAGS (Bypass Mode):\033[0m\n";
@@ -93,6 +99,36 @@ int Router::run_standalone_scan(const std::vector<std::string> & paths) {
     }
 
     std::cout << "\n\033[38;2;34;197;94m✔ Model catalog written to " << ModelScanner::get_cache_path() << "\033[0m\n";
+    return 0;
+}
+
+int Router::run_standalone_autotune(int argc, char ** argv) {
+    sandwich::autotune::TuneOptions opts;
+    for (int i = 2; i < argc; ++i) {
+        std::string a = argv[i];
+        if ((a == "-m" || a == "--model") && i + 1 < argc) {
+            opts.model_path = argv[++i];
+        } else if ((a == "-c" || a == "--ctx-size") && i + 1 < argc) {
+            opts.ctx_size = std::atoi(argv[++i]);
+        } else if ((a == "-b" || a == "--batch-size") && i + 1 < argc) {
+            opts.batch_size = std::atoi(argv[++i]);
+        } else if (a == "--autotune-invalidate") {
+            opts.force = true;
+        }
+    }
+    if (opts.model_path.empty()) {
+        const std::string canonical_qwen = "/home/sandeep/ai-models/moe/Qwen3.6-35B-A3B-MTP-GGUF/Qwen3.6-35B-A3B-UD-IQ3_XXS.gguf";
+        std::error_code ec;
+        if (std::filesystem::exists(canonical_qwen, ec)) {
+            opts.model_path = canonical_qwen;
+        } else {
+            ModelCatalog cat = ModelScanner::load_or_scan();
+            if (!cat.models.empty()) {
+                opts.model_path = cat.models.front().file_path;
+            }
+        }
+    }
+    sandwich::autotune::run_autotune(opts);
     return 0;
 }
 
@@ -275,12 +311,31 @@ int Router::auto_calibrate_and_dispatch(int argc, char ** argv) {
 }
 
 int Router::route(int argc, char ** argv) {
+    sandwich_set_autotune_fn(&sandwich::autotune::ensure_autotuned);
+
+    // Process autotuning control flags globally across any subcommand
+    for (int i = 1; i < argc; ++i) {
+        if (std::strcmp(argv[i], "--autotune-disable") == 0) {
+            setenv("SANDWICH_AUTOTUNE_DISABLE", "1", 1);
+            sandwich::autotune::Cache::notify_env_change();
+        } else if (std::strcmp(argv[i], "--autotune-invalidate") == 0) {
+            sandwich::autotune::Cache::instance().clear();
+            setenv("SANDWICH_AUTOTUNE_INVALIDATE", "1", 1);
+            sandwich::autotune::Cache::notify_env_change();
+        }
+    }
+
     // Case 1: Standalone Profiler flag
     if (argc >= 2 && (std::strcmp(argv[1], "--tune") == 0 || std::strcmp(argv[1], "--profile") == 0)) {
         return run_standalone_profiling(true);
     }
 
-    // Case 2: Standalone Model Scanner flag
+    // Case 2: Standalone Autotuner flag
+    if (argc >= 2 && std::strcmp(argv[1], "--autotune") == 0) {
+        return run_standalone_autotune(argc, argv);
+    }
+
+    // Case 3: Standalone Model Scanner flag
     if (argc >= 2 && std::strcmp(argv[1], "--scan-models") == 0) {
         std::vector<std::string> custom_paths;
         for (int i = 2; i < argc; ++i) {

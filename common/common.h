@@ -1108,6 +1108,9 @@ common_gguf_info common_get_gguf_info(const std::string & fname);
 // Project Sandwich: Architecture-aware auto-dispatch
 void sandwich_auto_dispatch(common_params & params);
 
+typedef void (*sandwich_autotune_fn_t)(const std::string & model_path, int ctx_size);
+void sandwich_set_autotune_fn(sandwich_autotune_fn_t fn);
+
 // note: defines the model, context, samplers, ets. lifetimes
 struct common_init_result {
     common_init_result(common_params & params, bool model_only = false);

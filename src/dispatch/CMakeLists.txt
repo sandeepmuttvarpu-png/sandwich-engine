@@ -12,6 +12,7 @@ add_library(${TARGET} STATIC
     flash_decoding_scheduler.cpp
     gpudirect_storage.cpp
     plugin_loader.cpp
+    autotune.cpp
     router.cpp
     ${PROJECT_SOURCE_DIR}/src/tui/sandwich_tui_backend.cpp
 )
@@ -26,6 +27,11 @@ target_include_directories(${TARGET} PUBLIC
     ${PROJECT_SOURCE_DIR}/ggml/include
     ${PROJECT_SOURCE_DIR}/vendor/cpp-httplib
 )
+
+if (GGML_CUDA)
+    target_include_directories(${TARGET} PUBLIC /opt/cuda/include)
+    target_link_libraries(${TARGET} PUBLIC /opt/cuda/lib64/libcudart.so)
+endif()
 
 target_link_libraries(${TARGET} PUBLIC
     nlohmann

@@ -5,6 +5,7 @@
 
 #include "build-info.h"
 #include "common.h"
+#include "../ggml/src/ggml-cuda/sandwich-kernel-cache.cuh"
 
 #include "../src/llama-ext.h"
 
@@ -1238,6 +1239,12 @@ common_gguf_info common_get_gguf_info(const std::string & fname) {
     return info;
 }
 
+static sandwich_autotune_fn_t g_sandwich_autotune_fn = nullptr;
+
+void sandwich_set_autotune_fn(sandwich_autotune_fn_t fn) {
+    g_sandwich_autotune_fn = fn;
+}
+
 static int64_t sandwich_get_kv_i64(const struct gguf_context * ctx, int64_t key_id) {
     if (key_id < 0) return 0;
     const enum gguf_type type = gguf_get_kv_type(ctx, key_id);
@@ -1736,6 +1743,20 @@ void sandwich_auto_dispatch(common_params & params) {
     int64_t kv_turbo4_mb = (int64_t)(kv_bytes_turbo4 / (1024ULL * 1024ULL));
     int64_t kv_turbo3_mb = (int64_t)(kv_bytes_turbo3 / (1024ULL * 1024ULL));
     int64_t kv_turbo2_mb = (int64_t)(kv_bytes_turbo2 / (1024ULL * 1024ULL));
+
+    // Check kernel autotune cache for FlashAttention winners on GPU
+    if (gpu_total_vram_b > 0 && sandwich::autotune::Cache::instance().enabled()) {
+        if (sandwich::autotune::Cache::instance().size() == 0) {
+            LOG_INF("🥪 [Sandwich Auto-Dispatch] Kernel autotune cache empty. Initiating autotuning pass...\n");
+            if (g_sandwich_autotune_fn) {
+                g_sandwich_autotune_fn(params.model.path, ctx_eval);
+            } else {
+                std::string cmd = "./build/bin/sandwich --autotune -m \"" + params.model.path + "\" -c " + std::to_string(ctx_eval);
+                int ret = std::system(cmd.c_str());
+                (void)ret;
+            }
+        }
+    }
 
     int64_t n_ctx_train = 0;
     int64_t ctx_id = gguf_find_key(gguf_ctx.get(), (model_arch + ".context_length").c_str());
