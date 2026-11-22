@@ -110,7 +110,6 @@ def run_one(name, flags, rep):
     cmd = [BIN] + BASE + flags
     env = os.environ.copy()
     env["GGML_CUDA_PDL"] = "0"
-    env["SANDWICH_LOG_FATTN_COUNT"] = "1"
 
     p = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
                          stderr=subprocess.PIPE, text=True, env=env)
