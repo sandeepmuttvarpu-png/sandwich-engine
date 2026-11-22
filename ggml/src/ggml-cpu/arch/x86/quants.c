@@ -3614,6 +3614,11 @@ void ggml_vec_dot_iq3_xxs_q8_K(int n, float * GGML_RESTRICT s, size_t bs, const 
 #endif
 }
 
+#if defined(__GNUC__) || defined(__clang__)
+__attribute__((weak)) bool sandwich_plugin_iq3_s_available(void);
+__attribute__((weak)) void sandwich_plugin_vec_dot_iq3_s_q8_K(int n, float * s, const void * vx, const void * vy);
+#endif
+
 void ggml_vec_dot_iq3_s_q8_K(int n, float * GGML_RESTRICT s, size_t bs, const void * GGML_RESTRICT vx, size_t bx, const void * GGML_RESTRICT vy, size_t by, int nrc) {
     assert(n % QK_K == 0);
     assert(nrc == 1);
@@ -3621,6 +3626,13 @@ void ggml_vec_dot_iq3_s_q8_K(int n, float * GGML_RESTRICT s, size_t bs, const vo
     UNUSED(bx);
     UNUSED(by);
     UNUSED(bs);
+
+#if defined(__GNUC__) || defined(__clang__)
+    if (&sandwich_plugin_iq3_s_available != NULL && sandwich_plugin_iq3_s_available()) {
+        sandwich_plugin_vec_dot_iq3_s_q8_K(n, s, vx, vy);
+        return;
+    }
+#endif
 
     const block_iq3_s * GGML_RESTRICT x = vx;
     const block_q8_K  * GGML_RESTRICT y = vy;

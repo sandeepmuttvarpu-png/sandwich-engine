@@ -12,6 +12,7 @@ add_library(${TARGET} STATIC
     flash_decoding_scheduler.cpp
     gpudirect_storage.cpp
     plugin_loader.cpp
+    plugin_iq3_s.cpp
     autotune.cpp
     router.cpp
     ${PROJECT_SOURCE_DIR}/src/tui/sandwich_tui_backend.cpp
