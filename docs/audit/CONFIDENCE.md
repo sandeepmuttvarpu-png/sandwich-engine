@@ -1,4 +1,6 @@
-# FORENSIC CONFIDENCE & BASELINE TELEMETRY CERTIFICATE (UNSEALED BASELINE v4.9)
+# FORENSIC CONFIDENCE & BASELINE TELEMETRY CERTIFICATE (ACTIVE CANONICAL)
+
+> **ARCHIVAL & SNAPSHOT NOTICE:** `CONFIDENCE_v4.9.md` is preserved as the frozen, certified snapshot for v4.9 audit baseline validation (`validate_ledger.py`). This file (`CONFIDENCE.md`) serves as the single active canonical source of truth for all post-v4.9 configuration sweeps and technique evolution.
 
 **Audit Phase:** Cycle 6 of 6 (Rubric Integrity, Ceiling Truth, Retirement Audit, Final Gate)
 **Canonical Scope:** Exactly 74 Headings (#1–60, #67–80 in `dairy.md`)
