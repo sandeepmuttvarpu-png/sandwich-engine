@@ -540,6 +540,12 @@ static void test_strata_backend() {
     std::string auto_cmd = sandwich::tui::strata_construct_cli_command(auto_cfg);
     SANDWICH_TEST_CHECK(auto_cmd.find("--sandwich-auto") != std::string::npos);
     SANDWICH_TEST_CHECK(auto_cmd.find("-m ") != std::string::npos);
+    // Regression: auto path must reference a drafter via -md, never the target model.
+    auto_cfg.drafter_path = drafters[0];
+    auto_cfg.drafter_gpu_layers = 99;
+    std::string auto_cmd_drafter = sandwich::tui::strata_construct_cli_command(auto_cfg);
+    SANDWICH_TEST_CHECK(auto_cmd_drafter.find("-md \"" + drafters[0] + "\"") != std::string::npos);
+    SANDWICH_TEST_CHECK(auto_cmd_drafter.find("-md \"" + models[0] + "\"") == std::string::npos);
     printf("  Auto-Dispatch Command synthesized: %s\n", auto_cmd.c_str());
 
     // 4. Manual Configuration Command Synthesis

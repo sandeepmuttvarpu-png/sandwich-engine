@@ -1796,7 +1796,12 @@ void sandwich_auto_dispatch(common_params & params) {
 #if defined(_SC_PHYS_PAGES) && defined(_SC_PAGE_SIZE)
         int64_t total_host_ram_mb = ((int64_t)sysconf(_SC_PHYS_PAGES) * (int64_t)sysconf(_SC_PAGE_SIZE)) / (1024 * 1024);
         if (total_host_ram_mb >= 22000 && params.moe_warm_ram_mb <= 14336) {
-            params.moe_warm_ram_mb = 18432; // Squeeze 18 GiB into Tier 2 WARM DDR5 pool on 24GB host (22.2 GB total RSS, zero swap)
+            // Guard: never let the warm pool push host VmHWM past the 16,552 MiB audit ceiling.
+            params.moe_warm_ram_mb = 14336; // Keep Tier 2 WARM pool under the host guard (was 18432, exceeded guard)
+        }
+        if (params.moe_warm_ram_mb > 16552) {
+            LOG_WRN("   -> [Sandwich Guard] moe_warm_ram_mb %d exceeds host guard (16552 MiB); clamping to 16384.\n", params.moe_warm_ram_mb);
+            params.moe_warm_ram_mb = 16384;
         }
 #endif
 
@@ -1829,8 +1834,10 @@ void sandwich_auto_dispatch(common_params & params) {
                         params.moe_cache_size / (1024 * 1024), params.moe_warm_ram_mb);
             } else if (params.moe_cache_slots <= 0 && params.moe_cache_size == 0) {
                 // Auto-configure thecodacus Dual-Path MoE Expert Cache by default
+                size_t _free_vram_mib = total_free_vram / (1024 * 1024);
                 if (expert_count >= 256) {
-                    params.moe_cache_slots = 48; // High-density micro-experts (e.g. Qwen3.6-35B) pushed from 32 to 48 slots (~4.2 GB pack)
+                    // Defensive: 48 slots OOM'd on 8 GB GPUs; cap by available VRAM headroom.
+                    params.moe_cache_slots = (_free_vram_mib > 7000) ? 24 : 16;
                 } else if (expert_count >= 64) {
                     params.moe_cache_slots = 36; // Standard MoE (e.g. GLM-4.7 Flash, Nemotron 30B) pushed from 24 to 36 slots (~3.6 GB pack)
                 } else if (expert_count > 0) {
@@ -1968,7 +1975,13 @@ void sandwich_auto_dispatch(common_params & params) {
             }
             params.speculative.draft.mparams.path = drafter_path;
             if (params.speculative.draft.n_gpu_layers < 0) {
-                params.speculative.draft.n_gpu_layers = 99; // 100% in GPU VRAM
+                // Defensive VRAM pinning: only pin drafter to VRAM when it fits the guard.
+                if (gpu_total_vram_mb >= 6000) {
+                    params.speculative.draft.n_gpu_layers = 99; // 100% in GPU VRAM
+                } else {
+                    params.speculative.draft.n_gpu_layers = 0; // Safe fallback: host (avoids OOM on small GPUs)
+                    LOG_WRN("   -> [Sandwich Guard] insufficient VRAM for drafter pinning; falling back to -ngld 0\n");
+                }
             }
             if (params.speculative.draft.n_max <= 0 || params.speculative.draft.n_max == 3) {
                 params.speculative.draft.n_max = is_mtp ? 1 : 6;
@@ -2160,7 +2173,13 @@ void sandwich_auto_dispatch(common_params & params) {
                 params.speculative.types.push_back(COMMON_SPECULATIVE_TYPE_DRAFT_SIMPLE);
             }
             params.speculative.draft.mparams.path = drafter_path;
-            params.speculative.draft.n_gpu_layers = 99; // 100% in GPU VRAM
+            if (total_vram_proj_mb <= safe_vram_cap_mb) {
+                params.speculative.draft.n_gpu_layers = 99; // 100% in GPU VRAM
+            } else {
+                params.speculative.draft.n_gpu_layers = 0; // Safe fallback: host (VRAM pinning exceeds guard)
+                LOG_WRN("   -> [Sandwich Guard] VRAM pinning would exceed guard (%ld > %ld MB); falling back to -ngld 0\n",
+                        (long)total_vram_proj_mb, (long)safe_vram_cap_mb);
+            }
             params.speculative.draft.n_max        = 5;
             params.speculative.draft.p_min        = 0.75f;
             params.speculative.draft.cache_type_k = is_assistant ? GGML_TYPE_F16 : GGML_TYPE_TURBO4_0;
@@ -2293,10 +2312,11 @@ void sandwich_auto_dispatch(common_params & params) {
         params.flash_attn_native_quants = true;
         LOG_INF("   -> [Technique #33] Quantized-Native CUDA FlashAttention ACTIVE (-fanq, 0 intermediate F16 buffer, sm_120 2x KQ half)\n");
 
+        // Defensive: the fused turbo4 MMA decode path faults (misaligned address) on
+        // head_dim >= 256 / high-GQA configs (Qwen3.6-35B: DKQ=256, ncols=16).
+        // Never auto-enable it here; keep the safe vector kernel unless explicitly requested.
         if (params.cache_type_k == GGML_TYPE_TURBO4_0 || params.cache_type_k == GGML_TYPE_TURBO3_0 || params.cache_type_k == GGML_TYPE_TURBO2_0) {
-            params.turbo_mma = true;
-            setenv("GGML_TURBO_MMA_FUSED", "1", 1);
-            LOG_INF("   -> [Technique #35] Fused TurboQuant MMA Tensor Core FlashAttention ACTIVE (--turbo-mma)\n");
+            LOG_INF("   -> [Technique #35] Fused TurboQuant MMA left DISABLED by dispatch (vector kernel) for load safety\n");
         }
 
         // [Turbo-KVarN Unified Hybrid] Closed-Form Dual-Axis Variance Normalization
@@ -2425,6 +2445,64 @@ void sandwich_auto_dispatch(common_params & params) {
     if (params.h2o_compression) {
         LOG_INF("   -> [Technique #77] Heavy Hitter Oracle (H2O) ACTIVE (budget=%d, heavy_hitters=%d, sinks=%d)\n",
                 params.h2o_budget, params.h2o_heavy_hitters, params.n_sink_tokens);
+    }
+
+    // Defensive flag-combination validation (prevents --sandwich-auto load crashes).
+    if (params.turbo_mma && (params.cache_type_k == GGML_TYPE_TURBO4_0 || params.cache_type_k == GGML_TYPE_TURBO3_0 || params.cache_type_k == GGML_TYPE_TURBO2_0) && head_dim >= 256) {
+        params.turbo_mma = false;
+        setenv("GGML_TURBO_MMA_FUSED", "0", 1);
+        LOG_WRN("   -> [Sandwich Guard] disabled --turbo-mma for head_dim=%ld (fused MMA faults); using vector kernel.\n", (long)head_dim);
+    }
+    if (params.speculative.draft.n_gpu_layers >= 99 && gpu_total_vram_mb < 6000) {
+        params.speculative.draft.n_gpu_layers = 0;
+        LOG_WRN("   -> [Sandwich Guard] drafter VRAM pinning exceeds guard; falling back to -ngld 0.\n");
+    }
+    if (params.moe_warm_ram_mb > 16552) {
+        params.moe_warm_ram_mb = 16384;
+        LOG_WRN("   -> [Sandwich Guard] moe_warm_ram_mb clamped to 16384 (host guard).\n");
+    }
+    if (params.moe_cache_slots > 0 && params.moe_cache_size > 0) {
+        // Mutual exclusivity: disable BeeLlama slab to prevent double VRAM allocation.
+        params.moe_cache_size = 0;
+        LOG_WRN("   -> [Sandwich Guard] cleared moe_cache_size (mutually exclusive with moe_cache_slots).\n");
+    }
+
+    // Log the constructed command line for auditability.
+    {
+        std::ostringstream _cmd;
+        _cmd << "./build/bin/llama-cli -m \"" << params.model.path << "\""
+             << " -ngl " << params.n_gpu_layers
+             << " -t " << params.cpuparams.n_threads
+             << " -c " << params.n_ctx;
+        if (!params.speculative.draft.mparams.path.empty()) {
+            _cmd << " -md \"" << params.speculative.draft.mparams.path << "\""
+                 << " -ngld " << params.speculative.draft.n_gpu_layers;
+        }
+        if (params.moe_cache_slots > 0) {
+            _cmd << " --moe-cache-slots " << params.moe_cache_slots;
+        }
+        if (params.moe_warm_ram_mb > 0) {
+            _cmd << " --moe-warm-ram-mb " << params.moe_warm_ram_mb;
+        }
+        if (params.cache_type_k != GGML_TYPE_F16) {
+            _cmd << " -ctk " << ggml_type_name(params.cache_type_k)
+                 << " -ctv " << ggml_type_name(params.cache_type_v);
+        }
+        if (params.flash_attn_type != LLAMA_FLASH_ATTN_TYPE_DISABLED) {
+            _cmd << " -fa";
+        }
+        if (params.moe_2q) _cmd << " --moe-2q";
+        if (params.moe_3tier) _cmd << " --io-uring";
+        if (params.turbo_mma) _cmd << " --turbo-mma";
+        else _cmd << " --no-turbo-mma";
+        LOG_INF("   -> [Sandwich Guard] Constructed command line: %s\n", _cmd.str().c_str());
+        if (const char * _sp = std::getenv("SANDWICH_DISPATCH_PRINT")) {
+            if (_sp[0] != '\0') {
+                std::fprintf(stderr, "SANDWICH_DISPATCH_PRINT argv: %s\n", _cmd.str().c_str());
+                std::fflush(stderr);
+                std::exit(0);
+            }
+        }
     }
 
     params.sandwich_dispatched = true;

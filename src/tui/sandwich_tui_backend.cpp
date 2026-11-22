@@ -227,6 +227,9 @@ std::string strata_construct_cli_command(const StrataInferenceConfig & config) {
             << " -t " << config.n_threads
             << " -ngl " << config.n_gpu_layers
             << " -c " << config.n_ctx;
+        if (!config.drafter_path.empty()) {
+            cmd << " -md \"" << config.drafter_path << "\" -ngld " << config.drafter_gpu_layers;
+        }
         return cmd.str();
     }
 
