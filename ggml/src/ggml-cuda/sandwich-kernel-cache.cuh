@@ -188,8 +188,17 @@ public:
     }
 
     // False when the user disabled autotuning; callers then never override.
+    // Hot-path optimized: caches lookup result to eliminate getenv() during token decode.
+    static void notify_env_change() {
+        env_dirty() = true;
+    }
+
     bool enabled() const {
-        return !env_flag("SANDWICH_AUTOTUNE_DISABLE");
+        if (env_dirty()) {
+            cached_enabled() = !env_flag("SANDWICH_AUTOTUNE_DISABLE");
+            env_dirty() = false;
+        }
+        return cached_enabled();
     }
 
     bool lookup(family fam, uint64_t fp, entry & out) {
@@ -233,9 +242,19 @@ public:
         std::lock_guard<std::mutex> lock(mutex_);
         entries_.clear();
         loaded_ = false;
+        env_dirty() = true;
     }
 
 private:
+    static bool & env_dirty() {
+        static bool dirty = true;
+        return dirty;
+    }
+
+    static bool & cached_enabled() {
+        static bool val = true;
+        return val;
+    }
     struct Key {
         family   fam;
         uint64_t fp;
@@ -330,3 +349,12 @@ private:
 
 } // namespace autotune
 } // namespace sandwich
+
+#if !defined(_WIN32)
+#ifndef setenv
+#  define setenv(k, v, o) (sandwich::autotune::Cache::notify_env_change(), (setenv)(k, v, o))
+#endif
+#ifndef unsetenv
+#  define unsetenv(k) (sandwich::autotune::Cache::notify_env_change(), (unsetenv)(k))
+#endif
+#endif
