@@ -4,10 +4,6 @@
 
 #include "cli-context.h"
 
-#ifdef GGML_USE_CUDA
-#include "ggml-cuda.h"
-#endif
-
 #include <signal.h>
 
 #if defined(_WIN32)
@@ -69,15 +65,5 @@ int llama_cli(int argc, char ** argv) {
     }
 
     const int res = ctx_cli.run();
-#ifdef GGML_USE_CUDA
-    if (getenv("SANDWICH_LOG_FATTN_COUNT") != nullptr) {
-        fprintf(stderr, "[FATTN_TELEMETRY] fattn_native_count = %ld\n", (long)ggml_backend_cuda_fattn_native_count());
-    }
-#endif
-    if (getenv("SANDWICH_LOG_REALLOC") != nullptr) {
-        fprintf(stderr, "[REALLOC_TELEMETRY] total_realloc_events = %ld, total_realloc_ms = %.3f\n",
-                (long)ggml_backend_sched_get_realloc_count(),
-                (double)ggml_backend_sched_get_realloc_total_us() / 1000.0);
-    }
     return res;
 }

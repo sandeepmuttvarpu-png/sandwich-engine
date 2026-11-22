@@ -1,11 +1,11 @@
 {
   "c4": {
     "stack": "c4",
-    "elapsed_sec": 62.20999455451965,
+    "elapsed_sec": 75.20715379714966,
     "peak_vram_mib": 6614,
     "fattn_native_count": 0,
-    "realloc_count": 40,
-    "realloc_total_ms": 31.486,
+    "realloc_count": 0,
+    "realloc_total_ms": 0.0,
     "pure_token_sha256": "481b2a7aea43731e77979bca6631cfac9d32bd42d023d63c91552b245931a6aa",
     "canonical_pure_sha256": "481b2a7aea43731e77979bca6631cfac9d32bd42d023d63c91552b245931a6aa",
     "pure_token_match": true,

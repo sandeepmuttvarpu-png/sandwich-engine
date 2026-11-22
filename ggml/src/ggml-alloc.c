@@ -934,13 +934,6 @@ static bool ggml_gallocr_reserve_n_impl(
             }
         }
         if (realloc) {
-            if (getenv("SANDWICH_LOG_REALLOC") != NULL) {
-                size_t cur_size = galloc->buffers[i] ? ggml_vbuffer_size(galloc->buffers[i]) : 0;
-                if (cur_size > 0) {
-                    fprintf(stderr, "[REALLOC_DEBUG] buffer #%d (%s) reallocating from %.2f MiB to %.2f MiB\n",
-                        i, ggml_backend_buft_name(galloc->bufts[i]), cur_size / 1024.0 / 1024.0, new_size / 1024.0 / 1024.0);
-                }
-            }
             ggml_vbuffer_free(galloc->buffers[i]);
             if (no_alloc) {
                 galloc->buffers[i] = NULL;
@@ -1008,17 +1001,11 @@ static bool ggml_gallocr_node_needs_realloc(ggml_gallocr_t galloc, struct ggml_t
     if (!node->data && !node->view_src) {
         // If we previously had data but don't now then reallocate
         if (talloc->buffer_id < 0) {
-            if (getenv("SANDWICH_LOG_REALLOC") != NULL) {
-                fprintf(stderr, "[REALLOC_DEBUG] node '%s' talloc->buffer_id < 0\n", node->name);
-            }
             return false;
         }
         node_size = ggml_backend_buft_get_alloc_size(galloc->bufts[talloc->buffer_id], node);
     }
     if (talloc->size_max < node_size) {
-        if (getenv("SANDWICH_LOG_REALLOC") != NULL) {
-            fprintf(stderr, "[REALLOC_DEBUG] node '%s' size %zu > max %zu\n", node->name, node_size, talloc->size_max);
-        }
         galloc->tensor_size_expanded = true;
         return false;
     }
