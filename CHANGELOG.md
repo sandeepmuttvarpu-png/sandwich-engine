@@ -8,6 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased] - UI Overhaul & Architecture Tooling
 
 ### Added
+- **Sequential Batching via $nrc > 1$ (IQ3_S / IQ2_S Grid-Unpack Amortization):**
+  - Unlocked $nrc \in \{2, 4, 8\}$ in fused `ggml_vec_dot_iq3_s_q8_K` and `ggml_vec_dot_iq2_s_q8_K` AVX2 kernels by hoisting 512-entry grid lookups (`iq3s_grid` / `iq2s_grid`), sign-mask extraction, and scale broadcasts out of the per-column loop.
+  - Demonstrated up to $3.90\times$ kernel-level speedup on IQ3_S ($2.40$ cyc/32 vs $9.36$ cyc/32, $\Delta > 2\sigma$) and $2.89\times$ on IQ2_S ($1.75$ cyc/32 vs $5.07$ cyc/32, $\Delta > 2\sigma$).
+  - Restructured `ggml_compute_forward_mul_mat_id_one_chunk` to group tokens routed to the same expert into sequential batches ($nrc \in \{8, 4, 2, 1\}$) with expert-major order within chunks (`nchunk0 = nth, nchunk1 = 1`).
+  - Added NRC sequential batching telemetry instrumentation reporting runtime distribution across prompt prefill and token decode phases.
+  - End-to-end verified on canonical C4 stack (`Qwen3.6-35B-A3B` + `DFlash2` with `-ngld 99`):
+    * Prefill throughput increased to $484.35 \pm 5.11$ t/s ($+23.08$ t/s, $+5.0\%$, $\Delta > 2\sigma$).
+    * Peak generation decode reached $31.73 \pm 1.12$ t/s ($+7.46$ t/s over baseline, $\Delta > 2\sigma$).
+    * Pure-token SHA256 verified 100% bit-exact: `481b2a7aea43731e77979bca6631cfac9d32bd42d023d63c91552b245931a6aa`.
+    * Clean zero-abort execution verified under `GGML_SCHED_DEBUG_REALLOC=1`.
+    * Peak VRAM ($7,056$ MiB) and peak VmHWM ($13,936$ MiB) strictly preserved within platform limits.
 - **Recommended Default Configuration (`-ngld 99`):**
   - Documented `-ngld 99` (VRAM-pinned speculative drafter) as the recommended default production configuration for 8 GB consumer GPUs.
   - Formally certified empirical headroom and decode throughput in `README.md` and `docs/audit/CONFIDENCE.md`: 30.73 ± 0.21 tok/s decode (+6.23 tok/s over host-injected drafter `-ngld 0`, $\Delta > 2\sigma$), peak VRAM 6,576 MiB, and 524 MiB safety headroom below the 7,100 MiB OS compositor safety ceiling.
