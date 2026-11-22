@@ -17,11 +17,13 @@
 #include <cmath>
 #include <string>
 #include <algorithm>
+#include <thread>
+#include <chrono>
 
 #if defined(__x86_64__) || defined(_M_X64)
 #  include <x86intrin.h>
+#  include <pthread.h>
 #else
-#  include <chrono>
 static inline uint64_t __rdtsc() {
     return std::chrono::high_resolution_clock::now().time_since_epoch().count();
 }
@@ -33,7 +35,17 @@ struct BenchConfig {
     int trials = 7;
     int k = 4096;
     int streaming_rows = 2048; // ~32MB working set for 4096 elements
+    bool compare_nrc = false;
 };
+
+static void pin_to_pcore() {
+#if defined(__x86_64__) || defined(_M_X64)
+    cpu_set_t cpuset;
+    CPU_ZERO(&cpuset);
+    CPU_SET(2, &cpuset); // P-core 2
+    pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
+#endif
+}
 
 static void print_usage(const char * prog) {
     std::printf("Usage: %s [options]\n", prog);
@@ -42,6 +54,7 @@ static void print_usage(const char * prog) {
     std::printf("  --trials <N>      Number of measurement trials (default: 7)\n");
     std::printf("  --k <N>           Vector element length K (default: 4096)\n");
     std::printf("  --rows <N>        Streaming working set rows (default: 2048)\n");
+    std::printf("  --compare-nrc     Run matched-work nrc amortization ablation (nrc in {2,4,8})\n");
     std::printf("  --help            Show this help\n");
 }
 
@@ -59,6 +72,8 @@ static BenchConfig parse_args(int argc, char ** argv) {
             cfg.k = std::atoi(argv[++i]);
         } else if (arg == "--rows" && i + 1 < argc) {
             cfg.streaming_rows = std::atoi(argv[++i]);
+        } else if (arg == "--compare-nrc") {
+            cfg.compare_nrc = true;
         } else if (arg == "--help") {
             print_usage(argv[0]);
             std::exit(0);
@@ -81,6 +96,110 @@ static StatResult calc_stats(const std::vector<double> & samples) {
     for (double v : samples) var += (v - m) * (v - m);
     double s = samples.size() > 1 ? std::sqrt(var / (samples.size() - 1)) : 0.0;
     return {m, s};
+}
+
+static void run_nrc_comparison_for_type(ggml_type type, const char * name, const BenchConfig & cfg) {
+    const auto * qfns_cpu = ggml_get_type_traits_cpu(type);
+    if (!qfns_cpu || !qfns_cpu->vec_dot) return;
+    const ggml_type vdot_type = qfns_cpu->vec_dot_type;
+    const auto * vdot_fns_cpu = ggml_get_type_traits_cpu(vdot_type);
+    if (!vdot_fns_cpu) return;
+
+    const int k = cfg.k;
+    const size_t row_size_x = ggml_row_size(type, k);
+    const size_t row_size_y = ggml_row_size(vdot_type, k);
+
+    std::vector<float> f_data_x(k);
+    for (int i = 0; i < k; ++i) f_data_x[i] = 0.1f + 2.0f * std::cos((float)i);
+
+    std::vector<uint8_t> x_bytes(row_size_x);
+    auto from_float_x = qfns_cpu->from_float;
+    if (!from_float_x) {
+        const auto * qfns = ggml_get_type_traits(type);
+        if (qfns) from_float_x = qfns->from_float_ref;
+    }
+    if (from_float_x) {
+        from_float_x(f_data_x.data(), x_bytes.data(), k);
+    } else {
+        for (size_t i = 0; i < row_size_x; ++i) x_bytes[i] = (uint8_t)((i * 37 + 13) & 0xff);
+        for (int b = 0; b < k / 256; ++b) {
+            uint16_t * d_ptr = (uint16_t*)(x_bytes.data() + b * (row_size_x / (k / 256)));
+            *d_ptr = 0x3c00;
+        }
+    }
+
+    const int nrc_list[] = {2, 4, 8};
+
+    for (int nrc : nrc_list) {
+        // Cooldown between nrc sweeps
+        std::this_thread::sleep_for(std::chrono::seconds(4));
+
+        std::vector<uint8_t> y_bytes(row_size_y * nrc);
+        for (int c = 0; c < nrc; ++c) {
+            std::vector<float> f_col(k);
+            for (int i = 0; i < k; ++i) f_col[i] = 0.05f + 1.8f * std::sin((float)(i + c * 23));
+            vdot_fns_cpu->from_float(f_col.data(), y_bytes.data() + c * row_size_y, k);
+        }
+
+        const double elements_per_32_seq = (double)(k / 32);
+        const double total_elements_per_32 = elements_per_32_seq * nrc;
+
+        std::vector<float> result_ref(nrc, 0.0f);
+        const size_t bs = 16;
+        std::vector<float> s_nrc(bs * nrc, 0.0f);
+
+        // 1. Warmup Baseline (nrc=1 across N calls)
+        for (int w = 0; w < 50; ++w) {
+            for (int c = 0; c < nrc; ++c) {
+                qfns_cpu->vec_dot(k, &result_ref[c], 0, x_bytes.data(), 0, y_bytes.data() + c * row_size_y, 0, 1);
+            }
+        }
+
+        // Measure Baseline (nrc=1 across N calls)
+        std::vector<double> base_trials;
+        for (int t = 0; t < cfg.trials; ++t) {
+            uint64_t t0 = __rdtsc();
+            for (int it = 0; it < cfg.iters; ++it) {
+                for (int c = 0; c < nrc; ++c) {
+                    qfns_cpu->vec_dot(k, &result_ref[c], 0, x_bytes.data(), 0, y_bytes.data() + c * row_size_y, 0, 1);
+                }
+            }
+            uint64_t t1 = __rdtsc();
+            base_trials.push_back((double)(t1 - t0) / (cfg.iters * total_elements_per_32));
+        }
+
+        // 2. Warmup Amortized (nrc=N in 1 call)
+        for (int w = 0; w < 50; ++w) {
+            qfns_cpu->vec_dot(k, s_nrc.data(), bs, x_bytes.data(), 0, y_bytes.data(), row_size_y, nrc);
+        }
+
+        // Measure Amortized (nrc=N in 1 call)
+        std::vector<double> amort_trials;
+        for (int t = 0; t < cfg.trials; ++t) {
+            uint64_t t0 = __rdtsc();
+            for (int it = 0; it < cfg.iters; ++it) {
+                qfns_cpu->vec_dot(k, s_nrc.data(), bs, x_bytes.data(), 0, y_bytes.data(), row_size_y, nrc);
+            }
+            uint64_t t1 = __rdtsc();
+            amort_trials.push_back((double)(t1 - t0) / (cfg.iters * total_elements_per_32));
+        }
+
+        StatResult stat_base = calc_stats(base_trials);
+        StatResult stat_amort = calc_stats(amort_trials);
+
+        double delta = stat_base.mean - stat_amort.mean;
+        double speedup = stat_base.mean / stat_amort.mean;
+        double sigma_comb = std::sqrt(stat_base.stddev * stat_base.stddev + stat_amort.stddev * stat_amort.stddev);
+        double two_sigma = 2.0 * sigma_comb;
+        double z = delta / (sigma_comb + 1e-9);
+        const char * verdict = (delta > two_sigma) ? "PASS" : "FAIL (NO GAIN)";
+
+        std::printf("%-6s | %3d | %5.2f ± %4.2f | %5.2f ± %4.2f | %6.2fx (%+5.1f%%) | Δ=%+5.2f, 2σ=%4.2f, z=%4.2f | %s\n",
+                    name, nrc, stat_base.mean, stat_base.stddev,
+                    stat_amort.mean, stat_amort.stddev,
+                    speedup, (speedup - 1.0) * 100.0,
+                    delta, two_sigma, z, verdict);
+    }
 }
 
 static void benchmark_type(ggml_type type, const char * name, const BenchConfig & cfg) {
@@ -229,11 +348,27 @@ static void benchmark_type(ggml_type type, const char * name, const BenchConfig 
 }
 
 int main(int argc, char ** argv) {
+    pin_to_pcore();
     ggml_cpu_init();
     ggml_quantize_init(GGML_TYPE_IQ3_S);
     ggml_quantize_init(GGML_TYPE_IQ2_S);
 
     BenchConfig cfg = parse_args(argc, argv);
+
+    if (cfg.compare_nrc) {
+        std::printf("========================================================================================================================\n");
+        std::printf("NRC Amortization Benchmark at Matched Total Work (iters = %d, trials = %d, K = %d)\n",
+                    cfg.iters, cfg.trials, cfg.k);
+        std::printf("Protocol: 7 trials, 2000 iters, P-core pinned, 4s cooldown. Unit: cyc/32 vals/seq.\n");
+        std::printf("========================================================================================================================\n");
+        std::printf("%-6s | %3s | %-13s | %-13s | %-16s | %-28s | %s\n",
+                    "Type", "nrc", "nrc=1 (cyc/32)", "nrc=N (cyc/32)", "Speedup", "2-Sigma Significance", "Verdict");
+        std::printf("-------+-----+---------------+---------------+------------------+------------------------------+--------------------\n");
+        run_nrc_comparison_for_type(GGML_TYPE_IQ3_S, "IQ3_S", cfg);
+        run_nrc_comparison_for_type(GGML_TYPE_IQ2_S, "IQ2_S", cfg);
+        std::printf("========================================================================================================================\n");
+        return 0;
+    }
 
     std::printf("========================================================================================\n");
     std::printf("IQ Dequant & Fused Vector Dot Benchmark (nrc = %d, iters = %d, trials = %d, K = %d)\n",
