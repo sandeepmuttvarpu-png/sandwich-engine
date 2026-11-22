@@ -432,6 +432,72 @@ static int test_quantize_imatrix_degenerate(bool verbose) {
     return num_failed;
 }
 
+static int test_iq_nrc_bit_exactness(bool verbose) {
+    const int test_size = 4096;
+    int num_failed = 0;
+
+    printf("Testing IQ3_S and IQ2_S nrc>1 bit-exactness:\n");
+
+    for (ggml_type type : {GGML_TYPE_IQ3_S, GGML_TYPE_IQ2_S}) {
+        const auto * qfns_cpu = ggml_get_type_traits_cpu(type);
+        if (!qfns_cpu || !qfns_cpu->vec_dot) continue;
+
+        const auto * vdot_cpu = ggml_get_type_traits_cpu(qfns_cpu->vec_dot_type);
+        const size_t row_size_x = ggml_row_size(type, test_size);
+        const size_t row_size_y = ggml_row_size(qfns_cpu->vec_dot_type, test_size);
+
+        std::vector<float> f_data_x(test_size);
+        for (int i = 0; i < test_size; ++i) f_data_x[i] = 0.1f + 2.0f * std::cos((float)i);
+
+        std::vector<uint8_t> x_bytes(row_size_x);
+        ggml_quantize_init(type);
+        auto from_float_ref = ggml_get_type_traits(type)->from_float_ref;
+        if (from_float_ref) {
+            from_float_ref(f_data_x.data(), x_bytes.data(), test_size);
+        } else {
+            for (size_t i = 0; i < row_size_x; ++i) x_bytes[i] = (uint8_t)((i * 37 + 13) & 0xff);
+            for (int b = 0; b < test_size / 256; ++b) {
+                uint16_t * d_ptr = (uint16_t*)(x_bytes.data() + b * (row_size_x / (test_size / 256)));
+                *d_ptr = 0x3c00;
+            }
+        }
+
+        for (int nrc : {1, 2, 4, 8, 3, 5}) {
+            std::vector<uint8_t> y_bytes(row_size_y * nrc);
+            for (int c = 0; c < nrc; ++c) {
+                std::vector<float> f_data_y(test_size);
+                for (int i = 0; i < test_size; ++i) f_data_y[i] = 0.05f + 1.7f * std::sin((float)(i + c * 31));
+                vdot_cpu->from_float(f_data_y.data(), y_bytes.data() + c * row_size_y, test_size);
+            }
+
+            const size_t bs = 16;
+            std::vector<float> s_nrc(bs * nrc, -99999.0f);
+            qfns_cpu->vec_dot(test_size, s_nrc.data(), bs, x_bytes.data(), 0, y_bytes.data(), row_size_y, nrc);
+
+            bool match = true;
+            for (int c = 0; c < nrc; ++c) {
+                float s_ref = 0.0f;
+                qfns_cpu->vec_dot(test_size, &s_ref, 0, x_bytes.data(), 0, y_bytes.data() + c * row_size_y, 0, 1);
+                float diff = std::abs(s_nrc[c * bs] - s_ref);
+                if (diff != 0.0f) {
+                    match = false;
+                    printf("  FAIL: %s nrc=%d col=%d got=%f ref=%f diff=%e\n",
+                           ggml_type_name(type), nrc, c, s_nrc[c * bs], s_ref, diff);
+                }
+            }
+
+            if (!match) {
+                num_failed++;
+            } else if (verbose) {
+                printf("  PASS: %s nrc=%d (bit-exact, diff=0.000000e+00)\n", ggml_type_name(type), nrc);
+            }
+        }
+        printf("  - %s: all nrc in {1,2,4,8} and fallbacks BIT-EXACT (diff == 0.000000e+00)\n", ggml_type_name(type));
+    }
+
+    return num_failed;
+}
+
 int main(int argc, char * argv[]) {
     bool verbose = false;
 
@@ -455,6 +521,7 @@ int main(int argc, char * argv[]) {
     num_failed += test_f8_e4m3(verbose);
     num_failed += test_vec_dot_q(verbose);
     num_failed += test_quantize_imatrix_degenerate(verbose);
+    num_failed += test_iq_nrc_bit_exactness(verbose);
 
     if (num_failed || verbose) {
         printf("%d tests failed\n", num_failed);

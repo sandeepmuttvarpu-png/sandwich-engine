@@ -1045,7 +1045,14 @@ void ggml_vec_dot_iq2_xs_q8_K_generic(int n, float * GGML_RESTRICT s, size_t bs,
 
 void ggml_vec_dot_iq2_s_q8_K_generic(int n, float * GGML_RESTRICT s, size_t bs, const void * GGML_RESTRICT vx, size_t bx, const void * GGML_RESTRICT vy, size_t by, int nrc) {
     assert(n % QK_K == 0);
-    assert(nrc == 1);
+    if (nrc != 1) {
+        const size_t stride_s = bs ? bs : 1;
+        const size_t stride_y = by ? by : (size_t)(n / QK_K) * sizeof(block_q8_K);
+        for (int c = 0; c < nrc; ++c) {
+            ggml_vec_dot_iq2_s_q8_K_generic(n, s + c * stride_s, 0, vx, 0, (const uint8_t *)vy + c * stride_y, 0, 1);
+        }
+        return;
+    }
     UNUSED(nrc);
     UNUSED(bx);
     UNUSED(by);
@@ -1141,7 +1148,14 @@ void ggml_vec_dot_iq3_xxs_q8_K_generic(int n, float * GGML_RESTRICT s, size_t bs
 
 void ggml_vec_dot_iq3_s_q8_K_generic(int n, float * GGML_RESTRICT s, size_t bs, const void * GGML_RESTRICT vx, size_t bx, const void * GGML_RESTRICT vy, size_t by, int nrc) {
     assert(n % QK_K == 0);
-    assert(nrc == 1);
+    if (nrc != 1) {
+        const size_t stride_s = bs ? bs : 1;
+        const size_t stride_y = by ? by : (size_t)(n / QK_K) * sizeof(block_q8_K);
+        for (int c = 0; c < nrc; ++c) {
+            ggml_vec_dot_iq3_s_q8_K_generic(n, s + c * stride_s, 0, vx, 0, (const uint8_t *)vy + c * stride_y, 0, 1);
+        }
+        return;
+    }
     UNUSED(nrc);
     UNUSED(bx);
     UNUSED(by);
