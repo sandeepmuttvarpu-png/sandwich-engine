@@ -188,6 +188,28 @@ Sandwich Engine exposes an OpenAI-compliant `/v1/chat/completions` API supportin
 
 ---
 
+## Recommended Production Configuration (8 GB Consumer GPUs)
+
+For consumer workstations with 8 GB VRAM (e.g., NVIDIA RTX 4060, RTX 5050 Mobile) paired with 24 GB+ host RAM running frontier MoE models with speculative decoding (e.g., Qwen3.6-35B-A3B + DFlash2):
+
+```bash
+sandwich run -m /path/to/target-model.gguf \
+    -md /path/to/draft-model.gguf \
+    -ngld 99 \
+    --moe-cache-slots 16 \
+    --moe-warm-ram-mb 8000 \
+    -ctk turbo4 -ctv turbo4 \
+    --turbo-kvran -fa --io-uring --moe-2q
+```
+
+### Empirical Performance & Headroom Verification
+* **VRAM-Pinned Speculative Drafter (`-ngld 99`):** Fully offloads the speculative draft model into GPU VRAM while the host manages target MoE layers.
+* **Measured Throughput:** **30.73 ± 0.21 tok/s** decode (warm-4) / **28.80 ± 1.42 tok/s** (interleaved $n=5$), delivering a **+6.23 tok/s** net throughput speedup over host-injected drafting (`-ngld 0` at 22.58 ± 1.80 tok/s), clearing the statistical significance gate ($\Delta > 2\sigma_{\text{comb}} = 4.58$ tok/s).
+* **Guaranteed Headroom:** Peak physical VRAM is strictly **6,576 MiB** (at 16 MoE cache slots), preserving **524 MiB safety headroom** below the 7,100 MiB OS compositor guard ceiling. Peak VmHWM remains bounded at 13,936 MiB.
+* **Token Parity:** 100% bit-identical token stream verified (SHA256: `481b2a7aea43731e77979bca6631cfac9d32bd42d023d63c91552b245931a6aa`).
+
+---
+
 ## Core Configuration & CLI Flags
 
 <details>

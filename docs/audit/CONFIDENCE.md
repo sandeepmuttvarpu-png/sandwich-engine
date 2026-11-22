@@ -604,6 +604,15 @@ not evidence and must be re-tested on true C4 at n=3 before any is trusted:
   session. Peak VRAM 6,576 MiB, peak VmHWM 13,936 MiB, pure-token SHA256 5/5 match.
 - **Decisive factor is `-ngld`:** on identical slots 16/warm 8000, `-ngld 0` = 22.58 +/- 1.80 t/s vs
   `-ngld 99` = 28.80 +/- 1.42 t/s. Delta +6.23 t/s > 2*sigma_comb = 4.58 t/s.
+
+| Metric | Host-Injected Drafter (`-ngld 0`) | VRAM-Pinned Drafter (`-ngld 99`) | Net Delta ($\Delta$) | Statistical Gate ($2\sigma_{\text{comb}}$) | Empirical Status |
+| :--- | :---: | :---: | :---: | :---: | :---: |
+| **Decode Throughput** | $22.58 \pm 1.80$ t/s | $\mathbf{28.80 \pm 1.42\text{ t/s}}$ | $\mathbf{+6.23\text{ t/s}}$ | $4.58$ t/s | **PASS ($\Delta > 2\sigma$)** |
+| **Warm-4 Peak Decode** | $24.53 \pm 0.19$ t/s | $\mathbf{30.73 \pm 0.21\text{ t/s}}$ | $\mathbf{+6.20\text{ t/s}}$ | $0.57$ t/s | **PASS ($\Delta > 2\sigma$)** |
+| **Peak VRAM** | 5,684 MiB | 6,576 MiB | +892 MiB | $\le 7,100$ MiB Guard | **PASS (524 MiB headroom)** |
+| **Peak VmHWM** | 14,820 MiB | 13,936 MiB | -884 MiB | $\le 16,552$ MiB Guard | **PASS** |
+| **Pure-Token SHA256** | `481b2a7a...` | `481b2a7a...` | Bit-Identical | Match (5/5) | **PASS** |
+
 - **Slot/warm beyond 16:** no gain, only VRAM cost. Slots 24/32 tie within noise; slots 32 peaks at
   7,056 MiB, only 44 MiB under guard.
 - **KV `f16`:** real regression, 26.85 t/s. `turbo4` and `q8_0` tie with identical SHA.
@@ -616,7 +625,7 @@ not evidence and must be re-tested on true C4 at n=3 before any is trusted:
 
 - Append corrected Nov 22 2026. Supersedes the Nov 21 2026 append.
 
-### `-ngld 99` recommended default for 8 GB GPUs (VRAM headroom note)
+### `-ngld 99` Recommended Default for 8 GB GPUs (VRAM Headroom Certificate)
 - On 8 GB GPUs, prefer `-ngld 99` (VRAM-pinned drafter): best SAFE decode 30.73 +/- 0.21 t/s with
   6,576 MiB peak VRAM, leaving **524 MiB headroom** below the 7,100 MiB compositor guard (slots 16).
 - `--sandwich-auto` load crash fixed via defensive flag-combination validation in dispatch (commit

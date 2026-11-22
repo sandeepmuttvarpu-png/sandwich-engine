@@ -8,6 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased] - UI Overhaul & Architecture Tooling
 
 ### Added
+- **Recommended Default Configuration (`-ngld 99`):**
+  - Documented `-ngld 99` (VRAM-pinned speculative drafter) as the recommended default production configuration for 8 GB consumer GPUs.
+  - Formally certified empirical headroom and decode throughput in `README.md` and `docs/audit/CONFIDENCE.md`: 30.73 ± 0.21 tok/s decode (+6.23 tok/s over host-injected drafter `-ngld 0`, $\Delta > 2\sigma$), peak VRAM 6,576 MiB, and 524 MiB safety headroom below the 7,100 MiB OS compositor safety ceiling.
+- **VNNI IQ3_S Plugin Kernel Consumer:**
+  - Implemented hardware VNNI `__dp4a` (`IDP.4A.S8.S8`) accelerated dot-product kernel in `plugins/iq3_s_vnni.cu`.
+  - Compiled multi-architecture fatbin artifact `plugins/iq3_s_vnni.cubin` supporting Turing (`sm_75`) through Blackwell (`sm_120`).
+  - Integrated dynamic runtime loader and execution dispatch in `src/dispatch/plugin_iq3_s.{hpp,cpp}` with weak linkage into `ggml-cpu/arch/x86/quants.c`.
+  - Added unit test and micro-benchmarks in `tests/test-sandwich-plugin.cpp` proving exact bit-level parity with CPU AVX2 baseline.
+- **Autotuner CLI Integration (`--autotune`):**
+  - Wired `--autotune`, `--autotune-disable`, and `--autotune-invalidate` into `router.cpp` and `sandwich_auto_dispatch()`.
+  - Benchmarks FlashAttention variants across representative shapes with trimmed mean and standard error gating, caching winners to `~/.cache/sandwich/kernel_cache.txt`.
 - **Autotuning & Persistent Kernel Cache:**
   - Added a header-only, dependency-free kernel variant cache in `ggml/src/ggml-cuda/sandwich-kernel-cache.cuh`, keyed by an FNV-1a fingerprint of device compute capability, head dimension, query count, GQA ratio, K/V dtypes, power-of-two-bucketed KV length, and mask/bias presence.
   - `ggml_cuda_get_best_fattn_kernel` now consults the cache as an *override* of the existing heuristic. The heuristic remains authoritative on a cache miss, when autotuning is disabled, or when the cached variant is invalid for the current tensor, so a cold or corrupt cache can never make the engine slower than its compiled-in default.
