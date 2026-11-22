@@ -249,3 +249,30 @@ Chat template and parser:
 
 Testing:
 - [Slice model](skills/slice-model/SKILL.md) - build a small slice (few layers/experts) of a big HF model without downloading the full weights, to test conversion and inference
+
+---
+
+## Documentation Contract (Mandatory for All Agents)
+
+To maintain absolute historical integrity, prevent regression to unverified claims, and preserve forensic transparency across all agentic cycles, all contributing agents must strictly adhere to the following contract:
+
+1. **Explicit Claim-Status Tagging:**
+   - Every quantitative technical claim (throughput, cache hit rate, bandwidth, memory overhead) must be assigned a lifecycle tag: `CURRENT`, `SUPERSEDED`, or `RETRACTED`.
+   - Never state an unverified assertion as an established fact.
+
+2. **Mandatory Environment Tagging:**
+   - Numbers from different execution environments are non-comparable.
+   - Every benchmark measurement must explicitly declare its full environment tuple:
+     - Linux kernel release (e.g. `uname -r`: `7.3.5-arch1-1`)
+     - NVIDIA display driver version (e.g. `620.73.04`)
+     - CPU frequency governor (e.g. `performance` vs `powersave`)
+     - GPU thermal/load state and pinned core affinity (e.g. Intel P-core 2).
+
+3. **Transparent Retraction Discipline:**
+   - Retractions must never silently overwrite, delete, or obscure prior claims.
+   - Every retraction must update the existing ledger entry in `docs/history/claim_status.md` and `docs/audit/CONFIDENCE.md`, provide the exact mathematical or empirical justification, and cite the specific commit SHA that corrected it.
+
+4. **Session-End Journal Synchronization:**
+   - Every development session and atomic commit cycle must terminate by invoking `python3 scripts/journal_sync.py`.
+   - The git `post-commit` hook automatically records commit metadata to `.git/JOURNAL.jsonl` (keeping the working tree clean), which `journal_sync.py` idempotently folds into `docs/history/commit_inventory.md` and synchronizes with the persistent memory store.
+
