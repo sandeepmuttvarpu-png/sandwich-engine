@@ -1522,6 +1522,24 @@ struct mmid_row_mapping {
     int32_t i2;
 };
 
+static inline bool sandwich_moe_grouping_enabled(void) {
+    static int enabled = -1;
+    if (enabled == -1) {
+        const char * env = getenv("SANDWICH_MOE_GROUPING");
+        enabled = (!env || (strcmp(env, "0") != 0 && strcmp(env, "false") != 0 && strcmp(env, "OFF") != 0)) ? 1 : 0;
+    }
+    return enabled == 1;
+}
+
+static inline bool sandwich_moe_nchunk1_enabled(void) {
+    static int enabled = -1;
+    if (enabled == -1) {
+        const char * env = getenv("SANDWICH_MOE_NCHUNK1");
+        enabled = (!env || (strcmp(env, "0") != 0 && strcmp(env, "false") != 0 && strcmp(env, "OFF") != 0)) ? 1 : 0;
+    }
+    return enabled == 1;
+}
+
 static void ggml_compute_forward_mul_mat_id_one_chunk(
     struct ggml_tensor * dst,
     const struct ggml_tensor * src0,
@@ -1548,7 +1566,7 @@ static void ggml_compute_forward_mul_mat_id_one_chunk(
     const int64_t blck_0 = 16;
     const int64_t blck_1 = 16;
 
-    if (type != GGML_TYPE_IQ3_S && type != GGML_TYPE_IQ2_S) {
+    if (!sandwich_moe_grouping_enabled() || (type != GGML_TYPE_IQ3_S && type != GGML_TYPE_IQ2_S)) {
         float tmp[16];
 
         for (int64_t iir1 = ir1_start; iir1 < ir1_end; iir1 += blck_1) {
@@ -1878,7 +1896,7 @@ static void ggml_compute_forward_mul_mat_id(
         int64_t nchunk0 = (nr0 + chunk_size - 1) / chunk_size;
         int64_t nchunk1 = (nr1 + chunk_size - 1) / chunk_size;
 
-        if (type == GGML_TYPE_IQ3_S || type == GGML_TYPE_IQ2_S) {
+        if (sandwich_moe_nchunk1_enabled() && (type == GGML_TYPE_IQ3_S || type == GGML_TYPE_IQ2_S)) {
             // Expert-major token grouping: preserve token batches within expert chunks to maximize nrc amortization
             nchunk0 = nth;
             nchunk1 = 1;
