@@ -84,7 +84,7 @@ In mid-November 2026, a comprehensive forensic audit was initiated to verify eve
 
 Following the audit, techniques were systematically re-evaluated using rigorous $n=5$ ablation runs on physical hardware:
 - **Batches 1–5 Systematic Promotion:** Re-evaluated techniques across KV caching, MoE routing, and CUDA memory management. Confidence rose from 44.35 to **53.00 / 74 = 0.716** on the canonical v4.9 sealed ledger.
-- **Resolution of $Q=7 > 4$ Microarchitectural Routing (`85f4a3c09`):** Profiling of DFlash2 candidate verification revealed that `fattn.cu:1266` gated sparse MMA execution on `Q->ne[1] <= 4`. Because DFlash2 drafted $N=6$ candidate tokens ($Q = 7$), verify calls exceeded the microarchitectural $Q \le 4$ gate, routing stably to `BEST_FATTN_KERNEL_MMA_F16` with dynamic in-kernel dequantization. `fattn_native_count = 0` was verified as expected behavior rather than a failure mode.
+- **Resolution of $Q=7 > 4$ Microarchitectural Routing (`85f4a3c09`):** $Q \le 4$ enables fused Turbo4 MMA when type/alignment preconditions match. DFlash2 gives $Q=7$, which exceeds that gate, so verification routes stably to `BEST_FATTN_KERNEL_MMA_F16` with dynamic in-kernel dequantization. `fattn_native_count = 0` is expected because no quantized-native kernel executed. Sparse MMA is dormant, reserved for high-sparsity KV eviction, and measured slower than dense in causal regimes.
 - **Retraction of 1.4 GB Padding Myth:** Re-measurement demonstrated that tensor alignment padding cost only **5.4 MB**, disproving the long-claimed 1.4 GB saving.
 - **Sealing of Baseline Certificate:** The validated state was snapshotted and immutable baseline certificates were generated: [docs/audit/CONFIDENCE_v4.9.md](file:///home/sandeep/dev/sandwich/sandwich-engine/docs/audit/CONFIDENCE_v4.9.md) and `validate_ledger.py` (Rule A through Rule N).
 
@@ -105,7 +105,7 @@ User-interface and terminal telemetry subsystems were modernized:
 
 In-depth configuration exploration on `Qwen3.6-35B-A3B` resolved speculative decoding performance:
 - **Retraction of False Drafter Dead-End:** Identified that an earlier benchmark script passed the drafter GGUF to `-m` instead of `-md`, incorrectly concluding speculative drafting was a net negative.
-- **Discovery of `-ngld 99` VRAM Pinning (`176746cf6`):** Offloading both target and drafter layers to GPU (`-ngl 99 -ngld 99`) achieved **$28.80 \pm 1.42\text{ t/s}$** ($30.73\text{ t/s}$ warm-4), delivering a $+6.23\text{ t/s}$ speedup over `-ngld 0` ($22.58\text{ t/s}$).
+- **Discovery of `-ngld 99` VRAM Pinning (`176746cf6`):** Offloading drafter layers to GPU (`-ngl 14 -ngld 99`) achieved **$28.80 \pm 1.42\text{ t/s}$** ($30.73\text{ t/s}$ warm-4), delivering a $+6.23\text{ t/s}$ speedup over `-ngld 0` ($22.58\text{ t/s}$).
 - **Headroom Verification:** Confirmed that dual offload occupied 6,576 MiB peak VRAM, preserving **524 MiB safe headroom** beneath the 7,100 MiB Wayland compositor safety guard.
 
 ---
