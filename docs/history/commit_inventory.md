@@ -3580,3 +3580,39 @@ This document records every sandwich-authored commit from upstream fork point `3
  2 files changed, 58 insertions(+)
 ```
 
+### [`ef36b0d4f`] docs(history): full project history, claim-status ledger, current-state snapshot
+- **Full SHA:** `ef36b0d4fcd2ea93961b7e3303611ffe9f6c6468`
+- **Date:** `2026-11-22T22:06:09+05:30`
+- **Environment:** Kernel `7.3.5-arch1-1`, Driver `620.73.04`, Governor `powersave`
+- **Diffstat:**
+```text
+5 files changed, 3905 insertions(+)
+```
+
+### [`b8592e107`] docs(agents): documentation contract and journal sync mechanism
+- **Full SHA:** `b8592e10732a1cfbc607f92fa28685740e35bbf1`
+- **Date:** `2026-11-22T22:06:29+05:30`
+- **Environment:** Kernel `7.3.5-arch1-1`, Driver `620.73.04`, Governor `powersave`
+- **Diffstat:**
+```text
+2 files changed, 145 insertions(+)
+```
+
+### [`540fba311`] chore(archive): manifest, move log, restore script
+- **Full SHA:** `540fba311368c8b5ab1b92f1cfee356a9676d812`
+- **Date:** `2026-11-23T20:19:12+05:30`
+- **Environment:** Kernel `7.3.5-arch1-1`, Driver `620.73.04`, Governor `powersave`
+- **Diffstat:**
+```text
+4 files changed, 103 insertions(+)
+```
+
+### [`7fe588876`] docs(history): reconcile claims ledger, version post-commit hook installer, and record config matrix
+- **Full SHA:** `7fe588876dbf4c03e368cb6984c6b5c9f9fe22ed`
+- **Date:** `2026-11-23T20:44:19+05:30`
+- **Environment:** Kernel `7.3.5-arch1-1`, Driver `620.73.04`, Governor `powersave`
+- **Diffstat:**
+```text
+8 files changed, 149 insertions(+), 41 deletions(-)
+```
+
