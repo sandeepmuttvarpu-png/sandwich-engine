@@ -186,7 +186,7 @@ TuneResult run_autotune(const TuneOptions & opts) {
                 double diff = vals[i] - out_mu;
                 var += diff * diff;
             }
-            out_sigma = std::sqrt(var / (count > 1 ? count - 1 : 1)) / std::sqrt((double)count);
+            out_sigma = std::sqrt(var / (count > 1 ? count - 1 : 1));
         };
 
         // 1. Measure heuristic baseline (trial override = 0)
