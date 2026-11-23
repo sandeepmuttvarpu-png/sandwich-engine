@@ -10,7 +10,7 @@
 
 | Metric | Certified Value | Status | Citation / Command |
 | :--- | :---: | :---: | :--- |
-| **Git HEAD SHA** | `540fba311` (and subsequent docs/installer commits) | Validated | `git rev-parse HEAD` |
+| **Git HEAD SHA** | `7fe588876` (reconciled claims ledger, tracked hook installer, config matrix) | Validated | `git rev-parse HEAD` |
 | **CTest Passing Suite** | **78 / 78 Passing (100%)** | Active | `ctest --test-dir build` (zero exclusions) |
 | **Ledger Rules (Rules A–N)** | **37 / 37 Passing, 0 Defects** | Sealed | `python3 docs/audit/validate_ledger.py` |
 | **Authoritative Confidence Score** | **53.00 / 74 = 0.716** | Audited | [CONFIDENCE_v4.9.md](file:///home/sandeep/dev/sandwich/sandwich-engine/docs/audit/CONFIDENCE_v4.9.md) |
