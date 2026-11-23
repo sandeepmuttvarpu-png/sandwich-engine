@@ -52,6 +52,7 @@
 ### LM Studio Model ID & GPU Idle Verification (Gate G4)
 - **Model Identity Disclosure:** The model utilized for Understory semantic queries was `nvidia-nemotron-3-nano-4b` (4.0B parameters, architecture `nemotron_h`, 3.93 GB disk size, 16,384 context length). It was assigned the alias `--identifier nemotron-3-nano-30b-a3b` solely to satisfy Understory's default client configuration. No 30B-parameter model was loaded.
 - **Clean GPU Idle State During Gate G4:** Prior to running the canonical C4 generation parity test (Gate G4), LM Studio was explicitly unloaded via `/home/sandeep/.lmstudio/bin/lms unload --all` (logged `Unloaded 1 model`). Physical VRAM usage was verified via `nvidia-smi` at **2 MiB used / 8,151 MiB total** (idle compositor baseline). Canonical C4 measured peak VRAM of 6,614 MiB with zero residual process interference.
+- **Microarchitectural $Q$-Gate Routing:** $Q \le 4$ enables fused Turbo4 MMA when type/alignment preconditions match. DFlash2 gives $Q=7$, which exceeds that gate, so verification routes to `BEST_FATTN_KERNEL_MMA_F16` with dynamic in-kernel dequantization. `fattn_native_count = 0` is expected because no quantized-native kernel executed. Sparse MMA is dormant, reserved for high-sparsity KV eviction, and measured slower than dense in causal regimes.
 
 ---
 
@@ -63,7 +64,7 @@ To achieve maximum inference throughput while remaining safely within physical h
 ./build/bin/llama-cli \
   -m /home/sandeep/dev/sandwich/ai-models/Qwen3.6-35B-A3B-UD-IQ3_XXS/Qwen3.6-35B-A3B-UD-IQ3_XXS.gguf \
   -md /home/sandeep/dev/sandwich/ai-models/Qwen3.6-35B-A3B-DFlash2-Q4_K_M/Qwen3.6-35B-A3B-DFlash2-Q4_K_M.gguf \
-  -ngl 99 \
+  -ngl 14 \
   -ngld 99 \
   --moe-cache-slots 16 \
   --moe-warm-ram-mb 8000 \
