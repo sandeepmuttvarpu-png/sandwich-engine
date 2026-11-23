@@ -38,7 +38,8 @@ timeline
     Nov 21 - Nov 22 : Era 7 - Autotune & Plugins (Commits 222-237)
                     : Dynamic CUDA driver loader, kernel cache, VNNI
     Nov 22          : Era 8 - Sequential Batching (Commits 238-244)
-                    : nrc>1 in IQ3_S/IQ2_S, MoE token grouping (484 t/s)
+                    : nrc>1 micro-kernel amortization (74.4% cycle drop)
+                    : Full-stack MoE attribution pending matched ablation
 ```
 
 ---
@@ -83,7 +84,7 @@ In mid-November 2026, a comprehensive forensic audit was initiated to verify eve
 
 Following the audit, techniques were systematically re-evaluated using rigorous $n=5$ ablation runs on physical hardware:
 - **Batches 1–5 Systematic Promotion:** Re-evaluated techniques across KV caching, MoE routing, and CUDA memory management. Confidence rose from 44.35 to **53.00 / 74 = 0.716** on the canonical v4.9 sealed ledger.
-- **Resolution of $Q=7 > 4$ Microarchitectural Routing Bug (`85f4a3c09`):** Profiling of DFlash2 candidate verification revealed that `fattn.cu:1266` gated sparse MMA execution on `Q->ne[1] <= 4`. Because DFlash2 drafted $N=6$ candidate tokens ($Q = 7$), verify calls bypassed sparse MMA entirely and routed to fallback kernels (`BEST_FATTN_KERNEL_MMA_F16`), explaining why `fattn_native_count` registered 0.
+- **Resolution of $Q=7 > 4$ Microarchitectural Routing (`85f4a3c09`):** Profiling of DFlash2 candidate verification revealed that `fattn.cu:1266` gated sparse MMA execution on `Q->ne[1] <= 4`. Because DFlash2 drafted $N=6$ candidate tokens ($Q = 7$), verify calls exceeded the microarchitectural $Q \le 4$ gate, routing stably to `BEST_FATTN_KERNEL_MMA_F16` with dynamic in-kernel dequantization. `fattn_native_count = 0` was verified as expected behavior rather than a failure mode.
 - **Retraction of 1.4 GB Padding Myth:** Re-measurement demonstrated that tensor alignment padding cost only **5.4 MB**, disproving the long-claimed 1.4 GB saving.
 - **Sealing of Baseline Certificate:** The validated state was snapshotted and immutable baseline certificates were generated: [docs/audit/CONFIDENCE_v4.9.md](file:///home/sandeep/dev/sandwich/sandwich-engine/docs/audit/CONFIDENCE_v4.9.md) and `validate_ledger.py` (Rule A through Rule N).
 
@@ -133,12 +134,11 @@ Dynamic hardware tuning was added to exploit microarchitectural features:
 *Commits 238–244 (`054bc7188` $\to$ `ed16af597`)*
 
 The engine unlocked multi-row SIMD vector dot product acceleration:
-- **IQ3_S / IQ2_S Fused `vec_dot`:** Amortized non-linear quant table unpacks across multiple active rows ($nrc > 1$), yielding up to **$3.90\times$ micro-kernel speedup**.
-- **Token Grouping by Expert (`ab022ec65`):** Implemented row re-ordering in `ggml_compute_forward_mul_mat_id` to group tokens assigned to the same expert, transforming single-row lookups into multi-row batches.
-- **Measured End-to-End Throughput Jump (`ed16af597`):**
-  - Prefill throughput increased from $461.27\text{ t/s}$ to **$484.35 \pm 5.11\text{ t/s}$** ($+23.08\text{ t/s}$).
-  - Decode throughput increased from $24.27\text{ t/s}$ to **$31.73 \pm 1.12\text{ t/s}$** ($+7.46\text{ t/s}$).
-  - Pure-token SHA256 verified 100% bit-identical against canonical reference outputs.
+- **IQ3_S / IQ2_S Fused `vec_dot`:** Amortized non-linear quant table unpacks across multiple active rows ($nrc > 1$), yielding a verified **$74.4\%$ cycle reduction** ($2.40 \pm 0.01\text{ cyc/32}$ vs $9.36 \pm 0.05$ baseline, $\Delta = 6.96 > 2\sigma = 0.102, z = 136.5$). Linear cost modeling ($U \approx 7.95, D \approx 1.41\text{ cyc/32}$) confirmed grid unpack is $85.0\%$ of the single-row kernel. Numerical difference is strictly $0.000000\text{e}+00$ across $nrc \in \{1, 2, 3, 4, 5, 8\}$.
+- **Token Grouping by Expert (`ab022ec65`):** Reordered token evaluations in `ggml_compute_forward_mul_mat_id` to group activations by touched expert, transforming single-row lookups into multi-row batches.
+- **Full-Stack Performance Disposition (`ed16af597`):**
+  - While initial measurements showed prefill increasing to $484.35 \pm 5.11\text{ t/s}$ and decode to $31.73 \pm 1.12\text{ t/s}$, subsequent audit identified three confounding factors: (1) the decode baseline was compared against an unmatched `-ngld 0` arm ($24.27\text{ t/s}$); against the true matched `-ngld 99` arm ($30.73 \pm 0.21\text{ t/s}$), the $+1.00\text{ t/s}$ delta is within $2\sigma_{\text{comb}} = 2.28\text{ t/s}$; (2) commit `ab022ec65` bundled token grouping, `nchunk1=1`, and tiled dispatch bypass; (3) peak VRAM increased from 6,576 MiB to 7,056 MiB due to slot over-allocation (`--moe-cache-slots 32`).
+  - **Empirical Verdict:** Micro-kernel amortization is **CURRENT / VERIFIED**; full-stack end-to-end attribution is tagged **CONFOUNDED / PENDING ABLATION**.
 
 ---
 
