@@ -272,7 +272,11 @@ To maintain absolute historical integrity, prevent regression to unverified clai
    - Retractions must never silently overwrite, delete, or obscure prior claims.
    - Every retraction must update the existing ledger entry in `docs/history/claim_status.md` and `docs/audit/CONFIDENCE.md`, provide the exact mathematical or empirical justification, and cite the specific commit SHA that corrected it.
 
-4. **Session-End Journal Synchronization:**
-   - Every development session and atomic commit cycle must terminate by invoking `python3 scripts/journal_sync.py`.
+4. **Session-End Journal Synchronization & Hook Installation:**
+   - Every clone or clean environment must initialize the tracked post-commit hook via:
+     ```bash
+     bash scripts/install-git-hooks.sh
+     ```
    - The git `post-commit` hook automatically records commit metadata to `.git/JOURNAL.jsonl` (keeping the working tree clean), which `journal_sync.py` idempotently folds into `docs/history/commit_inventory.md` and synchronizes with the persistent memory store.
+   - Every development session and atomic commit cycle must terminate by invoking `python3 scripts/journal_sync.py`.
 
