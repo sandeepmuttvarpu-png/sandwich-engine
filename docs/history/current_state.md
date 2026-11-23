@@ -54,6 +54,7 @@
 - **Model Identity Disclosure:** The model utilized for Understory semantic queries was `nvidia-nemotron-3-nano-4b` (4.0B parameters, architecture `nemotron_h`, 3.93 GB disk size, 16,384 context length). It was assigned the alias `--identifier nemotron-3-nano-30b-a3b` solely to satisfy Understory's default client configuration. No 30B-parameter model was loaded.
 - **Clean GPU Idle State During Gate G4:** Prior to running the canonical C4 generation parity test (Gate G4), LM Studio was explicitly unloaded via `/home/sandeep/.lmstudio/bin/lms unload --all` (logged `Unloaded 1 model`). Physical VRAM usage was verified via `nvidia-smi` at **2 MiB used / 8,151 MiB total** (idle compositor baseline). Canonical C4 measured peak VRAM of 6,614 MiB with zero residual process interference.
 - **Microarchitectural $Q$-Gate Routing:** $Q \le 4$ enables fused Turbo4 MMA when type/alignment preconditions match. DFlash2 gives $Q=7$, which exceeds that gate, so verification routes to `BEST_FATTN_KERNEL_MMA_F16` with dynamic in-kernel dequantization. `fattn_native_count = 0` is expected because no quantized-native kernel executed. Sparse MMA is dormant, reserved for high-sparsity KV eviction, and measured slower than dense in causal regimes.
+- **Load Smoke Test vs. Throughput Verification (V1):** Verification item V1 (`./build/bin/sandwich -m <35B IQ3_XXS> --sandwich-auto -n 8`) is strictly a **load smoke test**, verifying that `--sandwich-auto` initializes buffers and completes generation without SIGABRT/misalignment crashes (0 aborts, clean exit code 0). It is NOT a throughput benchmark.
 
 ---
 
@@ -77,19 +78,25 @@ To achieve maximum inference throughput while remaining safely within physical h
   -c 4096 -n 64
 ```
 
-### Verified Performance Benchmarks
-- **Decode Throughput (Certified Safe):** $\mathbf{30.73 \pm 0.21\text{ t/s}}$ warm-4 ($28.80 \pm 1.42\text{ t/s}$ dedicated $n=5$, $+6.23\text{ t/s}$ over `-ngld 0` at $22.58\text{ t/s}$)
+### Verified Performance Benchmarks & Attribution
+- **Historical Benchmark (Pre-ab022ec65 Baseline):** $\mathbf{30.73 \pm 0.21\text{ t/s}}$ warm-4 ($28.80 \pm 1.42\text{ t/s}$ dedicated $n=5$, $+6.23\text{ t/s}$ over `-ngld 0` at $22.58\text{ t/s}$)
+- **Current Matched Config Decode (Slots 16):** $29.63 \pm 0.34\text{ t/s}$ with autotune; $29.43 \pm 1.63\text{ t/s}$ with autotune disabled ($30.23 \pm 0.21\text{ t/s}$ without outlier run 2). Regression confirmed at matched slots 16 ($\Delta -1.10\text{ t/s}$, $2\sigma_{\text{comb}} = 0.80$, $z = 2.75$), under 3-arm ablation isolating individual components of `ab022ec65`.
 - **Peak VRAM Consumption:** **6,576 MiB** (**524 MiB safe margin** below 7,100 MiB Wayland compositor guardrail)
 - **Token Parity:** Output token sequence matches reference generation bit-for-bit (verified via SHA256 `481b2a7aea43731e77979bca6631cfac9d32bd42d023d63c91552b245931a6aa`)
 - **Buffer Stability:** 0 buffer reallocations or graph abortions under `GGML_SCHED_DEBUG_REALLOC=1`
+- **Regression Test Suite:** 79/79 passing (100%), upgraded from 78 via `test-sandwich-nrc` verifying bit-exact fused vec_dot math.
 
 ---
 
 ## 5. Known Open Items & Pruning Candidates
 
-1. **Sequential Batching ($nrc > 1$) Full-Stack Ablation:**
-   - The micro-kernel win is proven ($2.40\text{ cyc/32}$ vs $9.36\text{ cyc/32}$, $74.4\%$ cycle reduction, bit-exact across $nrc \in \{1, 2, 3, 4, 5, 8\}$).
-   - Full-stack decode attribution is pending clean 3-arm ablation isolating: (a) $nrc$ alone, (b) $+ \text{nchunk1}=1$, (c) $+$ tiled dispatch bypass.
+1. **Sequential Batching ($nrc > 1$) Full-Stack 3-Arm Ablation:**
+   - The micro-kernel win is proven ($2.40\text{ cyc/32}$ vs $9.36\text{ cyc/32}$, $74.4\%$ cycle reduction, bit-exact across $nrc \in \{1, 2, 3, 4, 5, 8\}$ via `test-sandwich-nrc`).
+   - Full-stack decode attribution is under active 3-arm interleaved $n=5$ ablation at matched slots 16 isolating:
+     * **Arm 0:** Control baseline (prior single-token dispatch, standard chunking, standard tiled matmul)
+     * **Arm 1:** Expert grouping only (`cur_nrc in {8, 4, 2, 1}`)
+     * **Arm 2:** Expert grouping + `nchunk1=1`
+     * **Arm 3:** Expert grouping + `nchunk1=1` + tiled bypass (full `ab022ec65`)
 2. **Formal Deprecation ADR for Technique #44:** Technique #44 (Turbo2 uniform 2-bit quantization) is retired in the confidence ledger, but `GGML_TYPE_TURBO2_0` type definitions and template instantiations remain in CUDA kernels. A formal ADR should govern its removal.
 3. **Pruning Dead Code from Technique #55:**
    - Dead parameter `bool prefill_head_alias` in [src/llama-cparams.h#L60](file:///home/sandeep/dev/sandwich/sandwich-engine/src/llama-cparams.h#L60) is unread across the engine.
