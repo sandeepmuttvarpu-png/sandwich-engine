@@ -106,10 +106,12 @@ def parse_sha(stdout):
     return hashlib.sha256(text.encode()).hexdigest(), bool(text)
 
 
-def run_one(name, flags, rep):
+def run_one(name, flags, rep, extra_env=None):
     cmd = [BIN] + BASE + flags
     env = os.environ.copy()
     env["GGML_CUDA_PDL"] = "0"
+    if extra_env:
+        env.update(extra_env)
 
     p = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
                          stderr=subprocess.PIPE, text=True, env=env)
@@ -216,7 +218,7 @@ def main():
         time.sleep(cooldown)
         rep = len(all_runs[c["name"]]) + 1
         print(f"[{i}/{len(order)}] {c['name']} rep{rep} ... ", end="", flush=True)
-        r = run_one(c["name"], c["flags"], rep)
+        r = run_one(c["name"], c["flags"], rep, c.get("env"))
         all_runs[c["name"]].append(r)
         if r.get("ok"):
             print(f"{r['decode_ts']:.2f} t/s | {r['peak_vram_mib']} MiB VRAM | "
@@ -230,6 +232,7 @@ def main():
             "protocol": {"guard_vram_mib": VRAM_GUARD_MIB, "guard_vmhwm_mib": VMHWM_GUARD_MIB,
                          "cooldown_s": cooldown, "warm_discard": 1},
             "configs": {n: {"flags": next(x["flags"] for x in configs if x["name"] == n),
+                            "env": next(x.get("env", {}) for x in configs if x["name"] == n),
                             "runs": rs, "summary": summarize(rs)} for n, rs in all_runs.items()},
         }
         json.dump(payload, open(args.out, "w"), indent=2)
