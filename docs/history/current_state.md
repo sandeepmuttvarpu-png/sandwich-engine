@@ -46,6 +46,7 @@
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
 | **Canonical C4 (Host Drafter)** | `ef36b0d4f` | 0 | 16 | 8000 | 620.73.04 | 7.3.5-arch1-1 | 2 MiB (Idle) | **6,614 MiB** | **486 MiB** | `481b2a7aea43...` (100%) |
 | **Certified Safe (VRAM Drafter)** | `176746cf6` | 99 | 16 | 8000 | 620.73.04 | 7.3.5-arch1-1 | 2 MiB (Idle) | **6,576 MiB** | **524 MiB** | `481b2a7aea43...` (100%) |
+| **Certified Safe (Full Stack + NRC Batching)** | Current HEAD | 99 | 16 | 8000 | 620.73.04 | 7.3.5-arch1-1 | 2 MiB (Idle) | **6,576 MiB** | **524 MiB** | `481b2a7aea43...` (100%) |
 | **Over-Allocated Experimental** | `ed16af597` | 99 | 32 | 12500 | 620.73.04 | 7.3.5-arch1-1 | 2 MiB (Idle) | **7,056 MiB** | **44 MiB** | `481b2a7aea43...` (100%) |
 | **Historical Baseline (Pre-Regression)** | `a7c9e6e26` | 0 | 16 | 8000 | 620.70.06 | 6.18-zen | Unknown (Legacy) | **6,614 MiB** | **486 MiB** | `481b2a7aea43...` (100%) |
 
