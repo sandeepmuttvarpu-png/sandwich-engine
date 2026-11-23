@@ -1222,6 +1222,15 @@ bool ggml_compute_forward_mul_mat_tiled(
     return ggml_tiled_matmul_type_dispatch(params, dst);
 }
 
+static inline bool sandwich_moe_tiled_bypass_enabled(void) {
+    static int enabled = -1;
+    if (enabled == -1) {
+        const char * env = getenv("SANDWICH_MOE_TILED_BYPASS");
+        enabled = (!env || (strcmp(env, "0") != 0 && strcmp(env, "false") != 0 && strcmp(env, "OFF") != 0)) ? 1 : 0;
+    }
+    return enabled == 1;
+}
+
 // MUL_MAT_ID (MoE), one expert; returns true if the expert was computed here,
 // per expert eligibility (type gate, batch floor) is decided here
 bool ggml_compute_forward_mul_mat_id_tiled(
@@ -1235,7 +1244,7 @@ bool ggml_compute_forward_mul_mat_id_tiled(
         return false;
     }
     // IQ3_S and IQ2_S use fused vec_dot with hoisted grid unpack and sequential nrc amortization
-    if (dst->src[0]->type == GGML_TYPE_IQ3_S || dst->src[0]->type == GGML_TYPE_IQ2_S) {
+    if (sandwich_moe_tiled_bypass_enabled() && (dst->src[0]->type == GGML_TYPE_IQ3_S || dst->src[0]->type == GGML_TYPE_IQ2_S)) {
         return false;
     }
     if (!ggml_tiled_supported(dst->src[0], dst->src[1])) {
