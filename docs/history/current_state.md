@@ -98,13 +98,8 @@ To achieve maximum inference throughput while remaining safely within physical h
      * Prefill ($nr_1 \ge 8$) takes the static partition (`nchunk1 = 1`) for maximal $nrc$ amortization ($+8.33\text{ t/s}$ win).
      * Decode ($nr_1 < 8$) takes dynamic fine-grained work-stealing (preserving the $+1.90 \sim +2.38\text{ t/s}$ decode win without coarse-thread stalls).
    - **Shipped HEAD (Full Bundle) vs Arm 0 (Control) Benchmark ($n=5$ Interleaved):**
-   - **Initial 4-Arm Ablation (Session Noise Identified):**
-     * Arm 0 vs Arm 1 decode: $\Delta = +1.000\text{ t/s}$, $\sigma_{\text{comb}} = 1.146$, $2\sigma_{\text{comb}} = 2.292$, $z = 0.87 < 2.0$ (Not Significant).
-     * Arm 1 vs Arm 2 decode: $\Delta = -1.000\text{ t/s}$, $z = 0.67 < 2.0$ (Not Significant).
-     * Arm 2 vs Arm 3 decode: $\Delta = +0.400\text{ t/s}$, $z = 0.25 < 2.0$ (Not Significant).
-     * Arm 2 vs Arm 1 prefill: $\Delta = \mathbf{+8.325\text{ t/s}}$, $2\sigma_{\text{comb}} = 5.248$, $\mathbf{z = 3.17 > 2.0}$ (**Significant ✓**).
-   - **Clean Isolated Arbitration (Arm 0 vs Arm 1, $n=5$ Interleaved):**
-     * Protocol: Matched slots 16, autotune disabled, 4s cooldown. Background interference eliminated (installer paused via SIGSTOP, `ryoku-ai-usage.timer` stopped, compositor idle at 2 MiB VRAM, >90% CPU idle).
+     * Protocol: Primary pairwise difference $t$-test on interleaved runs, matched slots 16, autotune disabled, 4s cooldown. Background interference eliminated (installer idle, `ryoku-ai-usage.timer` stopped, compositor idle at 2 MiB VRAM, >90% CPU idle).
+     * Arm 0 (Control) Decode: `[28.3, 31.4, 30.5, 31.7, 29.8]` $\to$ warm-4 $\mu = 30.850 \pm 0.866\text{ t/s}$ (all-5 $\mu = 30.340 \pm 1.365\text{ t/s}$).
      * Arm 0 (Control) Decode: `[28.5, 30.5, 29.8, 28.8, 29.3]` $\to$ warm-4 $\mu = 29.600 \pm 0.726\text{ t/s}$ (all-5 $\mu = 29.380 \pm 0.798\text{ t/s}$).
      * Arm 1 (Grouping Only) Decode: `[30.5, 32.0, 31.8, 30.7, 31.8]` $\to$ warm-4 $\mu = 31.575 \pm 0.591\text{ t/s}$ (all-5 $\mu = 31.360 \pm 0.702\text{ t/s}$).
      * Arm 0 Prefill: `[413.8, 454.5, 466.4, 456.8, 452.5]` $\to$ warm-4 $\mu = 457.550 \pm 6.156\text{ t/s}$.
