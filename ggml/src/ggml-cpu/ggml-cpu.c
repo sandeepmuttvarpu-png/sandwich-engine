@@ -1912,8 +1912,9 @@ static void ggml_compute_forward_mul_mat_id(
         int64_t nchunk0 = (nr0 + chunk_size - 1) / chunk_size;
         int64_t nchunk1 = (nr1 + chunk_size - 1) / chunk_size;
 
-        if (sandwich_moe_nchunk1_enabled() && (type == GGML_TYPE_IQ3_S || type == GGML_TYPE_IQ2_S)) {
-            // Expert-major token grouping: preserve token batches within expert chunks to maximize nrc amortization
+        if (sandwich_moe_nchunk1_enabled(nr1) && (type == GGML_TYPE_IQ3_S || type == GGML_TYPE_IQ2_S)) {
+            // Regime-conditional: prefill (nr1 >= 8) takes static partition (nchunk1 = 1) for maximal nrc amortization;
+            // decode (nr1 < 8) preserves dynamic work-stealing (nchunk0 fine-grained) without coarse thread-slice stalls.
             nchunk0 = nth;
             nchunk1 = 1;
         } else if (nchunk0 * nchunk1 < nth * 4 || disable_chunking) {
