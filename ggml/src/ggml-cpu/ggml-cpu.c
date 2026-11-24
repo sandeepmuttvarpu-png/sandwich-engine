@@ -1531,13 +1531,29 @@ static inline bool sandwich_moe_grouping_enabled(void) {
     return enabled == 1;
 }
 
-static inline bool sandwich_moe_nchunk1_enabled(void) {
-    static int enabled = -1;
-    if (enabled == -1) {
+static inline int sandwich_moe_nchunk1_mode(void) {
+    // -1: auto (regime-conditional: nchunk1=1 for prefill nr1>=8, dynamic work-stealing for decode nr1<8)
+    //  0: forced off (dynamic work-stealing always)
+    //  1: forced on (nchunk1=1 always)
+    static int mode = -2;
+    if (mode == -2) {
         const char * env = getenv("SANDWICH_MOE_NCHUNK1");
-        enabled = (!env || (strcmp(env, "0") != 0 && strcmp(env, "false") != 0 && strcmp(env, "OFF") != 0)) ? 1 : 0;
+        if (!env) {
+            mode = -1; // default shipped: regime-conditional
+        } else if (strcmp(env, "0") == 0 || strcmp(env, "false") == 0 || strcmp(env, "OFF") == 0) {
+            mode = 0;
+        } else {
+            mode = 1;
+        }
     }
-    return enabled == 1;
+    return mode;
+}
+
+static inline bool sandwich_moe_nchunk1_enabled(int64_t nr1) {
+    const int mode = sandwich_moe_nchunk1_mode();
+    if (mode == 1) return true;
+    if (mode == 0) return false;
+    return nr1 >= 8;
 }
 
 static void ggml_compute_forward_mul_mat_id_one_chunk(
