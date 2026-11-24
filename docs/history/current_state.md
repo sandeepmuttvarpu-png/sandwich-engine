@@ -10,8 +10,9 @@
 
 | Metric | Certified Value | Status | Citation / Command |
 | :--- | :---: | :---: | :--- |
-| **Git HEAD SHA** | `7fe588876` (reconciled claims ledger, tracked hook installer, config matrix) | Validated | `git rev-parse HEAD` |
-| **CTest Passing Suite** | **78 / 78 Passing (100%)** | Active | `ctest --test-dir build` (zero exclusions) |
+| **Git HEAD SHA** | `75beecfb1` (atomic 53-commit history, clean tree) | Validated | `git rev-parse HEAD` |
+| **CTest Passing Suite** | **79 / 79 Passing (100%)** | Active | `ctest --test-dir build` (138.39s, test-backend-ops 138.38s) |
+| **Engine Build Status** | **Exit 0, 0 Warnings** | Verified | `cmake --build build --config Release -j8` |
 | **Ledger Rules (Rules A–N)** | **37 / 37 Passing, 0 Defects** | Sealed | `python3 docs/audit/validate_ledger.py` |
 | **Authoritative Confidence Score** | **53.00 / 74 = 0.716** | Audited | [CONFIDENCE_v4.9.md](file:///home/sandeep/dev/sandwich/sandwich-engine/docs/audit/CONFIDENCE_v4.9.md) |
 | **Single-Node Physical Ceiling** | **67.70 / 74 = 0.915** | Bounded | Physical hardware architectural bound |
@@ -31,7 +32,7 @@
 
 - **Host Machine:** HP Victus 15-fa1xxx
 - **CPU:** 13th Gen Intel Core i7-13620H (6 Performance-cores + 4 Efficient-cores, 16 hardware threads)
-- **CPU Governor:** `performance` (frequency locked across P-cores)
+- **CPU Governor & Power Profile:** `powersave` with `energy_performance_preference = performance` under active `intel_pstate` / HWP; fixed environment property across all journal-recorded runs.
 - **Host Memory (RAM):** 24 GB DDR5-5200
   - **70% RAM Rule (Technique #42):** WARM pool allocation capped strictly at **16,552 MB** to eliminate kernel OOM risk.
 - **GPU:** NVIDIA GeForce RTX 5050 Laptop GPU (Blackwell `sm_120`, 8,151 MiB total physical VRAM)
@@ -114,6 +115,12 @@ To achieve maximum inference throughput while remaining safely within physical h
 
    - **Empirical Summary:** In 5 out of 5 interleaved pairs, Shipped HEAD strictly outperformed Arm 0 ($+4.30, +1.70, +2.60, +1.40, +1.90\text{ t/s}$). Shipped HEAD peaks at **$33.10\text{ t/s}$ decode** and reproduces the **$484.35\text{ t/s}$ prefill capability** (reaches $486.9\text{ t/s}$), delivering both speedups concurrently with zero regression.
    - **VRAM & Bit-Exactness:** Peak VRAM strictly 6,576 MiB across all 10 runs (524 MiB safe headroom). Pure-token SHA bit-exact 10/10 (`481b2a7aea43731e...`).
+   - **Tiled MoE Bypass (`SANDWICH_MOE_TILED_BYPASS`) Arbitration:**
+     * Evaluated whether disabling the tiled MoE bypass (`SANDWICH_MOE_TILED_BYPASS=0`) recovers prefill throughput without regressing decode.
+     * Protocol: $n=5$ interleaved A/B benchmark (`HEAD_DEFAULT_BYPASS` vs `HEAD_NO_BYPASS`) under matched slots 16, autotune disabled, 4s cooling.
+     * Decode: Default $23.220 \pm 1.659\text{ t/s}$ vs NoBypass $22.100 \pm 2.609\text{ t/s}$ (warm-4 $23.150 \pm 1.907$ vs $22.000 \pm 3.001\text{ t/s}$, pairwise $\bar{d} = +1.150, t = 0.91, p = 0.429$).
+     * Prefill: Default $369.900 \pm 39.458\text{ t/s}$ vs NoBypass $355.240 \pm 27.601\text{ t/s}$ (warm-4 $375.450 \pm 43.249$ vs $346.825 \pm 23.316\text{ t/s}$, pairwise $\bar{d} = +28.625, t = 2.11, p = 0.125$).
+     * Verdict: **Tiled bypass is innocent.** Disabling it does not recover prefill and does not improve decode (differences statistically null, $p > 0.12$). Default `SANDWICH_MOE_TILED_BYPASS=1` is confirmed and retained.
 2. **Formal Deprecation ADR for Technique #44:** Technique #44 (Turbo2 uniform 2-bit quantization) is retired in the confidence ledger, but `GGML_TYPE_TURBO2_0` type definitions and template instantiations remain in CUDA kernels. A formal ADR should govern its removal.
 3. **Pruning Dead Code from Technique #55:**
    - Dead parameter `bool prefill_head_alias` in [src/llama-cparams.h#L60](file:///home/sandeep/dev/sandwich/sandwich-engine/src/llama-cparams.h#L60) is unread across the engine.
