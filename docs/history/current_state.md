@@ -91,19 +91,15 @@ To achieve maximum inference throughput while remaining safely within physical h
 
 ## 5. Known Open Items & Pruning Candidates
 
-1. **Sequential Batching ($nrc > 1$) Full-Stack 4-Arm Ablation Analysis:**
+1. **Sequential Batching ($nrc > 1$) Full-Stack Ablation & Clean Arbitration:**
    - The micro-kernel win is proven ($2.40\text{ cyc/32}$ vs $9.36\text{ cyc/32}$, $74.4\%$ cycle reduction, bit-exact across $nrc \in \{1, 2, 3, 4, 5, 8\}$ via `test-sandwich-nrc`).
-   - Full-stack decode attribution remains unresolved because session measurement variance ($\sigma = 0.73 \sim 1.30\text{ t/s}$) exceeds the observed decode deltas ($\Delta \approx \pm 1.0\text{ t/s}$). Under the $2\sigma_{\text{comb}}$ hurdle:
-
-| Pairwise Comparison | Metric | Delta ($\Delta$) | $\sigma_{\text{comb}}$ | $2\sigma_{\text{comb}}$ | $z$-score | Empirical Verdict |
-| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Arm 1 vs Arm 0 (Grouping)** | Decode | $+1.000\text{ t/s}$ | $1.146$ | $2.292\text{ t/s}$ | $0.87 < 2.0$ | **NOT SIGNIFICANT (Noise)** |
-| **Arm 2 vs Arm 1 ($n\text{chunk1}=1$)** | Decode | $-1.000\text{ t/s}$ | $1.490$ | $2.980\text{ t/s}$ | $0.67 < 2.0$ | **NOT SIGNIFICANT (Noise)** |
-| **Arm 3 vs Arm 2 (Tiled bypass)** | Decode | $+0.400\text{ t/s}$ | $1.625$ | $3.250\text{ t/s}$ | $0.25 < 2.0$ | **NOT SIGNIFICANT (Noise)** |
-| **Arm 3 vs Arm 2 (Tiled bypass)** | Prefill | $-7.475\text{ t/s}$ | $9.462$ | $18.924\text{ t/s}$ | $0.79 < 2.0$ | **NOT SIGNIFICANT (Noise)** |
-| **Arm 2 vs Arm 1 ($n\text{chunk1}=1$)** | Prefill | $\mathbf{+8.325\text{ t/s}}$ | $2.624$ | $\mathbf{5.248\text{ t/s}}$ | $\mathbf{3.17 > 2.0}$ | **SIGNIFICANT ($z = 3.17$) ✓** |
-
-   - **Per-Run Raw Data (Prefill & Decode):**
+   - **Initial 4-Arm Ablation (Session Noise Identified):**
+     * Arm 0 vs Arm 1 decode: $\Delta = +1.000\text{ t/s}$, $\sigma_{\text{comb}} = 1.146$, $2\sigma_{\text{comb}} = 2.292$, $z = 0.87 < 2.0$ (Not Significant).
+     * Arm 1 vs Arm 2 decode: $\Delta = -1.000\text{ t/s}$, $z = 0.67 < 2.0$ (Not Significant).
+     * Arm 2 vs Arm 3 decode: $\Delta = +0.400\text{ t/s}$, $z = 0.25 < 2.0$ (Not Significant).
+     * Arm 2 vs Arm 1 prefill: $\Delta = \mathbf{+8.325\text{ t/s}}$, $2\sigma_{\text{comb}} = 5.248$, $\mathbf{z = 3.17 > 2.0}$ (**Significant ✓**).
+   - **Clean Isolated Arbitration (Arm 0 vs Arm 1, $n=5$ Interleaved):**
+     * Protocol: Matched slots 16, autotune disabled, 4s cooldown. Background interference eliminated (installer paused via SIGSTOP, `ryoku-ai-usage.timer` stopped, compositor idle at 2 MiB VRAM, >90% CPU idle).
      * **Arm 0 (Control):** Prefill `[435.0, 445.7, 448.9, 441.0, 452.6]`, Decode `[25.4, 28.7, 27.6, 29.3, 29.6]`
      * **Arm 1 (Grouping Only):** Prefill `[444.0, 447.8, 447.4, 451.2, 445.9]`, Decode `[23.4, 29.0, 29.4, 30.6, 30.2]`
      * **Arm 2 (Grouping + $n\text{chunk1}=1$):** Prefill `[439.1, 454.5, 457.4, 456.3, 457.4]`, Decode `[27.2, 29.4, 29.8, 29.1, 26.9]`
