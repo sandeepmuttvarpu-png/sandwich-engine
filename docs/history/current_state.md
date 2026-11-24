@@ -103,6 +103,14 @@ To achieve maximum inference throughput while remaining safely within physical h
 | **Arm 3 vs Arm 2 (Tiled bypass)** | Prefill | $-7.475\text{ t/s}$ | $9.462$ | $18.924\text{ t/s}$ | $0.79 < 2.0$ | **NOT SIGNIFICANT (Noise)** |
 | **Arm 2 vs Arm 1 ($n\text{chunk1}=1$)** | Prefill | $\mathbf{+8.325\text{ t/s}}$ | $2.624$ | $\mathbf{5.248\text{ t/s}}$ | $\mathbf{3.17 > 2.0}$ | **SIGNIFICANT ($z = 3.17$) ✓** |
 
+   - **Per-Run Raw Data (Prefill & Decode):**
+     * **Arm 0 (Control):** Prefill `[435.0, 445.7, 448.9, 441.0, 452.6]`, Decode `[25.4, 28.7, 27.6, 29.3, 29.6]`
+     * **Arm 1 (Grouping Only):** Prefill `[444.0, 447.8, 447.4, 451.2, 445.9]`, Decode `[23.4, 29.0, 29.4, 30.6, 30.2]`
+     * **Arm 2 (Grouping + $n\text{chunk1}=1$):** Prefill `[439.1, 454.5, 457.4, 456.3, 457.4]`, Decode `[27.2, 29.4, 29.8, 29.1, 26.9]`
+     * **Arm 3 (Full `ab022ec65`):** Prefill `[452.6, 441.4, 461.9, 449.6, 442.8]`, Decode `[24.4, 27.9, 30.2, 29.6, 29.1]`
+   - **Warm-4 Rule Wording:** Discard run 1 *only if it is cold and slow*. When reporting, provide both all-5 and warm-4 with external background interference outliers explicitly flagged.
+   - **Environment Guard:** Linux `scaling_governor` is `powersave` with `energy_performance_preference = performance` via `powerprofilesctl`. Clean isolated re-run of Arm 0 vs Arm 1 pending when background noise drops to $\sigma \le 0.35$.
+2. **Formal Deprecation ADR for Technique #44:** Technique #44 (Turbo2 uniform 2-bit quantization) is retired in the confidence ledger, but `GGML_TYPE_TURBO2_0` type definitions and template instantiations remain in CUDA kernels. A formal ADR should govern its removal.
 3. **Pruning Dead Code from Technique #55:**
    - Dead parameter `bool prefill_head_alias` in [src/llama-cparams.h#L60](file:///home/sandeep/dev/sandwich/sandwich-engine/src/llama-cparams.h#L60) is unread across the engine.
    - Header [src/ds4_engram_io.hpp](file:///home/sandeep/dev/sandwich/sandwich-engine/src/ds4_engram_io.hpp) has zero includes in any engine build target.
