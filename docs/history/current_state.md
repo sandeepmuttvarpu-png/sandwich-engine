@@ -80,9 +80,10 @@ To achieve maximum inference throughput while remaining safely within physical h
 
 ### Verified Performance Benchmarks & Attribution
 - **Historical Benchmark (Pre-ab022ec65 Baseline):** $\mathbf{30.73 \pm 0.21\text{ t/s}}$ warm-4 ($28.80 \pm 1.42\text{ t/s}$ dedicated $n=5$, $+6.23\text{ t/s}$ over `-ngld 0` at $22.58\text{ t/s}$)
-- **Current Matched Config Decode (Slots 16):** $29.63 \pm 0.34\text{ t/s}$ with autotune; $29.43 \pm 1.63\text{ t/s}$ with autotune disabled ($30.23 \pm 0.21\text{ t/s}$ without outlier run 2). Regression confirmed at matched slots 16 ($\Delta -1.10\text{ t/s}$, $2\sigma_{\text{comb}} = 0.80$, $z = 2.75$), under 3-arm ablation isolating individual components of `ab022ec65`.
-- **Peak VRAM Consumption:** **6,576 MiB** (**524 MiB safe margin** below 7,100 MiB Wayland compositor guardrail)
-- **Token Parity:** Output token sequence matches reference generation bit-for-bit (verified via SHA256 `481b2a7aea43731e77979bca6631cfac9d32bd42d023d63c91552b245931a6aa`)
+- **Current Matched Config Decode (Slots 16):** Unresolved — measurement variance exceeds effect size. In the autotune-disabled run, all-5 is $29.58 \pm 1.45\text{ t/s}$ (warm-4 is $29.43 \pm 1.63\text{ t/s}$ due to keeping the $27.0\text{ t/s}$ outlier from concurrent terminal activity; excluding that outlier yields $30.23 \pm 0.21\text{ t/s}$). Interleaved 4-arm ablation variance ($\sigma = 0.73 \sim 1.30\text{ t/s}$, $2\sigma_{\text{comb}} \ge 2.29\text{ t/s}$) exceeds the $\sim 1.0\text{ t/s}$ decode delta.
+- **Prefill Acceleration (Verified):** $nchunk1=1$ yields a statistically verified $+8.33\text{ t/s}$ prefill improvement ($456.40 \pm 1.37$ vs $448.08 \pm 2.24\text{ t/s}$, $2\sigma_{\text{comb}} = 5.25$, $z = 3.17$).
+- **Peak VRAM Consumption:** **6,576 MiB** (**524 MiB safe margin** below 7,100 MiB Wayland compositor guardrail) across all configs and arms.
+- **Token Parity:** Output token sequence matches reference generation bit-for-bit (verified via SHA256 `481b2a7aea43731e77979bca6631cfac9d32bd42d023d63c91552b245931a6aa`) across all 20 runs.
 - **Buffer Stability:** 0 buffer reallocations or graph abortions under `GGML_SCHED_DEBUG_REALLOC=1`
 - **Regression Test Suite:** 79/79 passing (100%), upgraded from 78 via `test-sandwich-nrc` verifying bit-exact fused vec_dot math.
 
