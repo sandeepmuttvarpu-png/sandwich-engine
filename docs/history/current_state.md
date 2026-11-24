@@ -100,11 +100,10 @@ To achieve maximum inference throughput while remaining safely within physical h
      * Arm 2 vs Arm 1 prefill: $\Delta = \mathbf{+8.325\text{ t/s}}$, $2\sigma_{\text{comb}} = 5.248$, $\mathbf{z = 3.17 > 2.0}$ (**Significant ✓**).
    - **Clean Isolated Arbitration (Arm 0 vs Arm 1, $n=5$ Interleaved):**
      * Protocol: Matched slots 16, autotune disabled, 4s cooldown. Background interference eliminated (installer paused via SIGSTOP, `ryoku-ai-usage.timer` stopped, compositor idle at 2 MiB VRAM, >90% CPU idle).
-     * **Arm 0 (Control):** Prefill `[435.0, 445.7, 448.9, 441.0, 452.6]`, Decode `[25.4, 28.7, 27.6, 29.3, 29.6]`
-     * **Arm 1 (Grouping Only):** Prefill `[444.0, 447.8, 447.4, 451.2, 445.9]`, Decode `[23.4, 29.0, 29.4, 30.6, 30.2]`
-     * **Arm 2 (Grouping + $n\text{chunk1}=1$):** Prefill `[439.1, 454.5, 457.4, 456.3, 457.4]`, Decode `[27.2, 29.4, 29.8, 29.1, 26.9]`
-     * **Arm 3 (Full `ab022ec65`):** Prefill `[452.6, 441.4, 461.9, 449.6, 442.8]`, Decode `[24.4, 27.9, 30.2, 29.6, 29.1]`
-   - **Warm-4 Rule Wording:** Discard run 1 *only if it is cold and slow*. When reporting, provide both all-5 and warm-4 with external background interference outliers explicitly flagged.
+     * Arm 0 (Control) Decode: `[28.5, 30.5, 29.8, 28.8, 29.3]` $\to$ warm-4 $\mu = 29.600 \pm 0.726\text{ t/s}$ (all-5 $\mu = 29.380 \pm 0.798\text{ t/s}$).
+     * Arm 1 (Grouping Only) Decode: `[30.5, 32.0, 31.8, 30.7, 31.8]` $\to$ warm-4 $\mu = 31.575 \pm 0.591\text{ t/s}$ (all-5 $\mu = 31.360 \pm 0.702\text{ t/s}$).
+     * Arm 0 Prefill: `[413.8, 454.5, 466.4, 456.8, 452.5]` $\to$ warm-4 $\mu = 457.550 \pm 6.156\text{ t/s}$.
+     * Arm 1 Prefill: `[453.6, 462.9, 465.5, 451.2, 457.8]` $\to$ warm-4 $\mu = 459.350 \pm 6.305\text{ t/s}$.
    - **Environment Guard:** Linux `scaling_governor` is `powersave` with `energy_performance_preference = performance` via `powerprofilesctl`. Clean isolated re-run of Arm 0 vs Arm 1 pending when background noise drops to $\sigma \le 0.35$.
 2. **Formal Deprecation ADR for Technique #44:** Technique #44 (Turbo2 uniform 2-bit quantization) is retired in the confidence ledger, but `GGML_TYPE_TURBO2_0` type definitions and template instantiations remain in CUDA kernels. A formal ADR should govern its removal.
 3. **Pruning Dead Code from Technique #55:**
