@@ -100,10 +100,10 @@ To achieve maximum inference throughput while remaining safely within physical h
    - **Shipped HEAD (Full Bundle) vs Arm 0 (Control) Benchmark ($n=5$ Interleaved):**
      * Protocol: Primary pairwise difference $t$-test on interleaved runs, matched slots 16, autotune disabled, 4s cooldown. Background interference eliminated (installer idle, `ryoku-ai-usage.timer` stopped, compositor idle at 2 MiB VRAM, >90% CPU idle).
      * Arm 0 (Control) Decode: `[28.3, 31.4, 30.5, 31.7, 29.8]` $\to$ warm-4 $\mu = 30.850 \pm 0.866\text{ t/s}$ (all-5 $\mu = 30.340 \pm 1.365\text{ t/s}$).
-     * Arm 0 (Control) Decode: `[28.5, 30.5, 29.8, 28.8, 29.3]` $\to$ warm-4 $\mu = 29.600 \pm 0.726\text{ t/s}$ (all-5 $\mu = 29.380 \pm 0.798\text{ t/s}$).
-     * Arm 1 (Grouping Only) Decode: `[30.5, 32.0, 31.8, 30.7, 31.8]` $\to$ warm-4 $\mu = 31.575 \pm 0.591\text{ t/s}$ (all-5 $\mu = 31.360 \pm 0.702\text{ t/s}$).
-     * Arm 0 Prefill: `[413.8, 454.5, 466.4, 456.8, 452.5]` $\to$ warm-4 $\mu = 457.550 \pm 6.156\text{ t/s}$.
-     * Arm 1 Prefill: `[453.6, 462.9, 465.5, 451.2, 457.8]` $\to$ warm-4 $\mu = 459.350 \pm 6.305\text{ t/s}$.
+     * Shipped HEAD Decode: `[32.6, 33.1, 33.1, 33.1, 31.7]` $\to$ warm-4 $\mu = 32.750 \pm 0.700\text{ t/s}$ (all-5 $\mu = 32.720 \pm 0.610\text{ t/s}$, peaks at $33.10\text{ t/s}$).
+     * Arm 0 Prefill: `[452.9, 480.6, 481.5, 479.4, 478.0]` $\to$ warm-4 $\mu = 479.875 \pm 1.517\text{ t/s}$.
+     * Shipped HEAD Prefill: `[475.3, 466.7, 486.9, 485.1, 478.1]` $\to$ warm-4 $\mu = 479.200 \pm 9.157\text{ t/s}$ (peaks at $486.9\text{ t/s}$).
+     * **Primary Pairwise-$t$ Arbitration Table (Shipped HEAD vs Control):**
      * **Statistical Arbitration Table (Clean Isolated Run):**
 
 | Pairwise Comparison | Metric | Delta ($\Delta$) | $\sigma_{\text{comb}}$ | $2\sigma_{\text{comb}}$ | $z$-score | Empirical Verdict |
