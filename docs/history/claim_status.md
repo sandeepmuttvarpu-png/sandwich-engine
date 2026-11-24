@@ -52,7 +52,7 @@ Every quantitative claim in this ledger is categorized into one of five forensic
 
 To prevent regression to unverified claims, all future performance claims must adhere to the following standards:
 
-1. **$n \ge 5$ Ablation Standard:** Every performance metric must report mean and standard deviation across at least five independent warm runs under locked CPU/GPU frequencies.
+1. **$n \ge 5$ Ablation Standard & Primary Protocol for Interleaved Designs:** Every performance metric must report mean and standard deviation across at least five runs under verified environment state. For interleaved benchmark designs ($A_1, B_1, A_2, B_2, \dots$), the **pairwise difference $t$-test** ($\bar{d} \pm s_d, SE = s_d/\sqrt{N}, t = \bar{d}/SE$) is formally declared as the **primary contractual protocol** to control for shared thermal and OS scheduling drift. Independent-sample comparisons ($2\sigma_{\text{comb}}$) treat paired observations as uncoordinated noise and are reported strictly as secondary bounds. Multi-test shopping is prohibited.
 2. **Deterministic Token Parity:** Output token streams must match canonical reference generation token-for-token (verified via pure-token SHA256 hashing).
 3. **Hardware Boundary Compliance:**
    - Host allocations must strictly honor the **16,552 MB WARM pool ceiling** (70% Host RAM rule).
