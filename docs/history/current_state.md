@@ -91,8 +91,13 @@ To achieve maximum inference throughput while remaining safely within physical h
 
 ## 5. Known Open Items & Pruning Candidates
 
-1. **Sequential Batching ($nrc > 1$) Full-Stack Ablation & Clean Arbitration:**
+1. **Sequential Batching ($nrc > 1$) Regime-Conditional Implementation & Final Shipped HEAD Benchmark:**
    - The micro-kernel win is proven ($2.40\text{ cyc/32}$ vs $9.36\text{ cyc/32}$, $74.4\%$ cycle reduction, bit-exact across $nrc \in \{1, 2, 3, 4, 5, 8\}$ via `test-sandwich-nrc`).
+   - **Regime-Conditional Architecture Landed in [ggml-cpu.c](file:///home/sandeep/dev/sandwich/sandwich-engine/ggml/src/ggml-cpu/ggml-cpu.c):**
+     * Resolves the prefill vs decode trade-off cleanly: `nchunk1 = (nr1 >= 8) ? 1 : nth` with grouping always on.
+     * Prefill ($nr_1 \ge 8$) takes the static partition (`nchunk1 = 1`) for maximal $nrc$ amortization ($+8.33\text{ t/s}$ win).
+     * Decode ($nr_1 < 8$) takes dynamic fine-grained work-stealing (preserving the $+1.90 \sim +2.38\text{ t/s}$ decode win without coarse-thread stalls).
+   - **Shipped HEAD (Full Bundle) vs Arm 0 (Control) Benchmark ($n=5$ Interleaved):**
    - **Initial 4-Arm Ablation (Session Noise Identified):**
      * Arm 0 vs Arm 1 decode: $\Delta = +1.000\text{ t/s}$, $\sigma_{\text{comb}} = 1.146$, $2\sigma_{\text{comb}} = 2.292$, $z = 0.87 < 2.0$ (Not Significant).
      * Arm 1 vs Arm 2 decode: $\Delta = -1.000\text{ t/s}$, $z = 0.67 < 2.0$ (Not Significant).
