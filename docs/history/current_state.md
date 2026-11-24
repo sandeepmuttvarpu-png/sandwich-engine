@@ -91,14 +91,18 @@ To achieve maximum inference throughput while remaining safely within physical h
 
 ## 5. Known Open Items & Pruning Candidates
 
-1. **Sequential Batching ($nrc > 1$) Full-Stack 3-Arm Ablation:**
+1. **Sequential Batching ($nrc > 1$) Full-Stack 4-Arm Ablation Analysis:**
    - The micro-kernel win is proven ($2.40\text{ cyc/32}$ vs $9.36\text{ cyc/32}$, $74.4\%$ cycle reduction, bit-exact across $nrc \in \{1, 2, 3, 4, 5, 8\}$ via `test-sandwich-nrc`).
-   - Full-stack decode attribution is under active 3-arm interleaved $n=5$ ablation at matched slots 16 isolating:
-     * **Arm 0:** Control baseline (prior single-token dispatch, standard chunking, standard tiled matmul)
-     * **Arm 1:** Expert grouping only (`cur_nrc in {8, 4, 2, 1}`)
-     * **Arm 2:** Expert grouping + `nchunk1=1`
-     * **Arm 3:** Expert grouping + `nchunk1=1` + tiled bypass (full `ab022ec65`)
-2. **Formal Deprecation ADR for Technique #44:** Technique #44 (Turbo2 uniform 2-bit quantization) is retired in the confidence ledger, but `GGML_TYPE_TURBO2_0` type definitions and template instantiations remain in CUDA kernels. A formal ADR should govern its removal.
+   - Full-stack decode attribution remains unresolved because session measurement variance ($\sigma = 0.73 \sim 1.30\text{ t/s}$) exceeds the observed decode deltas ($\Delta \approx \pm 1.0\text{ t/s}$). Under the $2\sigma_{\text{comb}}$ hurdle:
+
+| Pairwise Comparison | Metric | Delta ($\Delta$) | $\sigma_{\text{comb}}$ | $2\sigma_{\text{comb}}$ | $z$-score | Empirical Verdict |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| **Arm 1 vs Arm 0 (Grouping)** | Decode | $+1.000\text{ t/s}$ | $1.146$ | $2.292\text{ t/s}$ | $0.87 < 2.0$ | **NOT SIGNIFICANT (Noise)** |
+| **Arm 2 vs Arm 1 ($n\text{chunk1}=1$)** | Decode | $-1.000\text{ t/s}$ | $1.490$ | $2.980\text{ t/s}$ | $0.67 < 2.0$ | **NOT SIGNIFICANT (Noise)** |
+| **Arm 3 vs Arm 2 (Tiled bypass)** | Decode | $+0.400\text{ t/s}$ | $1.625$ | $3.250\text{ t/s}$ | $0.25 < 2.0$ | **NOT SIGNIFICANT (Noise)** |
+| **Arm 3 vs Arm 2 (Tiled bypass)** | Prefill | $-7.475\text{ t/s}$ | $9.462$ | $18.924\text{ t/s}$ | $0.79 < 2.0$ | **NOT SIGNIFICANT (Noise)** |
+| **Arm 2 vs Arm 1 ($n\text{chunk1}=1$)** | Prefill | $\mathbf{+8.325\text{ t/s}}$ | $2.624$ | $\mathbf{5.248\text{ t/s}}$ | $\mathbf{3.17 > 2.0}$ | **SIGNIFICANT ($z = 3.17$) ✓** |
+
 3. **Pruning Dead Code from Technique #55:**
    - Dead parameter `bool prefill_head_alias` in [src/llama-cparams.h#L60](file:///home/sandeep/dev/sandwich/sandwich-engine/src/llama-cparams.h#L60) is unread across the engine.
    - Header [src/ds4_engram_io.hpp](file:///home/sandeep/dev/sandwich/sandwich-engine/src/ds4_engram_io.hpp) has zero includes in any engine build target.
