@@ -113,7 +113,6 @@ To achieve maximum inference throughput while remaining safely within physical h
 | **Shipped HEAD vs Control (Primary Pairwise All-5)** | Prefill | $+3.940\text{ t/s}$ | $s_p = 13.029, SE = 5.827$ | $t = 0.68, p = 0.53$ (df=4) | Null / Matched ($\approx 479\text{ t/s}$) |
 
    - **Empirical Summary:** In 5 out of 5 interleaved pairs, Shipped HEAD strictly outperformed Arm 0 ($+4.30, +1.70, +2.60, +1.40, +1.90\text{ t/s}$). Shipped HEAD peaks at **$33.10\text{ t/s}$ decode** and reproduces the **$484.35\text{ t/s}$ prefill capability** (reaches $486.9\text{ t/s}$), delivering both speedups concurrently with zero regression.
-   - **Empirical Arbitration:** In 5 out of 5 interleaved pairs, Arm 1 strictly outperformed Arm 0 ($+2.0, +1.5, +2.0, +1.9, +2.5\text{ t/s}$). Sequential grouping is confirmed to accelerate decode by $\approx +1.98\text{ t/s}$ under clean idle conditions.
    - **VRAM & Bit-Exactness:** Peak VRAM strictly 6,576 MiB across all 10 runs (524 MiB safe headroom). Pure-token SHA bit-exact 10/10 (`481b2a7aea43731e...`).
 2. **Formal Deprecation ADR for Technique #44:** Technique #44 (Turbo2 uniform 2-bit quantization) is retired in the confidence ledger, but `GGML_TYPE_TURBO2_0` type definitions and template instantiations remain in CUDA kernels. A formal ADR should govern its removal.
 3. **Pruning Dead Code from Technique #55:**
