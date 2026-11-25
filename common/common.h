@@ -1106,6 +1106,8 @@ struct common_gguf_info {
 common_gguf_info common_get_gguf_info(const std::string & fname);
 
 // Project Sandwich: Architecture-aware auto-dispatch
+uint64_t sandwich_total_gguf_file_bytes(const std::string & primary_path, const struct gguf_context * ctx = nullptr);
+uint64_t sandwich_total_model_file_bytes(const common_params_model & model, const struct gguf_context * ctx = nullptr);
 void sandwich_auto_dispatch(common_params & params);
 
 typedef void (*sandwich_autotune_fn_t)(const std::string & model_path, int ctx_size);

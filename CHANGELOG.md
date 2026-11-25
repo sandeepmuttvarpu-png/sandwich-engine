@@ -80,6 +80,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Honored explicit `--spec-type none` (`has_explicit_non_model_spec`) in the dense drafter scanner and N-gram fallback, and retained partial GPU layer offload (`optimal_layers > 0`) rather than forcing `push_to_ram` (`-ngl 0`) on `<= 30%` fit ratios (`-ngl 16`, `5,689 MiB` VRAM on Gemma-4-31B-it QAT).
 - **MoE Online Warm-Up Auto-Tuning Gate (`SANDWICH_AUTOTUNE_DISABLE`):**
   - Wired `SANDWICH_AUTOTUNE_DISABLE` into `llama_context` initialization (`src/llama-context.cpp`) so `--autotune-disable` or `SANDWICH_AUTOTUNE_DISABLE=1` disables both kernel-variant autotuning and live MoE hot-expert warm-up repacking (`repack_moe_expert_cache`), keeping autotune-disabled baseline runs strictly static.
+- **Multi-Shard GGUF File Size Aggregation (`--sandwich-auto` & `ModelScanner`):**
+  - Added `sandwich_total_gguf_file_bytes()` / `sandwich_total_model_file_bytes()` in `common/common.cpp` and wired them into `sandwich_auto_dispatch()`, `sandwich_calculate_optimal_layers()`, and `ModelScanner::inspect_gguf_file()` (`src/dispatch/model_scanner.cpp`), eliminating shard-1 size underestimation on split checkpoints such as `Qwen3.8-Flash-Next` (`44.09 GB` shard 1 vs `70.91 GB` total).
+  - Added `test_multi_shard_size_aggregation()` in `tests/test-sandwich-dispatch.cpp`.
 
 ### Removed
 - **Legacy DUI/TUI Implementation:**

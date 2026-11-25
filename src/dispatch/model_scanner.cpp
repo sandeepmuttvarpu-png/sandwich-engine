@@ -1,5 +1,6 @@
 #include "model_scanner.hpp"
 #include "hardware_profiler.hpp"
+#include "common.h"
 
 #include <nlohmann/json.hpp>
 
@@ -196,15 +197,16 @@ void ModelScanner::parse_heuristics_from_filename(const std::string & filename, 
 
 bool ModelScanner::inspect_gguf_file(const std::string & file_path, ModelMetadata & out_meta) {
     std::error_code ec;
-    uintmax_t sz = fs::file_size(file_path, ec);
-    if (ec || sz < 1024) {
+    uintmax_t single_sz = fs::file_size(file_path, ec);
+    if (ec || single_sz < 1024) {
         return false;
     }
 
+    const uint64_t sz = sandwich_total_gguf_file_bytes(file_path);
     out_meta.file_path = file_path;
     out_meta.filename  = fs::path(file_path).filename().string();
-    out_meta.size_bytes = sz;
-    out_meta.size_gb    = static_cast<double>(sz) / (1024.0 * 1024.0 * 1024.0);
+    out_meta.size_bytes = sz > 0 ? sz : (uint64_t) single_sz;
+    out_meta.size_gb    = static_cast<double>(out_meta.size_bytes) / (1024.0 * 1024.0 * 1024.0);
 
     auto ftime = fs::last_write_time(file_path, ec);
     if (!ec) {

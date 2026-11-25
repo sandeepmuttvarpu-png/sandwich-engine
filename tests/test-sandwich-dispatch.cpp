@@ -7,10 +7,13 @@
 #include "flash_decoding_scheduler.hpp"
 #include "gpudirect_storage.hpp"
 #include "sandwich_tui_backend.h"
+#include "common.h"
 
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
+#include <fstream>
 #include <vector>
 #include <string>
 #include <cmath>
@@ -631,6 +634,52 @@ static void test_strata_backend() {
     printf("  [PASS] test_strata_backend\n");
 }
 
+static void test_multi_shard_size_aggregation() {
+    printf("[test_multi_shard_size_aggregation] Starting...\n");
+    namespace fs = std::filesystem;
+
+    const fs::path tmp_dir = fs::temp_directory_path() / ("sandwich_shard_test_" + std::to_string((int) getpid()));
+    fs::remove_all(tmp_dir);
+    fs::create_directories(tmp_dir);
+
+    auto write_dummy = [](const fs::path & p, size_t nbytes) {
+        std::ofstream f(p, std::ios::binary);
+        SANDWICH_TEST_CHECK(f.is_open());
+        std::vector<char> buf(nbytes, 'S');
+        f.write(buf.data(), (std::streamsize) buf.size());
+        SANDWICH_TEST_CHECK(f.good());
+    };
+
+    // 1. Unsharded file
+    const fs::path single_path = tmp_dir / "model-single.gguf";
+    write_dummy(single_path, 4096);
+    SANDWICH_TEST_CHECK(sandwich_total_gguf_file_bytes(single_path.string()) == 4096);
+
+    // 2. Canonical split naming (-00001-of-00002.gguf + -00002-of-00002.gguf) with only primary path passed
+    const fs::path shard1 = tmp_dir / "Qwen3.8-Flash-Next-Q4_K_S-00001-of-00002.gguf";
+    const fs::path shard2 = tmp_dir / "Qwen3.8-Flash-Next-Q4_K_S-00002-of-00002.gguf";
+    write_dummy(shard1, 10000);
+    write_dummy(shard2, 6100);
+
+    common_params_model split_model;
+    split_model.path = shard1.string();
+    SANDWICH_TEST_CHECK(sandwich_total_gguf_file_bytes(shard1.string()) == 16100);
+    SANDWICH_TEST_CHECK(sandwich_total_model_file_bytes(split_model) == 16100);
+
+    // 3. Explicit shards list with duplicate path is deduplicated cleanly
+    common_params_model explicit_model;
+    explicit_model.path = shard1.string();
+    explicit_model.shards = { shard1.string(), shard2.string(), shard2.string() };
+    SANDWICH_TEST_CHECK(sandwich_total_model_file_bytes(explicit_model) == 16100);
+
+    // 4. Missing sibling shard gracefully sums existing shards
+    fs::remove(shard2);
+    SANDWICH_TEST_CHECK(sandwich_total_gguf_file_bytes(shard1.string()) == 10000);
+
+    fs::remove_all(tmp_dir);
+    printf("  [PASS] test_multi_shard_size_aggregation\n");
+}
+
 int main() {
     printf("=== Running sandwich.cpp Dispatch Subsystem Unit Tests ===\n");
     test_ram_estimator();
@@ -642,6 +691,7 @@ int main() {
     test_flash_decoding_scheduler();
     test_gpudirect_storage();
     test_strata_backend();
+    test_multi_shard_size_aggregation();
     printf("=== All Sandwich Dispatch Tests Passed Successfully! ===\n");
     return 0;
 }

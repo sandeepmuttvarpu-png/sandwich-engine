@@ -1486,14 +1486,115 @@ static std::string sandwich_find_compatible_drafter(
     return best_candidate;
 }
 
-static int32_t sandwich_calculate_optimal_layers(
-    const struct gguf_context * ctx,
-    const std::string & model_path,
-    const std::string & arch,
-    int64_t vram_budget_mb) {
+static std::vector<std::string> sandwich_expand_split_shard_paths(
+    const std::vector<std::string> & initial_paths,
+    const struct gguf_context * ctx) {
+
+    std::vector<std::string> candidate_paths;
+    candidate_paths.reserve(initial_paths.size());
+    for (const auto & p : initial_paths) {
+        if (!p.empty() && std::find(candidate_paths.begin(), candidate_paths.end(), p) == candidate_paths.end()) {
+            candidate_paths.push_back(p);
+        }
+    }
+    if (candidate_paths.empty() || candidate_paths.size() > 1) {
+        return candidate_paths;
+    }
+
+    const std::string & primary = candidate_paths[0];
+    int32_t split_no    = -1;
+    int32_t split_count = 0;
+
+    if (ctx != nullptr) {
+        const int64_t k_cnt = gguf_find_key(ctx, "split.count");
+        const int64_t k_no  = gguf_find_key(ctx, "split.no");
+        if (k_cnt >= 0) {
+            split_count = (int32_t) sandwich_get_kv_i64(ctx, k_cnt);
+        }
+        if (k_no >= 0) {
+            split_no = (int32_t) sandwich_get_kv_i64(ctx, k_no);
+        }
+    }
+
+    // Fallback: parse canonical "-NNNNN-of-MMMMM.gguf" suffix (20 chars, 1-based shard index)
+    static const std::string ext    = ".gguf";
+    static const std::string of_tok = "-of-";
+    if ((split_count <= 1 || split_no < 0) && primary.size() > 20 &&
+        primary.compare(primary.size() - ext.size(), ext.size(), ext) == 0) {
+        const size_t suffix_start = primary.size() - 20;
+        if (primary[suffix_start] == '-' &&
+            primary.compare(suffix_start + 6, of_tok.size(), of_tok) == 0) {
+            auto parse_5 = [](const std::string & s, size_t off) -> int32_t {
+                int32_t val = 0;
+                for (size_t i = 0; i < 5; ++i) {
+                    const char c = s[off + i];
+                    if (c < '0' || c > '9') return -1;
+                    val = val * 10 + (c - '0');
+                }
+                return val;
+            };
+            const int32_t idx_1 = parse_5(primary, suffix_start + 1);
+            const int32_t cnt   = parse_5(primary, suffix_start + 10);
+            if (idx_1 >= 1 && cnt > 1 && idx_1 <= cnt) {
+                split_no    = idx_1 - 1;
+                split_count = cnt;
+            }
+        }
+    }
+
+    if (split_count > 1 && split_no >= 0 && split_no < split_count) {
+        std::vector<char> buf(std::max<size_t>(primary.size() + 64, 4096), 0);
+        const int32_t plen = llama_split_prefix(buf.data(), buf.size(), primary.c_str(), split_no, split_count);
+        if (plen > 0) {
+            const std::string prefix(buf.data(), (size_t) plen);
+            std::vector<std::string> expanded;
+            expanded.reserve((size_t) split_count);
+            for (int32_t i = 0; i < split_count; ++i) {
+                std::fill(buf.begin(), buf.end(), 0);
+                const int32_t slen = llama_split_path(buf.data(), buf.size(), prefix.c_str(), i, split_count);
+                if (slen > 0) {
+                    expanded.emplace_back(buf.data(), (size_t) slen);
+                }
+            }
+            if (!expanded.empty()) {
+                return expanded;
+            }
+        }
+    }
+
+    return candidate_paths;
+}
+
+static uint64_t sandwich_sum_gguf_shard_bytes(
+    const std::vector<std::string> & initial_paths,
+    const struct gguf_context * ctx) {
 
     namespace fs = std::filesystem;
-    std::error_code ec;
+    const auto paths = sandwich_expand_split_shard_paths(initial_paths, ctx);
+    uint64_t total_bytes = 0;
+    for (const auto & p : paths) {
+        std::error_code ec;
+        uintmax_t sz = fs::file_size(p, ec);
+        if (!ec) {
+            total_bytes += (uint64_t) sz;
+        }
+    }
+    return total_bytes;
+}
+
+uint64_t sandwich_total_gguf_file_bytes(const std::string & primary_path, const struct gguf_context * ctx) {
+    return sandwich_sum_gguf_shard_bytes({ primary_path }, ctx);
+}
+
+uint64_t sandwich_total_model_file_bytes(const common_params_model & model, const struct gguf_context * ctx) {
+    return sandwich_sum_gguf_shard_bytes(model.get_paths(), ctx);
+}
+
+static int32_t sandwich_calculate_optimal_layers(
+    const struct gguf_context * ctx,
+    uint64_t file_bytes,
+    const std::string & arch,
+    int64_t vram_budget_mb) {
 
     std::string key_block_count = arch + ".block_count";
     int64_t block_id = gguf_find_key(ctx, key_block_count.c_str());
@@ -1502,8 +1603,7 @@ static int32_t sandwich_calculate_optimal_layers(
         return 18; // Safe fallback
     }
 
-    uintmax_t file_bytes = fs::file_size(model_path, ec);
-    if (ec || file_bytes == 0) {
+    if (file_bytes == 0) {
         return 18;
     }
 
@@ -1729,9 +1829,7 @@ void sandwich_auto_dispatch(common_params & params) {
         }
     }
 
-    std::error_code msize_ec;
-    uintmax_t file_bytes = std::filesystem::file_size(params.model.path, msize_ec);
-    if (msize_ec) file_bytes = 0;
+    const uint64_t file_bytes = sandwich_total_model_file_bytes(params.model, gguf_ctx.get());
     uint64_t approx_layer_bytes = (total_blocks > 0 && file_bytes > 0) ? (file_bytes / (total_blocks + 1)) : 0;
 
     int32_t ctx_eval = (params.n_ctx > 0) ? params.n_ctx : 4096;
@@ -1827,11 +1925,7 @@ void sandwich_auto_dispatch(common_params & params) {
 
         size_t total_free_vram = gpu_free_vram_b;
 
-        std::error_code ec;
-        uintmax_t model_file_size = std::filesystem::file_size(params.model.path, ec);
-        if (ec) {
-            model_file_size = 0;
-        }
+        const uint64_t model_file_size = file_bytes;
 
         const bool fits_in_vram = (total_free_vram > 0 && model_file_size > 0 && model_file_size + 1536ULL * 1024 * 1024 < total_free_vram);
 
@@ -2062,7 +2156,7 @@ void sandwich_auto_dispatch(common_params & params) {
             int64_t main_budget_mb = safe_vram_cap_mb - drafter_headroom_mb - kv_turbo4_mb;
             if (main_budget_mb < 0) main_budget_mb = 0;
 
-            int32_t optimal_layers = (main_budget_mb > 500) ? sandwich_calculate_optimal_layers(gguf_ctx.get(), params.model.path, model_arch, main_budget_mb) : 0;
+            int32_t optimal_layers = (main_budget_mb > 500) ? sandwich_calculate_optimal_layers(gguf_ctx.get(), file_bytes, model_arch, main_budget_mb) : 0;
             float offload_ratio = 0.0f;
             float ram_ratio = 1.0f;
             int32_t target_gpu_layers = resolve_dense_offload(optimal_layers, offload_ratio, ram_ratio);
@@ -2227,7 +2321,7 @@ void sandwich_auto_dispatch(common_params & params) {
             // UNCAPPED VRAM PROFILE (No drafter found)
             int64_t uncapped_budget_mb = safe_vram_cap_mb - kv_turbo4_mb;
             if (uncapped_budget_mb < 0) uncapped_budget_mb = 0;
-            int32_t optimal_layers = (uncapped_budget_mb > 500) ? sandwich_calculate_optimal_layers(gguf_ctx.get(), params.model.path, model_arch, uncapped_budget_mb) : 0;
+            int32_t optimal_layers = (uncapped_budget_mb > 500) ? sandwich_calculate_optimal_layers(gguf_ctx.get(), file_bytes, model_arch, uncapped_budget_mb) : 0;
             float offload_ratio = 0.0f;
             float ram_ratio = 1.0f;
             int32_t target_gpu_layers = resolve_dense_offload(optimal_layers, offload_ratio, ram_ratio);
