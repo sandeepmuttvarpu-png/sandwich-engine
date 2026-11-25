@@ -1,0 +1,55 @@
+{
+  "results": [
+    {
+      "id": "qwen36_repack_gate",
+      "rc": 0,
+      "timed_out": false,
+      "elapsed_s": 13.89,
+      "peak_vram_mib": 6458.0,
+      "peak_vmhwm_mib": 13843.7,
+      "peak_temp_c": 58.38,
+      "resolved_ngl": null,
+      "resolved_threads": 6,
+      "prompt_tps": 274.3,
+      "gen_tps": 21.8,
+      "repack_fired": false,
+      "guard_vram_ok": true,
+      "guard_vmhwm_ok": true,
+      "preview": "ution. Traditional operating system primitives\u2014such as virtual memory paging, demand paging, and POSIX read/write syscalls\u2014were conceived in an era where compute devices operated either as passive peripherals or through isolated memory address spaces managed exclusively by the host kernel. In con ... (truncated)\n\n[Start thinking]\n\nHere's a thinking thinking sequence\n\n1.  **Deconstruct and Analyze the Prompt:**\n    *   *Context:* Modern OS/runtime design for LLMs, boundary between hardware and high-throughput kernel execution.\n    *   *Problem:* Traditional OS primitives (VM, paging, POSIX) vs."
+    },
+    {
+      "id": "muse_glimmer_30b_fixed",
+      "rc": 0,
+      "timed_out": false,
+      "elapsed_s": 38.0,
+      "peak_vram_mib": 6330.0,
+      "peak_vmhwm_mib": 15881.6,
+      "peak_temp_c": 62.66,
+      "resolved_ngl": 18,
+      "resolved_threads": 6,
+      "prompt_tps": 125.9,
+      "gen_tps": 2.8,
+      "repack_fired": false,
+      "guard_vram_ok": true,
+      "guard_vmhwm_ok": true,
+      "preview": "er as passive peripherals or through isolated memory address spaces managed exclusively by the host kernel. In con ... (truncated)\n\n[Start thinking]\n\nThe design of modern operating systems and runtime environments for large language models presents fundamental challenges at the boundary between hardware abstractions and high-throughput kernel execution. Traditional operating system primitives... Analyze the architectural trade-offs between static tensor offloading and dynamic hierarchical caching in heterogeneous accelerator environments, detailing specific implications for latency, throughput"
+    },
+    {
+      "id": "command_r_32b_fixed",
+      "rc": 0,
+      "timed_out": false,
+      "elapsed_s": 45.05,
+      "peak_vram_mib": 6692.0,
+      "peak_vmhwm_mib": 13913.8,
+      "peak_temp_c": 63.09,
+      "resolved_ngl": 15,
+      "resolved_threads": 6,
+      "prompt_tps": 236.7,
+      "gen_tps": 2.0,
+      "repack_fired": false,
+      "guard_vram_ok": true,
+      "guard_vmhwm_ok": true,
+      "preview": "OSIX read/write syscalls\u2014were conceived in an era where compute devices operated either as passive peripherals or through isolated memory address spaces managed exclusively by the host kernel. In con ... (truncated)\nThe design of operating systems and runtime environments for large language models in heterogeneous accelerator environments presents several architectural trade-offs and considerations. Here's an analysis of the trade-offs between static tensor offloading and dynamic hierarchical caching:\n\nLatency:\nStatic tensor offloading involves pre-allocating and offloading tensors to specific"
+    }
+  ]
+}

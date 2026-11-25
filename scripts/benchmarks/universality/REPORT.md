@@ -47,5 +47,17 @@ All four target models were run ($n=3$, 60s cooldown, Jinja chat templates via `
 - **15-Architecture Local Corpus Map (`inventory.json`, `coverage.json`)**:
   - Unsupported upstream architectures: `inkling2_loop` (`Inkling-2-Mini`), `dory` (`NVIDIA-Nemotron-Labs-Dory1.0-4B`).
   - Dense `qwen35` loader assert (`src/llama-model-loader.cpp:1954: GGML_ASSERT(buf_mmap || cur->data)`): `Qwen3.8-27B` and `Bonsai-27B-Q1_0` (`qwen35moe` unaffected).
-  - Multi-shard estimator bug: `qwen4exp` (`Qwen3.8-Flash-Next` 125B, 70.91 GB across 2 shards) sized against shard 1 (`44.09 GB`), breaching both `7,100 MiB` VRAM (`7,220 MiB`) and `16,552 MiB` VmHWM (`18,018 MiB`).
-  - Open follow-ups filed in `docs/history/notes.md` (Sections 7–9): `SANDWICH_AUTOTUNE_DISABLE` vs MoE warm-up repack gating (`src/llama-context.cpp:3588`), Gemma-4 Rep 2 nondeterministic `VmHWM` spike (`2,815 MiB` spread), and re-testing `Muse-Glimmer-30B`, `C4AI Command-R` (`600s` timeout), and `Flint Preview` under fixed dispatch.
+  - Multi-shard estimator bug: `qwen4exp` (`Qwen3.8-Flash-Next` 125B, 70.91 GB across 2 shards) sized against shard 1 (`44.09 GB`), breaching both `7,100 MiB` VRAM (`7,220 MiB`) and `16,552 MiB` VmHWM (`18,018 MiB`); fixed via `sandwich_total_gguf_file_bytes` / `sandwich_total_model_file_bytes` in `common/common.cpp` and `src/dispatch/model_scanner.cpp` (`4b583f9e1`).
+  - Open follow-ups remaining in `docs/history/notes.md` (Sections 8–9): Gemma-4 Rep 2 nondeterministic `VmHWM` spike (`2,815 MiB` spread), and `Flint Preview` Tier 2 `moe_warm_ram_mb` + `mmap` sizing.
+
+---
+
+## 3. Post-Fix Re-Examination of Open Items (`open_items_check.json`)
+
+Diagnostic `n=1` verification runs (`prompt_512.txt`, `SANDWICH_AUTOTUNE_DISABLE=1`, `--spec-type none` on dense models, idle GPU floor `2 MiB`) via `run_open_items.py` after `3ca410c28` and `4b583f9e1`:
+
+| Target | Configuration | Elapsed | Prefill | Decode | Peak VRAM ($\le 7,100$) | Peak VmHWM ($\le 16,552$) | Warm-Up Repack | Verdict |
+|---|---|---|---|---|---|---|---|---|
+| **Qwen3.6-35B-A3B** (`qwen35moe`) | `-ngl 14 -ngld 99`, slots 16, warm 8000, `-t 6`, `SANDWICH_AUTOTUNE_DISABLE=1` | `13.89 s` | `274.3 t/s` | `21.8 t/s` | **6,458.0 MiB** ✓ | **13,843.7 MiB** ✓ | **`false` ✓** | **REPACK SUPPRESSED + CLEAN GUARDS ✓** |
+| **Muse-Glimmer-30B** (`muse-glimmer`, dense) | `--sandwich-auto --spec-type none` (`-ngl 18`, `-t 6`) | `38.00 s` | `125.9 t/s` | `2.8 t/s` | **6,330.0 MiB** ✓ | **15,881.6 MiB** ✓ | `false` | **COHERENT + CLEAN GUARDS ✓** *(was `17,762 MiB` / `-ngl 0`)* |
+| **C4AI Command-R 08-2024** (`command-r`, dense) | `--sandwich-auto --spec-type none` (`-ngl 15`, `-t 6`, `600s` cap) | `45.05 s` | `236.7 t/s` | `2.0 t/s` | **6,692.0 MiB** ✓ | **13,913.8 MiB** ✓ | `false` | **COHERENT + CLEAN GUARDS ✓** *(was `180s` timeout @ `-t 12`)* |

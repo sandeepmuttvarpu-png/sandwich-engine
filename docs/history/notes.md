@@ -43,8 +43,8 @@ This document collects ongoing observational notes, future refinement tasks, and
   - Rep 3: `VmHWM = 16,324 MiB` ✓ (`tg = 2.3 t/s`)
 - **Action:** Investigate host buffer / `mmap` page-in / `ram_cache` allocation nondeterminism causing the Rep 2 `VmHWM` jump and decode drop.
 
-## 9. Open Item: Re-Examination of `Muse-Glimmer-30B`, `C4AI Command-R 08-2024`, and `Flint Preview`
+## 9. Re-Examination of `Muse-Glimmer-30B`, `C4AI Command-R 08-2024`, and `Flint Preview`
 - **Scope:** In the pre-fix sweep (`coverage.json`, `throughput.json` marked `INSTRUMENT-INVALID`), **every dense model row** was impacted by the `common/common.cpp` `push_to_ram` (`-ngl 0`) and silent `jit_down_quant = true` (`Q2_K`) defects, while `Flint Preview` ran the MoE branch:
-  - `Muse-Glimmer-30B` (`muse-glimmer`, 27.85B, dense): Phase 1 & invalid Pass 2 (`3.20 t/s`, `17,762 MiB` VmHWM) ran with `-ngl 0` and silent `Q2_K` weights; needs re-test under fixed hybrid GPU offload (`resolve_dense_offload`).
-  - `C4AI Command-R 08-2024` (`command-r`, 32.30B, dense): Timed out at `180s` (`TIMEOUT — RE-RUN AT 600s`) under pre-fix dense CPU-fallback + `12`-thread E-core pool; needs a `600s` re-run under fixed dispatch (`-t 6`, hybrid GPU offload, no silent `Q2_K`).
-  - `Flint Preview` (`flint`, 39.79B, MoE): Took the MoE branch (`12.70 t/s`, `4,192 MiB` VRAM), but breached `VmHWM` (`16,775` in Phase 1; `18,229 MiB` in Pass 2) — inspect Tier 2 `moe_warm_ram_mb` + `mmap` sizing.
+  - `Muse-Glimmer-30B` (`muse-glimmer`, 27.85B, dense) — **RESOLVED (`open_items_check.json`)**: Pre-fix Pass 2 (`3.20 t/s`, `-ngl 0`, `17,762 MiB` VmHWM) vs fixed `--sandwich-auto --spec-type none` (`-ngl 18`, `-t 6`, `SANDWICH_AUTOTUNE_DISABLE=1`): completed in `38.0 s`, `125.9 t/s` pp / `2.8 t/s` tg, `6,330.0 MiB` VRAM ($\le 7,100$ ✓), `15,881.6 MiB` VmHWM ($\le 16,552$ ✓), coherent `[Start thinking]` output.
+  - `C4AI Command-R 08-2024` (`command-r`, 32.30B, dense) — **RESOLVED (`open_items_check.json`)**: Pre-fix timed out at `180 s` (`-t 12` E-core pool, `-ngl 0`) vs fixed `--sandwich-auto --spec-type none` (`-ngl 15`, `-t 6`, `600s` timeout): completed in `45.05 s`, `236.7 t/s` pp / `2.0 t/s` tg, `6,692.0 MiB` VRAM ($\le 7,100$ ✓), `13,913.8 MiB` VmHWM ($\le 16,552$ ✓), coherent analysis.
+  - `Flint Preview` (`flint`, 39.79B, MoE) — **OPEN**: Took the MoE branch (`12.70 t/s`, `4,192 MiB` VRAM), but breached `VmHWM` (`16,775` in Phase 1; `18,229 MiB` in Pass 2) — still needs Tier 2 `moe_warm_ram_mb` + `mmap` sizing inspection.
