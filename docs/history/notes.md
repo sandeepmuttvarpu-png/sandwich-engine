@@ -27,3 +27,24 @@ This document collects ongoing observational notes, future refinement tasks, and
 ## 6. Understory & LM Studio Operational Protocol
 - Understory MCP semantic queries require LM Studio's local server active on port 1234 (`lms server start`).
 - **Operational Protocol:** Always start LM Studio server for memory maintenance and retrieval queries, but explicitly unload all resident models (`lms unload --all`) before running GPU benchmarks or generation parity tests (`verify_generation_parity.py`) to guarantee an idle GPU memory floor (2 MiB used) and eliminate VRAM contention.
+
+## 7. Open Defect: `SANDWICH_AUTOTUNE_DISABLE=1` Does Not Gate MoE Online Warm-Up Auto-Tuning Repack
+- **Symptom:** Running `llama-cli` with `SANDWICH_AUTOTUNE_DISABLE=1` (e.g. certified benchmarks in `spec_arm0_vs_head.json` and Universality Pass 2) still triggers `Online Warm-Up Auto-Tuning: Re-packed 28 layers into VRAM in ~70–80 ms` on `stderr` during Rep 1 / cold prefill.
+- **Root Cause:** Two independent tuning subsystems share the "autotune" concept, but only kernel-variant tuning checks `SANDWICH_AUTOTUNE_DISABLE`:
+  - `src/dispatch/autotune.cpp:43` (`run_autotune`) and `ggml/src/ggml-cuda/sandwich-kernel-cache.cuh:198` (`Cache::enabled()`) check `SANDWICH_AUTOTUNE_DISABLE`.
+  - `src/llama-context.cpp:3588` (`if (!model.has_moe_cache_profile() && model.has_moe_expert_cache() && !m_warmup_repacked)`) performs the live hot-expert `repack_moe_expert_cache(live_freq)` without checking `SANDWICH_AUTOTUNE_DISABLE` (or a dedicated `SANDWICH_WARMUP_REPACK_DISABLE` gate).
+- **Impact:** Any ablation or regression arm intended to run with "autotune disabled" still mutates MoE slot placement after 500 evaluations when hit rate < 65%, complicating cold-vs-warm latency attribution.
+- **Action:** Wire `SANDWICH_AUTOTUNE_DISABLE` (or an explicit sub-flag) into `src/llama-context.cpp:3588` as a separate tracked fix after validating baseline parity against `7958b1541`.
+
+## 8. Open Item: Gemma-4-31B-it QAT Nondeterministic `VmHWM` Spike
+- **Symptom:** In the verified 4-model Pass 2 re-run (`scripts/benchmarks/universality/throughput_v2_verified.json`), `Gemma-4-31B-it QAT` (`-ngl 16`, `5,600–5,689 MiB` VRAM, `--spec-type none`) exhibited a `2,815 MiB` `VmHWM` spread across three identical reps:
+  - Rep 1: `VmHWM = 14,539 MiB` ✓ (`tg = 2.4 t/s`)
+  - Rep 2: `VmHWM = 17,354 MiB` (**+802 MiB** over 16,552 guard; `tg = 1.4 t/s`)
+  - Rep 3: `VmHWM = 16,324 MiB` ✓ (`tg = 2.3 t/s`)
+- **Action:** Investigate host buffer / `mmap` page-in / `ram_cache` allocation nondeterminism causing the Rep 2 `VmHWM` jump and decode drop.
+
+## 9. Open Item: Re-Examination of `Muse-Glimmer-30B`, `C4AI Command-R 08-2024`, and `Flint Preview`
+- **Scope:** In the pre-fix sweep (`coverage.json`, `throughput.json` marked `INSTRUMENT-INVALID`), **every dense model row** was impacted by the `common/common.cpp` `push_to_ram` (`-ngl 0`) and silent `jit_down_quant = true` (`Q2_K`) defects, while `Flint Preview` ran the MoE branch:
+  - `Muse-Glimmer-30B` (`muse-glimmer`, 27.85B, dense): Phase 1 & invalid Pass 2 (`3.20 t/s`, `17,762 MiB` VmHWM) ran with `-ngl 0` and silent `Q2_K` weights; needs re-test under fixed hybrid GPU offload (`resolve_dense_offload`).
+  - `C4AI Command-R 08-2024` (`command-r`, 32.30B, dense): Timed out at `180s` (`TIMEOUT — RE-RUN AT 600s`) under pre-fix dense CPU-fallback + `12`-thread E-core pool; needs a `600s` re-run under fixed dispatch (`-t 6`, hybrid GPU offload, no silent `Q2_K`).
+  - `Flint Preview` (`flint`, 39.79B, MoE): Took the MoE branch (`12.70 t/s`, `4,192 MiB` VRAM), but breached `VmHWM` (`16,775` in Phase 1; `18,229 MiB` in Pass 2) — inspect Tier 2 `moe_warm_ram_mb` + `mmap` sizing.
