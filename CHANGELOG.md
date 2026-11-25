@@ -71,6 +71,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Test Suite Extensions:**
   - Added unit test suite `test_strata_backend()` in `tests/test-sandwich-dispatch.cpp` verifying backend telemetry, model discovery, whitespace path quoting, and parameter synthesis.
   - Added configuration invariant defaults validation and boundary tests.
+  - Added `test_dense_auto_dispatch_regressions()` in `tests/test-sandwich-dispatch.cpp` guarding dense full-fit (`-1 -> 99`), `<= 30%` partial offload retention, `jit_down_quant == false` preservation, and explicit `--spec-type none` handling.
 
 ### Fixed
 - **Dense Auto-Dispatch Silent `Q2_K` Weight Down-Quantization (`--sandwich-auto` Correctness):**

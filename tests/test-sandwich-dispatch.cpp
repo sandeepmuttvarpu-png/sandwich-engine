@@ -680,6 +680,107 @@ static void test_multi_shard_size_aggregation() {
     printf("  [PASS] test_multi_shard_size_aggregation\n");
 }
 
+static void test_dense_auto_dispatch_regressions() {
+    printf("[test_dense_auto_dispatch_regressions] Starting...\n");
+    namespace fs = std::filesystem;
+
+    const fs::path tmp_dir = fs::temp_directory_path() / ("sandwich_dense_dispatch_test_" + std::to_string((int) getpid()));
+    fs::remove_all(tmp_dir);
+    fs::create_directories(tmp_dir);
+
+    auto write_synthetic_dense_gguf = [](const fs::path & p, uint32_t blocks, uint64_t sparse_total_bytes) {
+        struct gguf_context * g = gguf_init_empty();
+        SANDWICH_TEST_CHECK(g != nullptr);
+        gguf_set_val_str(g, "general.architecture", "llama");
+        gguf_set_val_u32(g, "llama.block_count", blocks);
+        gguf_set_val_u32(g, "llama.attention.head_count", 32);
+        gguf_set_val_u32(g, "llama.attention.head_count_kv", 8);
+        gguf_set_val_u32(g, "llama.embedding_length", 4096);
+        gguf_set_val_str(g, "tokenizer.ggml.model", "llama");
+        const char * toks[2] = { "<unk>", "<s>" };
+        gguf_set_arr_str(g, "tokenizer.ggml.tokens", toks, 2);
+        SANDWICH_TEST_CHECK(gguf_write_to_file(g, p.c_str(), /*only_meta =*/ true));
+        gguf_free(g);
+        if (sparse_total_bytes > 0) {
+            const uint64_t actual = (uint64_t) fs::file_size(p);
+            if (sparse_total_bytes > actual) {
+                fs::resize_file(p, sparse_total_bytes);
+            }
+        }
+    };
+
+    const char * prev_disable = std::getenv("SANDWICH_AUTOTUNE_DISABLE");
+    const std::string saved_disable = prev_disable ? prev_disable : "";
+    setenv("SANDWICH_AUTOTUNE_DISABLE", "1", 1);
+
+    const RealtimeVRAMStats vram = RAMEstimator::sample_realtime_vram();
+
+    // 1. Compatible drafter sitting beside target + full-fit (-1 sentinel) dense GGUF (~2 GiB sparse)
+    const fs::path small_target = tmp_dir / "small-dense-7b.gguf";
+    const fs::path small_draft  = tmp_dir / "small-dense-draft.gguf";
+    write_synthetic_dense_gguf(small_target, 32, 2000ULL * 1024ULL * 1024ULL);
+    write_synthetic_dense_gguf(small_draft,   4,  300ULL * 1024ULL * 1024ULL);
+
+    {
+        common_params params;
+        params.sandwich_auto = true;
+        params.model.path = small_target.string();
+        params.n_ctx = 4096;
+        params.jit_down_quant = false;
+        params.speculative.types = { COMMON_SPECULATIVE_TYPE_NONE };
+
+        sandwich_auto_dispatch(params);
+
+        // Correctness: CPU fallback must never silently force Q2_K down-quantization
+        SANDWICH_TEST_CHECK(params.sandwich_dispatched);
+        SANDWICH_TEST_CHECK(!params.jit_down_quant);
+        // Flag contract: explicit `--spec-type none` must disable drafter scan and N-gram fallback
+        SANDWICH_TEST_CHECK(params.speculative.draft.mparams.path.empty());
+        SANDWICH_TEST_CHECK(params.speculative.types.size() == 1 &&
+                            params.speculative.types[0] == COMMON_SPECULATIVE_TYPE_NONE);
+        if (vram.cuda_available && vram.free_mb >= 4000) {
+            // Sentinel -1 (100% VRAM fit) must resolve to full GPU offload (99), never 0
+            SANDWICH_TEST_CHECK(params.n_gpu_layers == 99);
+            printf("  Full-fit dense offload: ngl=%d, jit_down_quant=%d\n",
+                   params.n_gpu_layers, (int) params.jit_down_quant);
+        }
+    }
+
+    // 2. Large partial-fit dense GGUF (28 GiB sparse, 60 blocks): <= 30% fit ratio must retain
+    //    partial GPU layers (never push_to_ram -> ngl 0) and preserve jit_down_quant = false.
+    const fs::path large_target = tmp_dir / "large-dense-30b.gguf";
+    write_synthetic_dense_gguf(large_target, 60, 28000ULL * 1024ULL * 1024ULL);
+    {
+        common_params params;
+        params.sandwich_auto = true;
+        params.model.path = large_target.string();
+        params.n_ctx = 4096;
+        params.jit_down_quant = false;
+        params.speculative.types = { COMMON_SPECULATIVE_TYPE_NONE };
+
+        sandwich_auto_dispatch(params);
+
+        SANDWICH_TEST_CHECK(params.sandwich_dispatched);
+        SANDWICH_TEST_CHECK(!params.jit_down_quant);
+        SANDWICH_TEST_CHECK(params.speculative.types.size() == 1 &&
+                            params.speculative.types[0] == COMMON_SPECULATIVE_TYPE_NONE);
+        if (vram.cuda_available && vram.free_mb >= 4000) {
+            SANDWICH_TEST_CHECK(params.n_gpu_layers > 0 && params.n_gpu_layers < 60);
+            printf("  Partial-fit dense offload: ngl=%d/60, jit_down_quant=%d\n",
+                   params.n_gpu_layers, (int) params.jit_down_quant);
+        }
+    }
+
+    if (prev_disable) {
+        setenv("SANDWICH_AUTOTUNE_DISABLE", saved_disable.c_str(), 1);
+    } else {
+        unsetenv("SANDWICH_AUTOTUNE_DISABLE");
+    }
+
+    fs::remove_all(tmp_dir);
+    printf("  [PASS] test_dense_auto_dispatch_regressions\n");
+}
+
 int main() {
     printf("=== Running sandwich.cpp Dispatch Subsystem Unit Tests ===\n");
     test_ram_estimator();
@@ -692,6 +793,7 @@ int main() {
     test_gpudirect_storage();
     test_strata_backend();
     test_multi_shard_size_aggregation();
+    test_dense_auto_dispatch_regressions();
     printf("=== All Sandwich Dispatch Tests Passed Successfully! ===\n");
     return 0;
 }
