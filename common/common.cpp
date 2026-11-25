@@ -2212,8 +2212,7 @@ void sandwich_auto_dispatch(common_params & params) {
             params.spec_tree_width   = 2;
             params.spec_tree_p_split = 0.15f;
 
-            // Phase 8: Dense Wing Overhaul
-            params.jit_down_quant    = true;
+            // Phase 8: Dense Wing Overhaul (preserve on-disk weight precision unless --jit-down-quant is explicitly enabled)
             params.thp_align         = true;
             params.early_exit_thresh = predict_asymmetric_split ? 0.0f : 0.92f;
         } else {
@@ -2282,7 +2281,6 @@ void sandwich_auto_dispatch(common_params & params) {
             LOG_INF("   -> KV Cache Target: %s (k=%s, v=%s, reason: %s)\n",
                     route_kv_to_host ? "HOST DDR5 RAM" : "GPU VRAM Offloaded",
                     ggml_type_name(target_kv_type), ggml_type_name(target_kv_type), kv_reason.c_str());
-            LOG_INF("   -> Phase 8: In-Memory JIT CPU Layer Down-Quantization ACTIVE (target: Q2_K, DDR5 9GB -> 4.8GB)\n");
             LOG_INF("   -> Phase 8: 2MB Transparent HugePages (THP) Alignment ACTIVE (madvise MADV_HUGEPAGE)\n");
 
             params.n_gpu_layers          = target_gpu_layers;
@@ -2299,7 +2297,6 @@ void sandwich_auto_dispatch(common_params & params) {
             params.cache_type_k          = target_kv_type;
             params.cache_type_v          = target_kv_type;
             params.flash_attn_type       = LLAMA_FLASH_ATTN_TYPE_ENABLED;
-            params.jit_down_quant        = true;
             params.thp_align             = true;
 
             // Zero-VRAM Context N-Gram Prompt Lookup Speculative Decoding

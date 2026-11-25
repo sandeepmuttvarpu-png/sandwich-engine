@@ -72,6 +72,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added unit test suite `test_strata_backend()` in `tests/test-sandwich-dispatch.cpp` verifying backend telemetry, model discovery, whitespace path quoting, and parameter synthesis.
   - Added configuration invariant defaults validation and boundary tests.
 
+### Fixed
+- **Dense Auto-Dispatch Silent `Q2_K` Weight Down-Quantization (`--sandwich-auto` Correctness):**
+  - Removed forced `params.jit_down_quant = true` in both dense branches of `sandwich_auto_dispatch()` (`common/common.cpp`), which previously re-quantized CPU-resident weights on load to 2-bit `Q2_K` (`src/llama-model-loader.cpp:1527-1549`) without warning or `--jit-down-quant`, silently degrading dense model generation into repetition loops (`-\n\n-` on Dolphin-2.8-Mistral-7B, `The same same...` on Gemma-4-31B-it QAT).
+
 ### Removed
 - **Legacy DUI/TUI Implementation:**
   - Completely purged broken legacy terminal wizard code (`tui_wizard.*`), removing dead code paths with zero residual references across `src/`, `tools/`, and `common/`.
