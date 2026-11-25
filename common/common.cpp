@@ -1801,6 +1801,27 @@ void sandwich_auto_dispatch(common_params & params) {
             is_moe ? "MIXTURE OF EXPERTS (MoE)" : "DENSE TRANSFORMER",
             model_arch.c_str(), expert_count, vocab_size);
 
+    const bool has_explicit_non_model_spec = !params.speculative.types.empty() &&
+        (params.speculative.types[0] == COMMON_SPECULATIVE_TYPE_NGRAM_SIMPLE ||
+         params.speculative.types[0] == COMMON_SPECULATIVE_TYPE_NGRAM_MOD ||
+         params.speculative.types[0] == COMMON_SPECULATIVE_TYPE_NONE);
+
+    auto resolve_dense_offload = [&](int32_t opt_layers, float & offload_ratio, float & ram_ratio) -> int32_t {
+        if (opt_layers < 0) {
+            offload_ratio = 1.0f;
+            ram_ratio = 0.0f;
+            return std::max<int32_t>(99, (int32_t)total_blocks + 1);
+        }
+        if (opt_layers > 0) {
+            offload_ratio = (total_blocks > 0) ? ((float)opt_layers / (float)total_blocks) : 1.0f;
+            ram_ratio = std::max(0.0f, 1.0f - offload_ratio);
+            return opt_layers;
+        }
+        offload_ratio = 0.0f;
+        ram_ratio = 1.0f;
+        return 0;
+    };
+
     if (is_moe) {
         LOG_INF("   -> Policy: MoE Expert Slab Staging Mode\n");
 
@@ -1970,11 +1991,6 @@ void sandwich_auto_dispatch(common_params & params) {
         std::string drafter_path = params.speculative.draft.mparams.path;
         bool drafter_found = !drafter_path.empty();
 
-        const bool has_explicit_non_model_spec = !params.speculative.types.empty() &&
-            (params.speculative.types[0] == COMMON_SPECULATIVE_TYPE_NGRAM_SIMPLE ||
-             params.speculative.types[0] == COMMON_SPECULATIVE_TYPE_NGRAM_MOD ||
-             params.speculative.types[0] == COMMON_SPECULATIVE_TYPE_NONE);
-
         if (!drafter_found && !has_explicit_non_model_spec) {
             drafter_path = sandwich_find_compatible_drafter(params.model.path, model_arch, vocab_size, embedding_length, tok_model);
             if (!drafter_path.empty()) {
@@ -2026,7 +2042,7 @@ void sandwich_auto_dispatch(common_params & params) {
         std::string drafter_path = params.speculative.draft.mparams.path;
         bool drafter_found = !drafter_path.empty();
 
-        if (!drafter_found) {
+        if (!drafter_found && !has_explicit_non_model_spec) {
             LOG_INF("   -> Scanning model directory tree for compatible speculative drafter...\n");
             drafter_path = sandwich_find_compatible_drafter(params.model.path, model_arch, vocab_size, embedding_length, tok_model);
             if (!drafter_path.empty()) {
@@ -2047,23 +2063,15 @@ void sandwich_auto_dispatch(common_params & params) {
             if (main_budget_mb < 0) main_budget_mb = 0;
 
             int32_t optimal_layers = (main_budget_mb > 500) ? sandwich_calculate_optimal_layers(gguf_ctx.get(), params.model.path, model_arch, main_budget_mb) : 0;
-            float offload_ratio = (total_blocks > 0 && optimal_layers > 0) ? ((float)optimal_layers / (float)total_blocks) : 0.0f;
-            float ram_ratio = 1.0f - offload_ratio;
-
-            bool predict_asymmetric_split = false;
-            // Technique #29 & #42: Asymmetric Split Decision Condition (70% RAM Rule)
-            // If >= 70% of a dense model resides in host RAM (offload_ratio <= 0.30f),
-            // eliminate mid-graph PCIe synchronization bubbles by pushing 100% of target weights to RAM!
-            // Raptor Lake P-cores execute contiguous AVX2-VNNI matrix operations without PCIe stalls,
-            // while 100% of GPU VRAM is dedicated to the speculative drafter (180+ t/s) and Split-KV FlashAttention.
-            if (ram_ratio >= 0.70f || offload_ratio <= 0.30f || (offload_ratio <= 0.35f && total_blocks >= 70)) {
-                predict_asymmetric_split = true;
-            }
-
-            int32_t target_gpu_layers = predict_asymmetric_split ? 0 : optimal_layers;
+            float offload_ratio = 0.0f;
+            float ram_ratio = 1.0f;
+            int32_t target_gpu_layers = resolve_dense_offload(optimal_layers, offload_ratio, ram_ratio);
+            // Only use pure-CPU target + GPU drafter split when zero target layers fit in VRAM.
+            bool predict_asymmetric_split = (target_gpu_layers == 0);
+            int64_t offloaded_blocks = (total_blocks > 0) ? std::min<int64_t>(target_gpu_layers, total_blocks) : target_gpu_layers;
             int64_t target_gpu_weight_mb = 0;
-            if (target_gpu_layers > 0 && approx_layer_bytes > 0) {
-                target_gpu_weight_mb = (int64_t)((target_gpu_layers * approx_layer_bytes) / (1024ULL * 1024ULL));
+            if (offloaded_blocks > 0 && approx_layer_bytes > 0) {
+                target_gpu_weight_mb = (int64_t)((offloaded_blocks * approx_layer_bytes) / (1024ULL * 1024ULL));
                 if (vocab_size > 0 && embedding_length > 0) {
                     target_gpu_weight_mb += (vocab_size * embedding_length * 6ULL) / (10ULL * 1024ULL * 1024ULL);
                 }
@@ -2212,7 +2220,7 @@ void sandwich_auto_dispatch(common_params & params) {
             params.spec_tree_width   = 2;
             params.spec_tree_p_split = 0.15f;
 
-            // Phase 8: Dense Wing Overhaul (preserve on-disk weight precision unless --jit-down-quant is explicitly enabled)
+            // Phase 8: Dense Wing Overhaul (preserve weight precision unless user enabled JIT down-quant)
             params.thp_align         = true;
             params.early_exit_thresh = predict_asymmetric_split ? 0.0f : 0.92f;
         } else {
@@ -2220,19 +2228,17 @@ void sandwich_auto_dispatch(common_params & params) {
             int64_t uncapped_budget_mb = safe_vram_cap_mb - kv_turbo4_mb;
             if (uncapped_budget_mb < 0) uncapped_budget_mb = 0;
             int32_t optimal_layers = (uncapped_budget_mb > 500) ? sandwich_calculate_optimal_layers(gguf_ctx.get(), params.model.path, model_arch, uncapped_budget_mb) : 0;
-            float offload_ratio = (total_blocks > 0 && optimal_layers > 0) ? ((float)optimal_layers / (float)total_blocks) : 0.0f;
-            float ram_ratio = 1.0f - offload_ratio;
+            float offload_ratio = 0.0f;
+            float ram_ratio = 1.0f;
+            int32_t target_gpu_layers = resolve_dense_offload(optimal_layers, offload_ratio, ram_ratio);
 
-            // Technique #42: 70% RAM Rule for Dense Models (Zero PCIe Ping-Pong)
-            // If >= 70% of a dense model is lying in RAM (offload_ratio <= 0.30f), push 100% of weights to RAM!
-            // Raptor Lake P-cores (AVX2-VNNI) execute contiguous matrix math without PCIe ping-pong.
-            // Pin KV cache and attention mechanism into GPU VRAM (--split-kv).
-            bool push_to_ram = (ram_ratio >= 0.70f || offload_ratio <= 0.30f);
-            int32_t target_gpu_layers = push_to_ram ? 0 : optimal_layers;
+            // Only fall back to pure-CPU target + GPU split-KV when zero layers fit in VRAM.
+            bool push_to_ram = (target_gpu_layers == 0);
 
+            int64_t offloaded_blocks = (total_blocks > 0) ? std::min<int64_t>(target_gpu_layers, total_blocks) : target_gpu_layers;
             int64_t target_gpu_weight_mb = 0;
-            if (target_gpu_layers > 0 && approx_layer_bytes > 0) {
-                target_gpu_weight_mb = (int64_t)((target_gpu_layers * approx_layer_bytes) / (1024ULL * 1024ULL));
+            if (offloaded_blocks > 0 && approx_layer_bytes > 0) {
+                target_gpu_weight_mb = (int64_t)((offloaded_blocks * approx_layer_bytes) / (1024ULL * 1024ULL));
                 if (vocab_size > 0 && embedding_length > 0) {
                     target_gpu_weight_mb += (vocab_size * embedding_length * 6ULL) / (10ULL * 1024ULL * 1024ULL);
                 }
@@ -2246,7 +2252,7 @@ void sandwich_auto_dispatch(common_params & params) {
             if (push_to_ram) {
                 route_kv_to_host = false; // Pinned to GPU VRAM via Asymmetric Split-KV!
                 target_kv_type = GGML_TYPE_TURBO4_0;
-                kv_reason = "70% RAM Rule (Technique #42): 100% dense weights in CPU DDR5 RAM, KV cache & attention pinned to GPU VRAM (split-kv)";
+                kv_reason = "Zero-layer VRAM fit fallback: dense weights in CPU DDR5 RAM, KV cache pinned to GPU VRAM (split-kv)";
             } else if (params.sandwich_predict) {
                 if (ctx_eval >= 48000) {
                     route_kv_to_host = true;
@@ -2269,15 +2275,13 @@ void sandwich_auto_dispatch(common_params & params) {
 
             LOG_INF("   -> No compatible draft model found in directory tree.\n");
             if (push_to_ram) {
-                LOG_INF("   -> 70%% RAM RULE ACTIVE (Technique #42: Asymmetric Split-KV & CPU Weight Pinning)\n");
-                LOG_INF("   -> %.1f%% of model weights reside in host RAM (>= 70%% threshold).\n", ram_ratio * 100.0f);
-                LOG_INF("   -> Pushing 100%% of dense weights to CPU DDR5 to eliminate PCIe ping-pong bottleneck!\n");
-                LOG_INF("   -> KV Cache & FlashAttention pinned entirely in GPU VRAM (split-kv) for 128k context.\n");
+                LOG_INF("   -> CPU FALLBACK ACTIVE (Asymmetric Split-KV & CPU Weight Pinning)\n");
+                LOG_INF("   -> 100.0%% of model weights reside in host RAM (0 layers fit in VRAM budget).\n");
+                LOG_INF("   -> KV Cache & FlashAttention pinned in GPU VRAM (split-kv).\n");
             } else {
-                LOG_INF("   -> Policy: Dense Memory-Constrained Mode (VRAM Cap LIFTED to 7.2 GB)\n");
-                LOG_INF("   -> Main Model:   n_gpu_layers = %d (maximum GPU layer offload)\n", optimal_layers);
+                LOG_INF("   -> Policy: Dense GPU/Hybrid Offload Mode (budget=%ld MB)\n", (long)uncapped_budget_mb);
+                LOG_INF("   -> Main Model:   n_gpu_layers = %d (offload_ratio = %.1f%%)\n", target_gpu_layers, offload_ratio * 100.0f);
             }
-            LOG_INF("   -> Speculative:  Activating Zero-VRAM Context N-Gram Lookup Speculation (n=12, m=48)\n");
             LOG_INF("   -> KV Cache Target: %s (k=%s, v=%s, reason: %s)\n",
                     route_kv_to_host ? "HOST DDR5 RAM" : "GPU VRAM Offloaded",
                     ggml_type_name(target_kv_type), ggml_type_name(target_kv_type), kv_reason.c_str());
@@ -2299,13 +2303,16 @@ void sandwich_auto_dispatch(common_params & params) {
             params.flash_attn_type       = LLAMA_FLASH_ATTN_TYPE_ENABLED;
             params.thp_align             = true;
 
-            // Zero-VRAM Context N-Gram Prompt Lookup Speculative Decoding
-            params.speculative.types.clear();
-            params.speculative.types.push_back(COMMON_SPECULATIVE_TYPE_NGRAM_SIMPLE);
-            params.speculative.ngram_simple.size_n   = 12; // Search context for matching 12-grams
-            params.speculative.ngram_simple.size_m   = 48; // Propose up to 48 candidate tokens
-            params.speculative.ngram_simple.min_hits = 1;
-            params.speculative.draft.n_max           = 5;
+            if (!has_explicit_non_model_spec) {
+                // Zero-VRAM Context N-Gram Prompt Lookup Speculative Decoding
+                LOG_INF("   -> Speculative:  Activating Zero-VRAM Context N-Gram Lookup Speculation (n=12, m=48)\n");
+                params.speculative.types.clear();
+                params.speculative.types.push_back(COMMON_SPECULATIVE_TYPE_NGRAM_SIMPLE);
+                params.speculative.ngram_simple.size_n   = 12; // Search context for matching 12-grams
+                params.speculative.ngram_simple.size_m   = 48; // Propose up to 48 candidate tokens
+                params.speculative.ngram_simple.min_hits = 1;
+                params.speculative.draft.n_max           = 5;
+            }
         }
     }
 

@@ -75,6 +75,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - **Dense Auto-Dispatch Silent `Q2_K` Weight Down-Quantization (`--sandwich-auto` Correctness):**
   - Removed forced `params.jit_down_quant = true` in both dense branches of `sandwich_auto_dispatch()` (`common/common.cpp`), which previously re-quantized CPU-resident weights on load to 2-bit `Q2_K` (`src/llama-model-loader.cpp:1527-1549`) without warning or `--jit-down-quant`, silently degrading dense model generation into repetition loops (`-\n\n-` on Dolphin-2.8-Mistral-7B, `The same same...` on Gemma-4-31B-it QAT).
+- **Dense Auto-Dispatch `-1` Offload Sentinel & `--spec-type none` Guard:**
+  - Fixed `sandwich_auto_dispatch()` (`common/common.cpp`) treating `sandwich_calculate_optimal_layers() == -1` (100% VRAM fit) as `0%` GPU offload (`-ngl 0`), restoring full GPU offload (`-ngl 99`, `4,342 MiB` VRAM, `50.87 t/s` on Dolphin-2.8-Mistral-7B).
+  - Honored explicit `--spec-type none` (`has_explicit_non_model_spec`) in the dense drafter scanner and N-gram fallback, and retained partial GPU layer offload (`optimal_layers > 0`) rather than forcing `push_to_ram` (`-ngl 0`) on `<= 30%` fit ratios (`-ngl 16`, `5,689 MiB` VRAM on Gemma-4-31B-it QAT).
 
 ### Removed
 - **Legacy DUI/TUI Implementation:**
