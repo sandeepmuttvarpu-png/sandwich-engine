@@ -78,6 +78,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Dense Auto-Dispatch `-1` Offload Sentinel & `--spec-type none` Guard:**
   - Fixed `sandwich_auto_dispatch()` (`common/common.cpp`) treating `sandwich_calculate_optimal_layers() == -1` (100% VRAM fit) as `0%` GPU offload (`-ngl 0`), restoring full GPU offload (`-ngl 99`, `4,342 MiB` VRAM, `50.87 t/s` on Dolphin-2.8-Mistral-7B).
   - Honored explicit `--spec-type none` (`has_explicit_non_model_spec`) in the dense drafter scanner and N-gram fallback, and retained partial GPU layer offload (`optimal_layers > 0`) rather than forcing `push_to_ram` (`-ngl 0`) on `<= 30%` fit ratios (`-ngl 16`, `5,689 MiB` VRAM on Gemma-4-31B-it QAT).
+- **MoE Online Warm-Up Auto-Tuning Gate (`SANDWICH_AUTOTUNE_DISABLE`):**
+  - Wired `SANDWICH_AUTOTUNE_DISABLE` into `llama_context` initialization (`src/llama-context.cpp`) so `--autotune-disable` or `SANDWICH_AUTOTUNE_DISABLE=1` disables both kernel-variant autotuning and live MoE hot-expert warm-up repacking (`repack_moe_expert_cache`), keeping autotune-disabled baseline runs strictly static.
 
 ### Removed
 - **Legacy DUI/TUI Implementation:**

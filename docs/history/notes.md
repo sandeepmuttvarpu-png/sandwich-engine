@@ -28,13 +28,13 @@ This document collects ongoing observational notes, future refinement tasks, and
 - Understory MCP semantic queries require LM Studio's local server active on port 1234 (`lms server start`).
 - **Operational Protocol:** Always start LM Studio server for memory maintenance and retrieval queries, but explicitly unload all resident models (`lms unload --all`) before running GPU benchmarks or generation parity tests (`verify_generation_parity.py`) to guarantee an idle GPU memory floor (2 MiB used) and eliminate VRAM contention.
 
-## 7. Open Defect: `SANDWICH_AUTOTUNE_DISABLE=1` Does Not Gate MoE Online Warm-Up Auto-Tuning Repack
+## 7. Resolved Defect: `SANDWICH_AUTOTUNE_DISABLE=1` Does Not Gate MoE Online Warm-Up Auto-Tuning Repack
 - **Symptom:** Running `llama-cli` with `SANDWICH_AUTOTUNE_DISABLE=1` (e.g. certified benchmarks in `spec_arm0_vs_head.json` and Universality Pass 2) still triggers `Online Warm-Up Auto-Tuning: Re-packed 28 layers into VRAM in ~70–80 ms` on `stderr` during Rep 1 / cold prefill.
 - **Root Cause:** Two independent tuning subsystems share the "autotune" concept, but only kernel-variant tuning checks `SANDWICH_AUTOTUNE_DISABLE`:
   - `src/dispatch/autotune.cpp:43` (`run_autotune`) and `ggml/src/ggml-cuda/sandwich-kernel-cache.cuh:198` (`Cache::enabled()`) check `SANDWICH_AUTOTUNE_DISABLE`.
   - `src/llama-context.cpp:3588` (`if (!model.has_moe_cache_profile() && model.has_moe_expert_cache() && !m_warmup_repacked)`) performs the live hot-expert `repack_moe_expert_cache(live_freq)` without checking `SANDWICH_AUTOTUNE_DISABLE` (or a dedicated `SANDWICH_WARMUP_REPACK_DISABLE` gate).
 - **Impact:** Any ablation or regression arm intended to run with "autotune disabled" still mutates MoE slot placement after 500 evaluations when hit rate < 65%, complicating cold-vs-warm latency attribution.
-- **Action:** Wire `SANDWICH_AUTOTUNE_DISABLE` (or an explicit sub-flag) into `src/llama-context.cpp:3588` as a separate tracked fix after validating baseline parity against `7958b1541`.
+- **Resolution:** Wired `SANDWICH_AUTOTUNE_DISABLE` (matching `env_flag` semantics: non-empty and not `"0"`, `"false"`, or `"off"`) into `llama_context` constructor (`src/llama-context.cpp`) to pre-mark `m_warmup_repacked = true` and skip live warm-up repacking whenever autotuning is disabled.
 
 ## 8. Open Item: Gemma-4-31B-it QAT Nondeterministic `VmHWM` Spike
 - **Symptom:** In the verified 4-model Pass 2 re-run (`scripts/benchmarks/universality/throughput_v2_verified.json`), `Gemma-4-31B-it QAT` (`-ngl 16`, `5,600–5,689 MiB` VRAM, `--spec-type none`) exhibited a `2,815 MiB` `VmHWM` spread across three identical reps:

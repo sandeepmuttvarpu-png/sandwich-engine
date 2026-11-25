@@ -481,6 +481,17 @@ llama_context::llama_context(
         }
     }
 
+    {
+        const char * SANDWICH_AUTOTUNE_DISABLE = getenv("SANDWICH_AUTOTUNE_DISABLE");
+        if (SANDWICH_AUTOTUNE_DISABLE && SANDWICH_AUTOTUNE_DISABLE[0] != '\0' &&
+            strcmp(SANDWICH_AUTOTUNE_DISABLE, "0") != 0 &&
+            strcmp(SANDWICH_AUTOTUNE_DISABLE, "false") != 0 &&
+            strcmp(SANDWICH_AUTOTUNE_DISABLE, "off") != 0) {
+            m_warmup_repacked = true;
+            LLAMA_LOG_INFO("%s: SANDWICH_AUTOTUNE_DISABLE set, skipping MoE online warm-up repack\n", __func__);
+        }
+    }
+
     // ref: https://github.com/ggml-org/llama.cpp/pull/17046#discussion_r2503085732
     cparams.n_ctx = GGML_PAD(cparams.n_ctx, 256);
 
