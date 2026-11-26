@@ -174,13 +174,15 @@ def run_one(spec: dict, rep: int) -> dict:
 
 
 def main():
+    selected = set(sys.argv[1:]) if len(sys.argv) > 1 else None
     vram_idle, temp_idle = query_gpu()
     if vram_idle > 200:
         print(f"ERROR: GPU not idle ({vram_idle} MiB used)", file=sys.stderr)
         sys.exit(1)
 
     report = {"models": {}}
-    for idx, spec in enumerate(MODELS):
+    active_models = [m for m in MODELS if not selected or m["id"] in selected]
+    for idx, spec in enumerate(active_models):
         print(f"\n=== Model {idx+1}/{len(MODELS)}: {spec['id']} ===", flush=True)
         # Print resolved plan if --sandwich-auto
         plan_line = None
@@ -218,7 +220,7 @@ def main():
             "peak_vmhwm_mib": max(x["peak_vmhwm_mib"] for x in runs),
         }
 
-        if idx + 1 < len(MODELS):
+        if idx + 1 < len(active_models):
             print("Cooling down 60s...", flush=True)
             time.sleep(60)
 
