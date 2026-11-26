@@ -256,6 +256,7 @@ int main() {
         { "partial-dense-30b",  28000ULL * 1024 * 1024,  1, 60, false, 7767, 24000, "none", 1.00 },
         { "moe-2shard-62pct",   70910ULL * 1024 * 1024,  2, 48, true,  7767, 24000, "none", 0.62 },
         { "moe-1shard-20gb",    20000ULL * 1024 * 1024,  1, 40, true,  7767, 24000, "none", 1.00 },
+        { "moe-full-fit-90pct",  6672ULL * 1024 * 1024,  1, 28, true,  7767, 24000, "none", 1.00 },
     };
 
     int failures = 0;
@@ -290,6 +291,10 @@ int main() {
 
         if (!ok_s || !ok_c || p_s.raw_argv.empty() || p_c.raw_argv.empty() || !(p_s == p_c)) {
             std::printf("  -> FAIL (mismatch or missing SANDWICH_DISPATCH_PRINT)\n");
+            ++failures;
+        } else if (f.name == "moe-full-fit-90pct" &&
+                   (p_c.ngl != 99 || p_c.io_uring || p_c.moe_2q || p_c.moe_warm_ram_mb > 0)) {
+            std::printf("  -> FAIL (MoE full-fit fixture did not disable tiering)\n");
             ++failures;
         } else {
             std::printf("  -> PASS (identical plan)\n");

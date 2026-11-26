@@ -485,25 +485,38 @@ TieringPlan plan_auto_dispatch(const DispatchRequest & req) {
         return 0;
     };
 
+    bool moe_full_fit = false;
     if (plan.is_moe) {
         const size_t total_free_vram = gpu_free_vram_b;
-        const bool fits_in_vram = (total_free_vram > 0 && plan.total_model_bytes > 0 &&
-                                   plan.total_model_bytes + 1536ULL * 1024 * 1024 < total_free_vram);
-
-#if defined(_SC_PHYS_PAGES) && defined(_SC_PAGE_SIZE)
-        int64_t total_host_ram_mb = ((int64_t) sysconf(_SC_PHYS_PAGES) * (int64_t) sysconf(_SC_PAGE_SIZE)) / (1024 * 1024);
-        if (total_host_ram_mb >= 22000 && plan.moe_warm_ram_mb <= 14336) {
-            plan.moe_warm_ram_mb = 14336;
-        }
-        if (plan.moe_warm_ram_mb > 16552) {
-            plan.moe_warm_ram_mb = 16384;
-        }
-#endif
+        const int64_t model_mb = (int64_t) (plan.total_model_bytes / (1024ULL * 1024ULL));
+        const int64_t moe_compute_buf_mb = 350;
+        const bool fits_in_vram = (safe_vram_cap_mb > 0 && plan.total_model_bytes > 0 &&
+                                   (model_mb + kv_turbo4_mb + moe_compute_buf_mb) <= safe_vram_cap_mb);
 
         if (fits_in_vram && plan.moe_cache_size == 0 && plan.moe_cache_slots <= 0) {
-            plan.gpu_layers       = 99;
-            plan.moe_cpu_override = false;
+            // MoE Full-Fit: 100% GPU offload; disable Tier 2/3 paging, hot-pack, and warm pool
+            moe_full_fit              = true;
+            plan.gpu_layers           = 99;
+            plan.moe_cpu_override     = false;
+            plan.moe_3tier            = false;
+            plan.moe_2q               = false;
+            plan.moe_cache_slots      = 0;
+            plan.moe_cache_size       = 0;
+            plan.moe_warm_ram_mb      = 0;
+            plan.cache_ram_mib        = 0;
+            plan.sched_async_cpu      = false;
+            plan.asym_prefetch        = false;
+            plan.moe_prefetch_threads = 0;
         } else {
+#if defined(_SC_PHYS_PAGES) && defined(_SC_PAGE_SIZE)
+            int64_t total_host_ram_mb = ((int64_t) sysconf(_SC_PHYS_PAGES) * (int64_t) sysconf(_SC_PAGE_SIZE)) / (1024 * 1024);
+            if (total_host_ram_mb >= 22000 && plan.moe_warm_ram_mb <= 14336) {
+                plan.moe_warm_ram_mb = 14336;
+            }
+            if (plan.moe_warm_ram_mb > 16552) {
+                plan.moe_warm_ram_mb = 16384;
+            }
+#endif
             plan.gpu_layers       = 99;
             plan.moe_cpu_override = true;
 
@@ -533,15 +546,15 @@ TieringPlan plan_auto_dispatch(const DispatchRequest & req) {
                 else if (free_vram_mib > 400)  plan.moe_cache_size = (free_vram_mib - 200) * 1024 * 1024;
                 else                           plan.moe_cache_size = 512ULL * 1024 * 1024;
             }
-        }
 
-        plan.moe_2q          = true;
-        plan.moe_3tier       = true;
-        plan.sched_async_cpu = true;
-        if (plan.cache_ram_mib <= 0) {
-            plan.cache_ram_mib = 6144;
+            plan.moe_2q          = true;
+            plan.moe_3tier       = true;
+            plan.sched_async_cpu = true;
+            if (plan.cache_ram_mib <= 0) {
+                plan.cache_ram_mib = 6144;
+            }
+            plan.moe_prefetch_threads = 4;
         }
-        plan.moe_prefetch_threads = 4;
 
         if (req.sandwich_predict && plan.n_ctx_eval >= 48000) {
             plan.no_kv_offload = true;
@@ -705,7 +718,7 @@ TieringPlan plan_auto_dispatch(const DispatchRequest & req) {
         plan.kv_type_v = "turbo2";
     }
 
-    if (plan.chunked_prefill || plan.n_ctx_eval >= 32768 || plan.is_moe) {
+    if (plan.chunked_prefill || plan.n_ctx_eval >= 32768 || (plan.is_moe && !moe_full_fit)) {
         plan.chunked_prefill = true;
         if (plan.prefill_chunk_size > 0) {
             plan.n_ubatch = plan.prefill_chunk_size;
@@ -721,7 +734,7 @@ TieringPlan plan_auto_dispatch(const DispatchRequest & req) {
         plan.kva_prefill = true;
     }
 
-    if (plan.asym_prefetch || (plan.is_moe && plan.expert_count >= 256)) {
+    if (plan.asym_prefetch || (plan.is_moe && !moe_full_fit && plan.expert_count >= 256)) {
         plan.asym_prefetch = true;
     }
 

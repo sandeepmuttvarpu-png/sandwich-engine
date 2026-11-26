@@ -834,6 +834,56 @@ static void test_dynamic_vram_ceiling_occupied() {
     printf("  [PASS] test_dynamic_vram_ceiling_occupied\n");
 }
 
+static void test_moe_full_fit_disables_tiering() {
+    printf("[test_moe_full_fit_disables_tiering] Starting...\n");
+    namespace fs = std::filesystem;
+
+    const fs::path tmp_dir = fs::temp_directory_path() / ("sandwich_moe_fit_" + std::to_string((int) getpid()));
+    fs::remove_all(tmp_dir);
+    fs::create_directories(tmp_dir);
+
+    const fs::path model_path = tmp_dir / "moe-90pct.gguf";
+    struct gguf_context * g = gguf_init_empty();
+    SANDWICH_TEST_CHECK(g != nullptr);
+    gguf_set_val_str(g, "general.architecture", "qwen35moe");
+    gguf_set_val_u32(g, "qwen35moe.block_count", 28);
+    gguf_set_val_u32(g, "qwen35moe.attention.head_count", 16);
+    gguf_set_val_u32(g, "qwen35moe.attention.head_count_kv", 4);
+    gguf_set_val_u32(g, "qwen35moe.embedding_length", 2048);
+    gguf_set_val_u32(g, "general.expert_count", 64);
+    gguf_set_val_u32(g, "qwen35moe.expert_count", 64);
+    gguf_set_val_u32(g, "qwen35moe.expert_used_count", 6);
+    gguf_set_val_str(g, "tokenizer.ggml.model", "llama");
+    const char * toks[2] = { "<unk>", "<s>" };
+    gguf_set_arr_str(g, "tokenizer.ggml.tokens", toks, 2);
+    SANDWICH_TEST_CHECK(gguf_write_to_file(g, model_path.c_str(), true));
+    gguf_free(g);
+    // 90% of 7,414 MiB runtime ceiling = 6,672 MiB
+    fs::resize_file(model_path, 6672ULL * 1024ULL * 1024ULL);
+
+    sandwich::dispatch::DispatchRequest req;
+    req.model.path = model_path.string();
+    req.n_ctx = 4096;
+    req.explicit_non_model_spec = true;
+    req.override_total_vram_mb = 7767;
+    req.override_free_vram_mb  = 7765;
+    const auto plan = sandwich::dispatch::plan_auto_dispatch(req);
+    SANDWICH_TEST_CHECK(plan.valid);
+    SANDWICH_TEST_CHECK(plan.is_moe);
+    SANDWICH_TEST_CHECK(plan.gpu_layers == 99);
+    SANDWICH_TEST_CHECK(!plan.moe_cpu_override);
+    SANDWICH_TEST_CHECK(!plan.moe_3tier);
+    SANDWICH_TEST_CHECK(!plan.moe_2q);
+    SANDWICH_TEST_CHECK(plan.moe_cache_slots == 0);
+    SANDWICH_TEST_CHECK(plan.moe_cache_size == 0);
+    SANDWICH_TEST_CHECK(plan.moe_warm_ram_mb == 0);
+    SANDWICH_TEST_CHECK(!plan.sched_async_cpu);
+    SANDWICH_TEST_CHECK(plan.moe_prefetch_threads == 0);
+
+    fs::remove_all(tmp_dir);
+    printf("  [PASS] test_moe_full_fit_disables_tiering\n");
+}
+
 int main() {
     printf("=== Running sandwich.cpp Dispatch Subsystem Unit Tests ===\n");
     test_ram_estimator();
@@ -848,6 +898,7 @@ int main() {
     test_multi_shard_size_aggregation();
     test_dense_auto_dispatch_regressions();
     test_dynamic_vram_ceiling_occupied();
+    test_moe_full_fit_disables_tiering();
     printf("=== All Sandwich Dispatch Tests Passed Successfully! ===\n");
     return 0;
 }
