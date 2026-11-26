@@ -69,6 +69,7 @@ struct HardwareProfile {
 };
 
 struct TieringPlan {
+    uint64_t total_model_bytes    = 0; // Authoritative sum across ALL shards
     uint64_t model_total_mb       = 0;
     uint64_t tier1_hot_vram_mb    = 0; // GPU VRAM (capped by WAYLAND_VRAM_GUARD_MB)
     uint64_t tier2_warm_ddr5_mb   = 0; // Host RAM (capped by 70% RAM Rule)
@@ -79,6 +80,62 @@ struct TieringPlan {
     double   est_tokens_sec_hybrid= 0.0;
     double   est_tokens_sec_worst = 0.0;
     std::string recommended_flags;
+
+    // Unified auto-dispatch plan fields (shared by sandwich_auto_dispatch & Router)
+    bool        valid                    = false;
+    std::string model_arch               = "unknown";
+    bool        is_moe                   = false;
+    bool        is_fine_grained          = false;
+    bool        is_mla                   = false;
+    int64_t     expert_count             = 0;
+    size_t      vocab_size               = 0;
+    size_t      embedding_length         = 0;
+    int64_t     head_count_kv            = 8;
+    int64_t     head_dim                 = 128;
+    int32_t     n_ctx_eval               = 4096;
+    int64_t     n_ctx_train              = 0;
+    int64_t     gpu_total_vram_mb        = 8192;
+    size_t      gpu_free_vram_b          = 0;
+    int64_t     safe_vram_cap_mb         = 0;
+    int32_t     threads                  = 0;
+    std::vector<int> p_core_ids;
+    bool        use_split_kv             = false;
+    bool        no_kv_offload            = false;
+    std::string kv_type_k                = "turbo4";
+    std::string kv_type_v                = "turbo4";
+    bool        flash_attn               = true;
+    bool        flash_attn_native_quants = false;
+    bool        turboquant_varn          = false;
+    bool        turbo_mma                = false;
+    bool        moe_3tier                = false;
+    bool        moe_2q                   = true;
+    int32_t     moe_cache_slots          = 0;
+    size_t      moe_cache_size           = 0;
+    int32_t     moe_warm_ram_mb          = 12288;
+    bool        moe_cpu_override         = false;
+    int32_t     cache_ram_mib            = 0;
+    bool        chunked_prefill          = false;
+    int32_t     n_ubatch                 = 0;
+    int32_t     prefill_chunk_size       = 0;
+    bool        sched_async_cpu          = false;
+    bool        asym_prefetch            = false;
+    int32_t     moe_prefetch_threads     = 0;
+    bool        parallel_decoding        = true;
+    int32_t     n_parallel               = 4;
+    bool        cont_batching            = true;
+    bool        thp_align                = true;
+    float       early_exit_thresh        = 0.0f;
+    bool        logits_topk_default      = false;
+    bool        spec_pipe                = false;
+    std::string drafter_path;
+    int32_t     drafter_gpu_layers       = -1;
+    std::string spec_type                = "none"; // "none", "draft", "ngram-simple"
+    int32_t     spec_n_max               = 5;
+    float       spec_p_min               = 0.75f;
+    bool        spec_tree                = false;
+    std::string drafter_kv_type          = "turbo4";
+    bool        kva_prefill              = false;
+    bool        jit_down_quant           = false;
 };
 
 class HardwareProfiler {

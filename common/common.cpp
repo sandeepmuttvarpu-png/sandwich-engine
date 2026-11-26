@@ -5,6 +5,7 @@
 
 #include "build-info.h"
 #include "common.h"
+#include "unified_planner.hpp"
 #include "../ggml/src/ggml-cuda/sandwich-kernel-cache.cuh"
 
 #include "../src/llama-ext.h"
@@ -1261,231 +1262,6 @@ static int64_t sandwich_get_kv_i64(const struct gguf_context * ctx, int64_t key_
     }
 }
 
-// Detect and pin to physical Performance-cores on Intel hybrid CPUs (e.g. i7-13620H)
-static void sandwich_tune_pcore_affinity(common_params & params) {
-#if defined(__linux__)
-    std::vector<int> p_cores;
-    uint32_t highest_freq = 0;
-
-    for (int cpu = 0; cpu < GGML_MAX_N_THREADS; ++cpu) {
-        std::string freq_path = "/sys/devices/system/cpu/cpu" + std::to_string(cpu) + "/cpufreq/cpuinfo_max_freq";
-        std::ifstream f(freq_path);
-        if (!f.is_open()) break;
-        uint32_t freq = 0;
-        f >> freq;
-        if (freq > highest_freq) {
-            highest_freq = freq;
-        }
-    }
-
-    if (highest_freq > 0) {
-        for (int cpu = 0; cpu < GGML_MAX_N_THREADS; ++cpu) {
-            std::string freq_path = "/sys/devices/system/cpu/cpu" + std::to_string(cpu) + "/cpufreq/cpuinfo_max_freq";
-            std::ifstream f(freq_path);
-            if (!f.is_open()) break;
-            uint32_t freq = 0;
-            f >> freq;
-            // Cores operating within 10% of maximum frequency are P-cores
-            if (freq >= highest_freq * 0.90) {
-                std::string sib_path = "/sys/devices/system/cpu/cpu" + std::to_string(cpu) + "/topology/thread_siblings_list";
-                std::ifstream sib_f(sib_path);
-                int primary_cpu = cpu;
-                if (sib_f.is_open()) {
-                    sib_f >> primary_cpu;
-                }
-                if (primary_cpu == cpu) {
-                    p_cores.push_back(cpu);
-                }
-            }
-        }
-    }
-
-    if (p_cores.size() >= 4 && p_cores.size() < (size_t)std::thread::hardware_concurrency()) {
-        int n_pcores = (int)p_cores.size();
-        LOG_INF("   -> Intel Hybrid Topology: Auto-Pinning %d Threads to Physical P-Cores\n", n_pcores);
-        params.cpuparams.n_threads = n_pcores;
-        params.cpuparams_batch.n_threads = n_pcores;
-        params.cpuparams.mask_valid = true;
-        params.cpuparams_batch.mask_valid = true;
-        std::fill(std::begin(params.cpuparams.cpumask), std::end(params.cpuparams.cpumask), false);
-        std::fill(std::begin(params.cpuparams_batch.cpumask), std::end(params.cpuparams_batch.cpumask), false);
-        for (int c : p_cores) {
-            if (c < GGML_MAX_N_THREADS) {
-                params.cpuparams.cpumask[c] = true;
-                params.cpuparams_batch.cpumask[c] = true;
-            }
-        }
-    }
-#else
-    (void)params;
-#endif
-}
-
-// Scans the model directory tree to discover a compatible speculative drafter model
-static std::string sandwich_find_compatible_drafter(
-    const std::string & model_path,
-    const std::string & target_arch,
-    size_t target_vocab_size,
-    size_t target_embedding_length,
-    const std::string & target_tok_model) {
-
-    namespace fs = std::filesystem;
-    std::error_code ec;
-
-    fs::path main_path = fs::canonical(model_path, ec);
-    if (ec) {
-        main_path = model_path;
-    }
-    fs::path anchor_dir = main_path.parent_path();
-
-    std::vector<fs::path> search_dirs;
-    if (fs::exists(anchor_dir, ec) && fs::is_directory(anchor_dir, ec)) {
-        search_dirs.push_back(anchor_dir);
-    }
-
-    // Also check parent directory if available to catch sibling folders (e.g. drafters/ alongside dense/)
-    fs::path parent_dir = anchor_dir.parent_path();
-    if (!parent_dir.empty() && parent_dir != anchor_dir && fs::exists(parent_dir, ec) && fs::is_directory(parent_dir, ec)) {
-        search_dirs.push_back(parent_dir);
-        // Also check if there is a grandparent (e.g. ~/ai-models) with subfolders
-        fs::path grand_dir = parent_dir.parent_path();
-        if (!grand_dir.empty() && grand_dir != parent_dir && fs::exists(grand_dir, ec) && fs::is_directory(grand_dir, ec)) {
-            for (const auto & entry : fs::directory_iterator(grand_dir, fs::directory_options::skip_permission_denied, ec)) {
-                if (entry.is_directory(ec)) {
-                    std::string fname = entry.path().filename().string();
-                    std::transform(fname.begin(), fname.end(), fname.begin(), ::tolower);
-                    if (fname.find("draft") != std::string::npos || fname.find("unsloth") != std::string::npos) {
-                        search_dirs.push_back(entry.path());
-                    }
-                }
-            }
-        }
-    }
-
-    // Explicitly scan standard model drafters directories if available
-    for (const char * explicit_draft_dir : {
-        "/home/sandeep/ai-models/drafters",
-        "/home/sandeep/ai-models/draft"
-    }) {
-        if (fs::exists(explicit_draft_dir, ec) && fs::is_directory(explicit_draft_dir, ec)) {
-            search_dirs.push_back(explicit_draft_dir);
-        }
-    }
-
-    std::string best_candidate;
-    uintmax_t best_size = UINT64_MAX;
-    std::unordered_set<std::string> visited_paths;
-
-    for (const auto & sdir : search_dirs) {
-        if (!fs::exists(sdir, ec)) continue;
-
-        for (auto it = fs::recursive_directory_iterator(sdir, fs::directory_options::skip_permission_denied, ec);
-             it != fs::recursive_directory_iterator(); ++it) {
-
-            if (it.depth() > 2) {
-                it.pop();
-                continue;
-            }
-
-            if (!it->is_regular_file(ec)) continue;
-
-            const fs::path & p = it->path();
-            std::string ext = p.extension().string();
-            std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
-            if (ext != ".gguf") continue;
-
-            // Skip self
-            if (fs::equivalent(p, main_path, ec)) continue;
-
-            std::string filename = p.filename().string();
-            std::transform(filename.begin(), filename.end(), filename.begin(), ::tolower);
-            if (filename.find("mmproj") != std::string::npos ||
-                filename.find("embed") != std::string::npos ||
-                filename.find("imatrix") != std::string::npos) {
-                continue;
-            }
-
-            std::string full_path = p.string();
-            if (visited_paths.count(full_path)) continue;
-            visited_paths.insert(full_path);
-
-            uintmax_t fsize = fs::file_size(p, ec);
-            if (ec) continue;
-
-            // Drafter models must be between 50 MB and 4.0 GB
-            if (fsize < 50ULL * 1024 * 1024 || fsize > 4ULL * 1024 * 1024 * 1024) {
-                continue;
-            }
-
-            // Inspect GGUF header without loading tensors
-            struct gguf_init_params cand_params = { /* .no_alloc = */ true, /* .ctx = */ nullptr };
-            gguf_context_ptr cand_ctx(gguf_init_from_file(full_path.c_str(), cand_params));
-            if (!cand_ctx) continue;
-
-            // Check architecture
-            int64_t cand_arch_id = gguf_find_key(cand_ctx.get(), "general.architecture");
-            if (cand_arch_id < 0 || gguf_get_kv_type(cand_ctx.get(), cand_arch_id) != GGUF_TYPE_STRING) continue;
-            std::string cand_arch = gguf_get_val_str(cand_ctx.get(), cand_arch_id);
-
-            bool is_same_family = false;
-            for (const char * fam : { "qwen", "llama", "gemma", "lfm2" }) {
-                if (target_arch.rfind(fam, 0) == 0 && cand_arch.rfind(fam, 0) == 0) {
-                    is_same_family = true;
-                    break;
-                }
-            }
-            bool is_dflash_pair = (cand_arch.find("dflash") != std::string::npos);
-            bool arch_matches = (cand_arch == target_arch) || is_same_family || is_dflash_pair;
-            bool is_assistant_head = (cand_arch == target_arch + "-assistant" || cand_arch.find("assistant") != std::string::npos);
-
-            if (!arch_matches && !is_assistant_head) {
-                continue;
-            }
-
-            // Check hidden embedding dimension for assistant heads and dflash models to avoid tensor multiplication assertions
-            if ((is_assistant_head || is_dflash_pair) && target_embedding_length > 0) {
-                int64_t cand_embd_out_id = gguf_find_key(cand_ctx.get(), (cand_arch + ".embedding_length_out").c_str());
-                int64_t cand_embd_id = (cand_embd_out_id >= 0) ? cand_embd_out_id : gguf_find_key(cand_ctx.get(), (cand_arch + ".embedding_length").c_str());
-                if (cand_embd_id >= 0) {
-                    size_t cand_embd = sandwich_get_kv_i64(cand_ctx.get(), cand_embd_id);
-                    if (cand_embd != target_embedding_length) {
-                        LOG_WRN("🥪 [Sandwich Drafter Scanner] Skipping %s: projection dimension (%zu) does not match target (%zu)\n",
-                                full_path.c_str(), cand_embd, target_embedding_length);
-                        continue;
-                    }
-                }
-            }
-
-            // Check vocabulary size
-            int64_t cand_tokens_id = gguf_find_key(cand_ctx.get(), "tokenizer.ggml.tokens");
-            if (cand_tokens_id < 0) continue;
-            size_t cand_vocab = gguf_get_arr_n(cand_ctx.get(), cand_tokens_id);
-            if (cand_vocab != target_vocab_size) continue;
-
-            // Check tokenizer model type (e.g. gemma4 vs llama) to avoid speculative vocab type mismatches
-            if (!target_tok_model.empty()) {
-                int64_t cand_tok_model_id = gguf_find_key(cand_ctx.get(), "tokenizer.ggml.model");
-                if (cand_tok_model_id >= 0 && gguf_get_kv_type(cand_ctx.get(), cand_tok_model_id) == GGUF_TYPE_STRING) {
-                    std::string cand_tok_model = gguf_get_val_str(cand_ctx.get(), cand_tok_model_id);
-                    if (cand_tok_model != target_tok_model) {
-                        LOG_WRN("🥪 [Sandwich Drafter Scanner] Skipping %s: tokenizer model (%s) does not match target (%s)\n",
-                                full_path.c_str(), cand_tok_model.c_str(), target_tok_model.c_str());
-                        continue;
-                    }
-                }
-            }
-
-            // Valid matching drafter found!
-            if (fsize < best_size) {
-                best_size = fsize;
-                best_candidate = full_path;
-            }
-        }
-    }
-
-    return best_candidate;
-}
-
 static std::vector<std::string> sandwich_expand_split_shard_paths(
     const std::vector<std::string> & initial_paths,
     const struct gguf_context * ctx) {
@@ -1590,1037 +1366,222 @@ uint64_t sandwich_total_model_file_bytes(const common_params_model & model, cons
     return sandwich_sum_gguf_shard_bytes(model.get_paths(), ctx);
 }
 
-static int32_t sandwich_calculate_optimal_layers(
-    const struct gguf_context * ctx,
-    uint64_t file_bytes,
-    const std::string & arch,
-    int64_t vram_budget_mb) {
-
-    std::string key_block_count = arch + ".block_count";
-    int64_t block_id = gguf_find_key(ctx, key_block_count.c_str());
-    int64_t total_blocks = (block_id >= 0) ? sandwich_get_kv_i64(ctx, block_id) : 0;
-    if (total_blocks <= 0) {
-        return 18; // Safe fallback
-    }
-
-    if (file_bytes == 0) {
-        return 18;
-    }
-
-    // Dynamic non-layer memory headroom:
-    // 1. Base overhead: TurboQuant turbo4 KV cache, activations (gallocr pp buffers), display server (~1200 MB)
-    int64_t base_overhead_mb = 1200;
-
-    // 2. Non-layer model tensors (token_embd, output_norm, output.weight) scale with vocab_size * embedding_length
-    int64_t tokens_id = gguf_find_key(ctx, "tokenizer.ggml.tokens");
-    int64_t vocab_size = (tokens_id >= 0) ? gguf_get_arr_n(ctx, tokens_id) : 0;
-    int64_t embd_id = gguf_find_key(ctx, (arch + ".embedding_length").c_str());
-    int64_t embedding_length = (embd_id >= 0) ? sandwich_get_kv_i64(ctx, embd_id) : 0;
-
-    if (vocab_size > 0 && embedding_length > 0) {
-        // Average 0.6 bytes/weight across quantized embedding tables
-        int64_t embd_mb = (vocab_size * embedding_length * 6ULL) / (10ULL * 1024ULL * 1024ULL);
-        base_overhead_mb += embd_mb;
-    } else {
-        base_overhead_mb += 400;
-    }
-
-    int64_t usable_weight_mb = vram_budget_mb - base_overhead_mb;
-    if (usable_weight_mb <= 0) usable_weight_mb = 1000;
-
-    // Average bytes per transformer layer
-    uint64_t approx_layer_bytes = file_bytes / (total_blocks + 1);
-    if (approx_layer_bytes == 0) return 18;
-
-    int64_t allowed_layers = (usable_weight_mb * 1024ULL * 1024ULL) / approx_layer_bytes;
-    if (allowed_layers >= total_blocks) {
-        return -1; // 100% GPU offload
-    }
-    if (allowed_layers <= 0) {
-        return 0;
-    }
-    return (int32_t)allowed_layers;
+static ggml_type sandwich_kv_type_from_name(const std::string & name) {
+    if (name == "f16")    return GGML_TYPE_F16;
+    if (name == "turbo2") return GGML_TYPE_TURBO2_0;
+    if (name == "turbo3") return GGML_TYPE_TURBO3_0;
+    return GGML_TYPE_TURBO4_0;
 }
 
 void sandwich_auto_dispatch(common_params & params) {
-    if (!params.sandwich_auto) {
+    if (!params.sandwich_auto || params.sandwich_dispatched || params.model.path.empty()) {
         return;
     }
 
-    if (params.sandwich_dispatched) {
-        return;
-    }
-
-    if (params.model.path.empty()) {
-        return;
-    }
-
-    struct gguf_init_params gguf_params = {
-        /* .no_alloc = */ true,
-        /* .ctx      = */ nullptr,
-    };
-
-    gguf_context_ptr gguf_ctx(gguf_init_from_file(params.model.path.c_str(), gguf_params));
-    if (!gguf_ctx) {
-        LOG_WRN("🥪 [Sandwich Auto-Dispatch] Failed to open GGUF file: %s\n", params.model.path.c_str());
-        return;
-    }
-
-    // Optimize CPU thread allocation and core affinities for hybrid architectures
-    sandwich_tune_pcore_affinity(params);
-
-    // Anti-Pattern Guard: Enforce no weight repacking (-rtr / --repack) for k-quants in hybrid mode.
-    // In hybrid offloading, row-interleaved weight repacking forces CPU graph allocation and destroys DRAM cache locality.
-    if (!params.no_extra_bufts) {
-        LOG_WRN("🥪 [Sandwich Anti-Pattern Guard] Disabling -rtr / --repack: row-interleaved repacking must NOT be used for k-quants in hybrid mode!\n");
-        params.no_extra_bufts = true;
-    }
-
-    int64_t expert_count = 0;
-
-    // 1. Direct check for general.expert_count
-    int64_t key_expert_count = gguf_find_key(gguf_ctx.get(), "general.expert_count");
-    if (key_expert_count >= 0) {
-        expert_count = sandwich_get_kv_i64(gguf_ctx.get(), key_expert_count);
-    }
-
-    // 2. Fallback: check architecture specific expert counts
-    std::string model_arch = "unknown";
-    int64_t arch_id = gguf_find_key(gguf_ctx.get(), "general.architecture");
-    if (arch_id >= 0 && gguf_get_kv_type(gguf_ctx.get(), arch_id) == GGUF_TYPE_STRING) {
-        model_arch = gguf_get_val_str(gguf_ctx.get(), arch_id);
-    }
-
-    if (expert_count == 0 && !model_arch.empty() && model_arch != "unknown") {
-        const std::string arch_exp_key = model_arch + ".expert_count";
-        int64_t key_exp = gguf_find_key(gguf_ctx.get(), arch_exp_key.c_str());
-        if (key_exp >= 0) {
-            expert_count = sandwich_get_kv_i64(gguf_ctx.get(), key_exp);
-        }
-        if (expert_count == 0) {
-            const std::string arch_used_key = model_arch + ".expert_used_count";
-            int64_t key_used = gguf_find_key(gguf_ctx.get(), arch_used_key.c_str());
-            if (key_used >= 0) {
-                expert_count = sandwich_get_kv_i64(gguf_ctx.get(), key_used);
-            }
-        }
-    }
-
-    size_t vocab_size = 0;
-    int64_t tokens_id = gguf_find_key(gguf_ctx.get(), "tokenizer.ggml.tokens");
-    if (tokens_id >= 0) {
-        vocab_size = gguf_get_arr_n(gguf_ctx.get(), tokens_id);
-    }
-
-    size_t embedding_length = 0;
-    if (!model_arch.empty() && model_arch != "unknown") {
-        std::string key_embd = model_arch + ".embedding_length";
-        int64_t embd_id = gguf_find_key(gguf_ctx.get(), key_embd.c_str());
-        if (embd_id >= 0) {
-            embedding_length = sandwich_get_kv_i64(gguf_ctx.get(), embd_id);
-        }
-    }
-
-    std::string tok_model;
-    int64_t tok_model_id = gguf_find_key(gguf_ctx.get(), "tokenizer.ggml.model");
-    if (tok_model_id >= 0 && gguf_get_kv_type(gguf_ctx.get(), tok_model_id) == GGUF_TYPE_STRING) {
-        tok_model = gguf_get_val_str(gguf_ctx.get(), tok_model_id);
-    }
-
-    const bool is_moe = (expert_count > 0);
-
-    // System Hardware Discovery (Technique #29: Hardware-Aware Predictive Solver)
-    uint64_t host_ram_total_mb = 24576;
-    uint64_t host_ram_free_mb  = 16384;
-#if defined(__linux__)
-    struct sysinfo si;
-    if (sysinfo(&si) == 0) {
-        host_ram_total_mb = ((uint64_t)si.totalram * si.mem_unit) / (1024 * 1024);
-        host_ram_free_mb  = ((uint64_t)si.freeram  * si.mem_unit) / (1024 * 1024);
-    }
-#elif defined(_WIN32)
-    MEMORYSTATUSEX mem_status;
-    mem_status.dwLength = sizeof(mem_status);
-    if (GlobalMemoryStatusEx(&mem_status)) {
-        host_ram_total_mb = mem_status.ullTotalPhys / (1024 * 1024);
-        host_ram_free_mb  = mem_status.ullAvailPhys / (1024 * 1024);
-    }
-#elif defined(__APPLE__) && defined(__MACH__)
-    int mib[2] = { CTL_HW, HW_MEMSIZE };
-    uint64_t memsize = 0;
-    size_t len = sizeof(memsize);
-    if (sysctl(mib, 2, &memsize, &len, NULL, 0) == 0) {
-        host_ram_total_mb = memsize / (1024 * 1024);
-        host_ram_free_mb  = host_ram_total_mb / 2;
-    }
-#endif
-
-    size_t gpu_free_vram_b  = 0;
-    size_t gpu_total_vram_b = 0;
-    for (size_t i = 0; i < ggml_backend_dev_count(); ++i) {
-        auto * dev = ggml_backend_dev_get(i);
-        if (ggml_backend_dev_type(dev) == GGML_BACKEND_DEVICE_TYPE_GPU) {
-            size_t free_b = 0, total_b = 0;
-            ggml_backend_dev_memory(dev, &free_b, &total_b);
-            gpu_free_vram_b  += free_b;
-            gpu_total_vram_b += total_b;
-        }
-    }
-    int64_t gpu_total_vram_mb = (gpu_total_vram_b > 0) ? (int64_t)(gpu_total_vram_b / (1024 * 1024)) : 8192;
-
-    // Aggressive VRAM ceiling: reserve only 160 MB margin for CUDA runtime context and dynamic activation peaks.
-    // On Wayland (running on Intel iGPU), discrete GPU has ~2MB system overhead.
-    // Pushes VRAM to the edge (up to 7,900-8,000 MB) to maximize resident experts and throughput.
-    int64_t safe_vram_cap_mb = (gpu_total_vram_mb > 300) ? (gpu_total_vram_mb - 160) : gpu_total_vram_mb;
-    if (safe_vram_cap_mb > 8000) safe_vram_cap_mb = 8000;
-    if (!params.vram_guard.empty()) {
-        std::string vg = params.vram_guard;
-        if (vg == "none" || vg == "uncapped" || vg == "max" || vg == "0") {
-            safe_vram_cap_mb = (gpu_total_vram_mb > 80) ? (gpu_total_vram_mb - 80) : gpu_total_vram_mb;
-            LOG_INF("   -> [Sandwich VRAM Guard] UNCAPPED MODE ACTIVE (ceiling removed, allocating up to %ld MB)\n", (long)safe_vram_cap_mb);
-        } else {
-            try {
-                size_t end_idx = 0;
-                double val = std::stod(vg, &end_idx);
-                std::string unit = vg.substr(end_idx);
-                if (unit == "G" || unit == "g" || unit == "GB" || unit == "gb" || unit == "GiB") {
-                    safe_vram_cap_mb = (int64_t)(val * 1024.0);
-                } else {
-                    safe_vram_cap_mb = (int64_t)val;
-                }
-                LOG_INF("   -> [Sandwich VRAM Guard] Custom VRAM limit applied: %ld MB\n", (long)safe_vram_cap_mb);
-            } catch (...) {
-                // keep safe_vram_cap_mb
-            }
-        }
-    }
-
-    std::string key_block_count = model_arch + ".block_count";
-    int64_t block_id = gguf_find_key(gguf_ctx.get(), key_block_count.c_str());
-    int64_t total_blocks = (block_id >= 0) ? sandwich_get_kv_i64(gguf_ctx.get(), block_id) : 0;
-
-    int64_t head_count_kv = 0;
-    std::string key_head_count_kv = model_arch + ".attention.head_count_kv";
-    int64_t hkv_id = gguf_find_key(gguf_ctx.get(), key_head_count_kv.c_str());
-    if (hkv_id >= 0) {
-        head_count_kv = sandwich_get_kv_i64(gguf_ctx.get(), hkv_id);
-    } else {
-        std::string key_head_count = model_arch + ".attention.head_count";
-        int64_t h_id = gguf_find_key(gguf_ctx.get(), key_head_count.c_str());
-        if (h_id >= 0) {
-            head_count_kv = sandwich_get_kv_i64(gguf_ctx.get(), h_id);
-        }
-    }
-    if (head_count_kv <= 0) head_count_kv = 8;
-
-    int64_t head_dim = 0;
-    std::string key_key_length = model_arch + ".attention.key_length";
-    int64_t klen_id = gguf_find_key(gguf_ctx.get(), key_key_length.c_str());
-    if (klen_id >= 0) {
-        head_dim = sandwich_get_kv_i64(gguf_ctx.get(), klen_id);
-    } else {
-        std::string key_head_count = model_arch + ".attention.head_count";
-        int64_t h_id = gguf_find_key(gguf_ctx.get(), key_head_count.c_str());
-        int64_t head_count = (h_id >= 0) ? sandwich_get_kv_i64(gguf_ctx.get(), h_id) : 0;
-        if (head_count > 0 && embedding_length > 0) {
-            head_dim = embedding_length / head_count;
-        } else {
-            head_dim = 128;
-        }
-    }
-
-    const uint64_t file_bytes = sandwich_total_model_file_bytes(params.model, gguf_ctx.get());
-    uint64_t approx_layer_bytes = (total_blocks > 0 && file_bytes > 0) ? (file_bytes / (total_blocks + 1)) : 0;
-
-    int32_t ctx_eval = (params.n_ctx > 0) ? params.n_ctx : 4096;
-    uint64_t kv_elems_per_token = 2ULL * (total_blocks > 0 ? total_blocks : 32) * head_count_kv * head_dim;
-    uint64_t kv_bytes_turbo4 = (uint64_t)(kv_elems_per_token * (double)ctx_eval * 0.5);
-    uint64_t kv_bytes_turbo3 = (uint64_t)(kv_elems_per_token * (double)ctx_eval * 0.375);
-    uint64_t kv_bytes_turbo2 = (uint64_t)(kv_elems_per_token * (double)ctx_eval * 0.25);
-
-    int64_t kv_turbo4_mb = (int64_t)(kv_bytes_turbo4 / (1024ULL * 1024ULL));
-    int64_t kv_turbo3_mb = (int64_t)(kv_bytes_turbo3 / (1024ULL * 1024ULL));
-    int64_t kv_turbo2_mb = (int64_t)(kv_bytes_turbo2 / (1024ULL * 1024ULL));
-
-    // Check kernel autotune cache for FlashAttention winners on GPU
-    if (gpu_total_vram_b > 0 && sandwich::autotune::Cache::instance().enabled()) {
-        if (sandwich::autotune::Cache::instance().size() == 0) {
-            LOG_INF("🥪 [Sandwich Auto-Dispatch] Kernel autotune cache empty. Initiating autotuning pass...\n");
-            if (g_sandwich_autotune_fn) {
-                g_sandwich_autotune_fn(params.model.path, ctx_eval);
-            } else {
-                std::string cmd = "./build/bin/sandwich --autotune -m \"" + params.model.path + "\" -c " + std::to_string(ctx_eval);
-                int ret = std::system(cmd.c_str());
-                (void)ret;
-            }
-        }
-    }
-
-    int64_t n_ctx_train = 0;
-    int64_t ctx_id = gguf_find_key(gguf_ctx.get(), (model_arch + ".context_length").c_str());
-    if (ctx_id >= 0) {
-        n_ctx_train = sandwich_get_kv_i64(gguf_ctx.get(), ctx_id);
-    }
-    if (n_ctx_train <= 0) {
-        int64_t orig_ctx_id = gguf_find_key(gguf_ctx.get(), (model_arch + ".rope.scaling.original_context_length").c_str());
-        if (orig_ctx_id >= 0) {
-            n_ctx_train = sandwich_get_kv_i64(gguf_ctx.get(), orig_ctx_id);
-        }
-    }
-    if (n_ctx_train <= 0) {
-        int64_t g_ctx_id = gguf_find_key(gguf_ctx.get(), "general.context_length");
-        if (g_ctx_id >= 0) {
-            n_ctx_train = sandwich_get_kv_i64(gguf_ctx.get(), g_ctx_id);
-        }
-    }
-
-    // Technique #64: Dynamic YaRN Auto-Frequency Scaling
-    if (params.dynamic_yarn && n_ctx_train > 0 && ctx_eval > n_ctx_train) {
-        if (params.rope_scaling_type == LLAMA_ROPE_SCALING_TYPE_UNSPECIFIED || params.rope_scaling_type == LLAMA_ROPE_SCALING_TYPE_NONE) {
-            const float freq_scale = (float)n_ctx_train / (float)ctx_eval;
-            params.rope_scaling_type = LLAMA_ROPE_SCALING_TYPE_YARN;
-            params.yarn_orig_ctx     = (uint32_t)n_ctx_train;
-            params.rope_freq_scale   = freq_scale;
-            params.yarn_ext_factor   = 1.0f;
-            params.yarn_beta_fast    = 32.0f;
-            params.yarn_beta_slow    = 1.0f;
-        }
-    }
-
-    // Technique #65: Universal Attention Sink Guard (enforce >=4 sink tokens default)
-    if (params.n_sink_tokens < 4) {
-        params.n_sink_tokens = 4;
-    }
-
-    LOG_INF("\n=======================================================\n");
-    LOG_INF("🥪 [Project Sandwich] Architecture-Aware Auto-Dispatcher\n");
-    LOG_INF("   Model Path:    %s\n", params.model.path.c_str());
-    LOG_INF("   Topology:      %s (arch = %s, experts = %" PRId64 ", vocab = %zu)\n",
-            is_moe ? "MIXTURE OF EXPERTS (MoE)" : "DENSE TRANSFORMER",
-            model_arch.c_str(), expert_count, vocab_size);
-
-    const bool has_explicit_non_model_spec = !params.speculative.types.empty() &&
+    sandwich::dispatch::DispatchRequest req;
+    req.model                   = params.model;
+    req.n_ctx                   = params.n_ctx;
+    req.n_threads               = params.cpuparams.n_threads;
+    req.vram_guard              = params.vram_guard;
+    req.sandwich_predict        = params.sandwich_predict;
+    req.explicit_non_model_spec = !params.speculative.types.empty() &&
         (params.speculative.types[0] == COMMON_SPECULATIVE_TYPE_NGRAM_SIMPLE ||
          params.speculative.types[0] == COMMON_SPECULATIVE_TYPE_NGRAM_MOD ||
          params.speculative.types[0] == COMMON_SPECULATIVE_TYPE_NONE);
+    req.explicit_drafter_path   = params.speculative.draft.mparams.path;
+    req.drafter_gpu_layers      = params.speculative.draft.n_gpu_layers;
+    req.moe_3tier               = params.moe_3tier;
+    req.moe_cache_slots         = params.moe_cache_slots;
+    req.moe_cache_size          = params.moe_cache_size;
+    req.moe_warm_ram_mb         = params.moe_warm_ram_mb;
+    req.cache_ram_mib           = params.cache_ram_mib;
+    req.chunked_prefill         = params.chunked_prefill;
+    req.n_ubatch                = params.n_ubatch;
+    req.prefill_chunk_size      = params.prefill_chunk_size;
+    req.n_parallel              = params.n_parallel;
+    req.split_kv                = params.split_kv;
+    req.logits_topk             = params.logits_topk;
+    req.asym_kv_squeeze         = params.asym_kv_squeeze;
+    req.kv_is_turbo4_k          = (params.cache_type_k == GGML_TYPE_TURBO4_0);
+    req.kv_is_turbo2_v          = (params.cache_type_v == GGML_TYPE_TURBO2_0);
+    req.turbo_mma               = params.turbo_mma;
+    req.turboquant_varn         = params.turboquant_varn;
+    req.asym_prefetch           = params.asym_prefetch;
+    req.kva_prefill             = params.kva_prefill;
+    req.native_mtp              = params.native_mtp;
+    req.load_mtp                = params.load_mtp;
+    req.jit_down_quant          = params.jit_down_quant;
 
-    auto resolve_dense_offload = [&](int32_t opt_layers, float & offload_ratio, float & ram_ratio) -> int32_t {
-        if (opt_layers < 0) {
-            offload_ratio = 1.0f;
-            ram_ratio = 0.0f;
-            return std::max<int32_t>(99, (int32_t)total_blocks + 1);
+    const sandwich::dispatch::TieringPlan plan = sandwich::dispatch::plan_auto_dispatch(req);
+    if (!plan.valid) {
+        return;
+    }
+
+    // Apply P-core thread affinity
+    if (!plan.p_core_ids.empty()) {
+        params.cpuparams.n_threads       = plan.threads;
+        params.cpuparams_batch.n_threads = plan.threads;
+        params.cpuparams.strict_cpu       = true;
+        params.cpuparams_batch.strict_cpu = true;
+        std::fill(std::begin(params.cpuparams.cpumask), std::end(params.cpuparams.cpumask), false);
+        std::fill(std::begin(params.cpuparams_batch.cpumask), std::end(params.cpuparams_batch.cpumask), false);
+        for (int c : plan.p_core_ids) {
+            if (c >= 0 && c < GGML_MAX_N_THREADS) {
+                params.cpuparams.cpumask[c]       = true;
+                params.cpuparams_batch.cpumask[c] = true;
+            }
         }
-        if (opt_layers > 0) {
-            offload_ratio = (total_blocks > 0) ? ((float)opt_layers / (float)total_blocks) : 1.0f;
-            ram_ratio = std::max(0.0f, 1.0f - offload_ratio);
-            return opt_layers;
-        }
-        offload_ratio = 0.0f;
-        ram_ratio = 1.0f;
-        return 0;
-    };
+    }
 
-    if (is_moe) {
-        LOG_INF("   -> Policy: MoE Expert Slab Staging Mode\n");
+    if (!params.no_extra_bufts) {
+        params.no_extra_bufts = true;
+    }
 
-        size_t total_free_vram = gpu_free_vram_b;
-
-        const uint64_t model_file_size = file_bytes;
-
-        const bool fits_in_vram = (total_free_vram > 0 && model_file_size > 0 && model_file_size + 1536ULL * 1024 * 1024 < total_free_vram);
-
-#if defined(_SC_PHYS_PAGES) && defined(_SC_PAGE_SIZE)
-        int64_t total_host_ram_mb = ((int64_t)sysconf(_SC_PHYS_PAGES) * (int64_t)sysconf(_SC_PAGE_SIZE)) / (1024 * 1024);
-        if (total_host_ram_mb >= 22000 && params.moe_warm_ram_mb <= 14336) {
-            // Guard: never let the warm pool push host VmHWM past the 16,552 MiB audit ceiling.
-            params.moe_warm_ram_mb = 14336; // Keep Tier 2 WARM pool under the host guard (was 18432, exceeded guard)
-        }
-        if (params.moe_warm_ram_mb > 16552) {
-            LOG_WRN("   -> [Sandwich Guard] moe_warm_ram_mb %d exceeds host guard (16552 MiB); clamping to 16384.\n", params.moe_warm_ram_mb);
-            params.moe_warm_ram_mb = 16384;
-        }
-#endif
-
-        if (fits_in_vram && params.moe_cache_size == 0 && params.moe_cache_slots <= 0) {
-            LOG_INF("   -> Model fits entirely within VRAM (%zu MiB vs %zu MiB free). Full GPU offload.\n",
-                    (size_t)(model_file_size / (1024 * 1024)), total_free_vram / (1024 * 1024));
-            params.n_gpu_layers = 99;
-        } else {
-            // Keep MoE expert weights in host CPU RAM and dynamically stage active experts via GPU VRAM cache
-            // We support two caching paradigms:
-            // 1. Thecodacus Static Hot-Pack Cache (params.moe_cache_slots > 0): contiguous VRAM resident hot experts.
-            // 2. BeeLlama Dynamic Slab Cache (params.moe_cache_size > 0): dynamic runtime LRU slab.
-            // These two systems MUST remain strictly mutually exclusive to prevent double VRAM allocation and OOM.
-            if (params.moe_3tier) {
-                // Phase 12: 3-Tier Hierarchical Engine uses the Dynamic VRAM Slab
-                params.moe_cache_slots = 0;
-                size_t free_vram_mib = total_free_vram / (1024 * 1024);
-                size_t moe_cache_mib = 2048;
-                if (free_vram_mib > 6000) {
-                    moe_cache_mib = 2400;
-                } else if (free_vram_mib > 4000) {
-                    moe_cache_mib = 1800;
-                } else if (free_vram_mib > 2000) {
-                    moe_cache_mib = 1024;
-                }
-                if (params.moe_cache_size == 0) {
-                    params.moe_cache_size = moe_cache_mib * 1024 * 1024;
-                }
-                LOG_INF("   -> [Phase 12] Universal 3-Tier MoE Engine: ACTIVE (Tier 1: %zu MiB VRAM Slab, Tier 2: %d MiB DDR5 THP, Tier 3: io_uring NVMe DMA)\n",
-                        params.moe_cache_size / (1024 * 1024), params.moe_warm_ram_mb);
-            } else if (params.moe_cache_slots <= 0 && params.moe_cache_size == 0) {
-                // Auto-configure thecodacus Dual-Path MoE Expert Cache by default
-                size_t _free_vram_mib = total_free_vram / (1024 * 1024);
-                if (expert_count >= 256) {
-                    // Defensive: 48 slots OOM'd on 8 GB GPUs; cap by available VRAM headroom.
-                    params.moe_cache_slots = (_free_vram_mib > 7000) ? 24 : 16;
-                } else if (expert_count >= 64) {
-                    params.moe_cache_slots = 36; // Standard MoE (e.g. GLM-4.7 Flash, Nemotron 30B) pushed from 24 to 36 slots (~3.6 GB pack)
-                } else if (expert_count > 0) {
-                    params.moe_cache_slots = std::min<int32_t>(32, (int32_t)expert_count);
-                }
-                if (params.moe_cache_slots > 0) {
-                    params.moe_cache_size = 0;
-                    LOG_INF("   -> Thecodacus MoE Expert Cache: %d VRAM resident slots/layer (BeeLlama slab disabled)\n", params.moe_cache_slots);
-                }
-            } else if (params.moe_cache_slots > 0) {
-                params.moe_cache_size = 0; // Disable BeeLlama slab to prevent double allocation!
-                LOG_INF("   -> Thecodacus MoE Expert Cache: %d VRAM resident slots/layer (BeeLlama slab disabled)\n", params.moe_cache_slots);
+    // Check kernel autotune cache for FlashAttention winners on GPU
+    if (plan.gpu_total_vram_mb > 0 && sandwich::autotune::Cache::instance().enabled()) {
+        if (sandwich::autotune::Cache::instance().size() == 0) {
+            if (g_sandwich_autotune_fn) {
+                g_sandwich_autotune_fn(params.model.path, plan.n_ctx_eval);
             } else {
-                size_t free_vram_mib = total_free_vram / (1024 * 1024);
-                size_t moe_cache_mib = 2048;
-                if (free_vram_mib > 4000) {
-                    moe_cache_mib = free_vram_mib - 800; // Leave 800 MB for non-MoE weights + TurboQuant KV
-                } else if (free_vram_mib > 2000) {
-                    moe_cache_mib = free_vram_mib - 500;
-                } else if (free_vram_mib > 500) {
-                    moe_cache_mib = free_vram_mib - 200;
-                }
-                if (params.moe_cache_size == 0) {
-                    params.moe_cache_size = moe_cache_mib * 1024 * 1024;
-                }
-                LOG_INF("   -> Modern MoE Cache: %zu MiB VRAM Expert Slab (O(1) LRU eviction)\n",
-                        params.moe_cache_size / (1024 * 1024));
-            }
-
-            // Ensure expert weights stay in host memory so GPU cache stages them
-            bool has_cpu_moe_override = false;
-            for (const auto & ov : params.tensor_buft_overrides) {
-                if (ov.pattern != nullptr && std::string(ov.pattern) == LLM_FFN_EXPS_REGEX) {
-                    has_cpu_moe_override = true;
-                    break;
-                }
-            }
-            if (!has_cpu_moe_override) {
-                while (!params.tensor_buft_overrides.empty() && params.tensor_buft_overrides.back().pattern == nullptr) {
-                    params.tensor_buft_overrides.pop_back();
-                }
-                params.tensor_buft_overrides.push_back(llm_ffn_exps_cpu_override());
-                params.tensor_buft_overrides.push_back({nullptr, nullptr});
-            }
-
-            params.n_gpu_layers = 99;
-        }
-
-        const bool is_fine_grained = is_moe && (expert_count >= 256 || model_arch == "qwen3next" || model_arch == "deepseek2" || model_arch == "deepseek3");
-        if (is_fine_grained) {
-            LOG_INF("   -> Topology: Fine-Grained MoE Architecture (Micro-Experts: %" PRId64 ")\n", expert_count);
-            LOG_INF("   -> Phase 6: Asymmetric Mixed-Precision & High-Density Micro-Expert Slab Cache Active\n");
-            LOG_INF("   -> O(1) LRU Slot Table: Optimized for 24k+ micro-expert indexing (Target 90%%+ Hit Rate)\n");
-        }
-
-        LOG_INF("   -> Phase 5: Pinned Host Memory & Early-Lookahead Router (Zero-Copy PCIe DMA)\n");
-        LOG_INF("   -> Phase 6: Asymmetric Mixed-Precision Quantization (Sub-4-bit IQK Experts / High-Precision Backbone)\n");
-
-        LOG_INF("   -> Asynchronous MoE Prefetcher: 2 worker threads (madvise WILLNEED + COLD + Lookahead)\n");
-        LOG_INF("   -> TurboQuant KV Compression: cache_type_k = turbo4, cache_type_v = turbo4\n");
-        LOG_INF("   -> Persistent Prompt Prefix Caching: 6 GiB Host RAM buffer & slot common-prefix matching active\n");
-
-        if (params.cache_ram_mib <= 0) {
-            params.cache_ram_mib     = 6144; // 6 GiB Host RAM prefix cache for OpenCode/Cline/Continue fast reuse
-        }
-        params.cache_prompt          = true;
-        params.cache_idle_slots      = true;
-        if (params.slot_prompt_similarity <= 0.0f) {
-            params.slot_prompt_similarity = 0.5f;
-        }
-
-        if (params.sandwich_predict && ctx_eval >= 48000) {
-            params.no_kv_offload = true;
-            params.cache_type_k = GGML_TYPE_TURBO2_0;
-            params.cache_type_v = GGML_TYPE_TURBO2_0;
-            LOG_INF("   -> TurboQuant Predictive Auto-Router: Ultra-long context (%d) auto-routed to Host DDR5 with turbo2 (%ld MB)\n",
-                    ctx_eval, (long)kv_turbo2_mb);
-        } else if (params.sandwich_predict && ctx_eval >= 32768) {
-            params.no_kv_offload = true;
-            params.cache_type_k = GGML_TYPE_TURBO3_0;
-            params.cache_type_v = GGML_TYPE_TURBO3_0;
-            LOG_INF("   -> TurboQuant Predictive Auto-Router: Long context (%d) auto-routed to Host DDR5 with turbo3 (%ld MB)\n",
-                    ctx_eval, (long)kv_turbo3_mb);
-        } else {
-            params.cache_type_k = GGML_TYPE_TURBO4_0;
-            params.cache_type_v = GGML_TYPE_TURBO4_0;
-            LOG_INF("   -> TurboQuant KV Compression: cache_type_k = turbo4, cache_type_v = turbo4 (%ld MB)\n", (long)kv_turbo4_mb);
-        }
-        params.flash_attn_type       = LLAMA_FLASH_ATTN_TYPE_ENABLED;
-        ggml_moe_prefetch_set_n_threads(4);
-
-        // Auto-discover routing profile CSV if present in model directory
-        if (params.moe_cache_profile.empty()) {
-            namespace fs = std::filesystem;
-            std::error_code ec;
-            fs::path p(params.model.path);
-            fs::path mdir = p.parent_path();
-            if (fs::exists(mdir, ec) && fs::is_directory(mdir, ec)) {
-                for (const auto & entry : fs::directory_iterator(mdir, ec)) {
-                    if (entry.is_regular_file(ec) && entry.path().extension() == ".csv") {
-                        params.moe_cache_profile = entry.path().string();
-                        LOG_INF("   -> FOUND MoE Routing Profile in model directory: %s\n", params.moe_cache_profile.c_str());
-                        break;
-                    }
-                }
+                std::string cmd = "./build/bin/sandwich --autotune -m \"" + params.model.path + "\" -c " + std::to_string(plan.n_ctx_eval);
+                int ret = std::system(cmd.c_str());
+                (void) ret;
             }
         }
+    }
 
-        std::string drafter_path = params.speculative.draft.mparams.path;
-        bool drafter_found = !drafter_path.empty();
+    // Apply offload, KV, MoE tiering, and speculative plan
+    params.n_gpu_layers            = plan.gpu_layers;
+    params.split_kv                = plan.use_split_kv;
+    params.no_kv_offload           = plan.no_kv_offload;
+    params.cache_type_k            = sandwich_kv_type_from_name(plan.kv_type_k);
+    params.cache_type_v            = sandwich_kv_type_from_name(plan.kv_type_v);
+    params.flash_attn_type         = plan.flash_attn ? LLAMA_FLASH_ATTN_TYPE_ENABLED : LLAMA_FLASH_ATTN_TYPE_DISABLED;
+    params.flash_attn_native_quants = plan.flash_attn_native_quants;
+    params.turboquant_varn         = plan.turboquant_varn;
+    if (plan.turboquant_varn) {
+        setenv("SANDWICH_TURBOQUANT_VARN", "1", 1);
+    }
+    params.turbo_mma               = plan.turbo_mma;
+    if (!plan.turbo_mma) {
+        setenv("GGML_TURBO_MMA_FUSED", "0", 1);
+    }
+    params.moe_3tier               = plan.moe_3tier;
+    params.moe_2q                  = plan.moe_2q;
+    params.moe_cache_slots         = plan.moe_cache_slots;
+    params.moe_cache_size          = plan.moe_cache_size;
+    params.moe_warm_ram_mb         = plan.moe_warm_ram_mb;
+    params.cache_ram_mib           = plan.cache_ram_mib;
+    params.chunked_prefill         = plan.chunked_prefill;
+    params.n_ubatch                = plan.n_ubatch;
+    params.prefill_chunk_size      = plan.prefill_chunk_size;
+    params.sched_async_cpu         = plan.sched_async_cpu;
+    params.asym_prefetch           = plan.asym_prefetch;
+    if (plan.asym_prefetch) {
+        setenv("SANDWICH_ASYM_PREFETCH", "1", 1);
+    }
+    params.parallel_decoding       = plan.parallel_decoding;
+    params.n_parallel              = plan.n_parallel;
+    params.cont_batching           = plan.cont_batching;
+    params.thp_align               = plan.thp_align;
+    params.early_exit_thresh       = plan.early_exit_thresh;
+    params.spec_pipe               = plan.spec_pipe;
+    if (plan.logits_topk_default) {
+        params.logits_topk = 64;
+    }
+    params.kva_prefill             = plan.kva_prefill;
+    params.jit_down_quant          = plan.jit_down_quant;
+    if (plan.is_mla) {
+        params.latent_mla = true;
+    }
+    if (params.native_mtp || params.load_mtp) {
+        params.native_mtp = true;
+        params.load_mtp   = true;
+    }
 
-        if (!drafter_found && !has_explicit_non_model_spec) {
-            drafter_path = sandwich_find_compatible_drafter(params.model.path, model_arch, vocab_size, embedding_length, tok_model);
-            if (!drafter_path.empty()) {
-                drafter_found = true;
-            }
-        }
+    params.tensor_buft_overrides.clear();
+    if (plan.moe_cpu_override) {
+        params.tensor_buft_overrides.push_back({ LLM_FFN_EXPS_REGEX, ggml_backend_cpu_buffer_type() });
+        params.tensor_buft_overrides.push_back({ nullptr, nullptr });
+    }
+    ggml_moe_prefetch_set_n_threads(plan.moe_prefetch_threads);
 
-        if (drafter_found) {
-            auto detected_types = common_speculative_types_from_gguf(drafter_path);
-            const bool is_mtp = !detected_types.empty() && detected_types[0] == COMMON_SPECULATIVE_TYPE_DRAFT_MTP;
-            LOG_INF("   -> [Technique #26] Active MoE Speculative Drafter: %s (%s)\n",
-                    is_mtp ? "NATIVE MTP EMBEDDED DRAFTER" : "EXT-MODEL SPECULATIVE DRAFTER",
-                    drafter_path.c_str());
-
-            if (!detected_types.empty()) {
-                params.speculative.types = detected_types;
-            } else {
-                params.speculative.types.push_back(COMMON_SPECULATIVE_TYPE_DRAFT_SIMPLE);
-            }
-            params.speculative.draft.mparams.path = drafter_path;
-            if (params.speculative.draft.n_gpu_layers < 0) {
-                // Defensive VRAM pinning: only pin drafter to VRAM when it fits the guard.
-                if (gpu_total_vram_mb >= 6000) {
-                    params.speculative.draft.n_gpu_layers = 99; // 100% in GPU VRAM
-                } else {
-                    params.speculative.draft.n_gpu_layers = 0; // Safe fallback: host (avoids OOM on small GPUs)
-                    LOG_WRN("   -> [Sandwich Guard] insufficient VRAM for drafter pinning; falling back to -ngld 0\n");
-                }
-            }
-            if (params.speculative.draft.n_max <= 0 || params.speculative.draft.n_max == 3) {
-                params.speculative.draft.n_max = is_mtp ? 1 : 6;
-            }
-            if (params.speculative.draft.p_min <= 0.0f) {
-                params.speculative.draft.p_min = 0.75f;
-            }
-            params.speculative.draft.cache_type_k = GGML_TYPE_TURBO4_0;
-            params.speculative.draft.cache_type_v = GGML_TYPE_TURBO4_0;
-        }
-
-        params.sched_async_cpu = true; // Overlap CPU cold-expert and GPU hot-expert computation
-    } else {
-        // Dense Model Handling: Strictly bypass Phase 5 & 6 MoE optimizations to preserve 100% stability and TurboQuant efficiency
-        params.moe_cache_size        = 0;
-        params.moe_expert_cache_size = 0;
-        ggml_moe_prefetch_set_n_threads(0);
-        ggml_moe_prefetch_clear_moe_layers();
-        params.tensor_type_overrides.clear();
-
-        std::string drafter_path = params.speculative.draft.mparams.path;
-        bool drafter_found = !drafter_path.empty();
-
-        if (!drafter_found && !has_explicit_non_model_spec) {
-            LOG_INF("   -> Scanning model directory tree for compatible speculative drafter...\n");
-            drafter_path = sandwich_find_compatible_drafter(params.model.path, model_arch, vocab_size, embedding_length, tok_model);
-            if (!drafter_path.empty()) {
-                drafter_found = true;
-            }
-        }
-
-        if (drafter_found) {
-            std::error_code d_ec;
-            size_t drafter_bytes = std::filesystem::file_size(drafter_path, d_ec);
-            int64_t drafter_mb = (!d_ec && drafter_bytes > 0) ? (int64_t)(drafter_bytes / (1024ULL * 1024ULL)) : 1000;
-
-            bool is_assistant = (drafter_path.find("assistant") != std::string::npos);
-            bool is_dflash = (drafter_path.find("dflash") != std::string::npos || drafter_path.find("DFlash") != std::string::npos);
-
-            int64_t drafter_headroom_mb = drafter_mb + (is_dflash ? 650 : (is_assistant ? 350 : 450));
-            int64_t main_budget_mb = safe_vram_cap_mb - drafter_headroom_mb - kv_turbo4_mb;
-            if (main_budget_mb < 0) main_budget_mb = 0;
-
-            int32_t optimal_layers = (main_budget_mb > 500) ? sandwich_calculate_optimal_layers(gguf_ctx.get(), file_bytes, model_arch, main_budget_mb) : 0;
-            float offload_ratio = 0.0f;
-            float ram_ratio = 1.0f;
-            int32_t target_gpu_layers = resolve_dense_offload(optimal_layers, offload_ratio, ram_ratio);
-            // Only use pure-CPU target + GPU drafter split when zero target layers fit in VRAM.
-            bool predict_asymmetric_split = (target_gpu_layers == 0);
-            int64_t offloaded_blocks = (total_blocks > 0) ? std::min<int64_t>(target_gpu_layers, total_blocks) : target_gpu_layers;
-            int64_t target_gpu_weight_mb = 0;
-            if (offloaded_blocks > 0 && approx_layer_bytes > 0) {
-                target_gpu_weight_mb = (int64_t)((offloaded_blocks * approx_layer_bytes) / (1024ULL * 1024ULL));
-                if (vocab_size > 0 && embedding_length > 0) {
-                    target_gpu_weight_mb += (vocab_size * embedding_length * 6ULL) / (10ULL * 1024ULL * 1024ULL);
-                }
-            }
-
-            int64_t gallocr_scratch_mb = is_dflash ? 650 : (is_assistant ? 350 : 450);
-            int64_t total_vram_without_kv = target_gpu_weight_mb + drafter_mb + gallocr_scratch_mb;
-            int64_t total_vram_proj_mb = total_vram_without_kv + kv_turbo4_mb;
-
-            // TurboQuant Predictive Selection (OOM Immunity & Context Scaling)
-            bool route_kv_to_host = false;
-            ggml_type target_kv_type = GGML_TYPE_TURBO4_0;
-            std::string kv_reason;
-
-            if (is_assistant) {
-                target_kv_type = GGML_TYPE_F16;
-                route_kv_to_host = false;
-                kv_reason = "ISWA shared KV cache requires unquantized F16";
-            } else if (params.sandwich_predict) {
-                if (ctx_eval >= 48000) {
-                    route_kv_to_host = true;
-                    target_kv_type = GGML_TYPE_TURBO2_0;
-                    kv_reason = "Ultra-long context (>=48K): host DDR5 auto-routing with turbo2 (8x compression, zero OOM guarantee)";
-                } else if (ctx_eval >= 32768 || total_vram_proj_mb > safe_vram_cap_mb) {
-                    route_kv_to_host = true;
-                    target_kv_type = GGML_TYPE_TURBO3_0;
-                    kv_reason = "Long context / VRAM cap exceeded: host DDR5 auto-routing with turbo3 (5.3x compression)";
-                } else {
-                    route_kv_to_host = false;
-                    target_kv_type = GGML_TYPE_TURBO4_0;
-                    kv_reason = "Fits safely within dynamic VRAM ceiling: GPU resident turbo4 (192 GB/s attention bandwidth)";
-                }
-            } else {
-                target_kv_type = GGML_TYPE_TURBO4_0;
-                route_kv_to_host = false;
-                kv_reason = "Default TurboQuant turbo4 policy";
-            }
-
-            bool is_blackwell = false;
-            for (size_t di = 0; di < ggml_backend_dev_count(); ++di) {
-                auto * d = ggml_backend_dev_get(di);
-                if (ggml_backend_dev_type(d) == GGML_BACKEND_DEVICE_TYPE_GPU) {
-                    std::string desc = ggml_backend_dev_description(d);
-                    if (desc.find("5050") != std::string::npos || desc.find("5060") != std::string::npos ||
-                        desc.find("5070") != std::string::npos || desc.find("5080") != std::string::npos ||
-                        desc.find("5090") != std::string::npos || desc.find("Blackwell") != std::string::npos) {
-                        is_blackwell = true;
-                        break;
-                    }
-                }
-            }
-
-            // Phase 10 & 11 Pipeline Overhaul & Hardware Push (Techniques #30 - #35)
-            params.spec_pipe          = true;
-            params.spec_tree_adaptive = true;
-            params.vnni_enabled       = true;
-            if (predict_asymmetric_split) {
-                params.split_kv       = true;
-                route_kv_to_host      = false; // Pure VRAM KV cache via Asymmetric Split-KV Engine!
-            }
-            if (is_blackwell) {
-                params.use_fp4        = true;
-            }
-
-            // Print Hardware & Predictive Telemetry HUD
-            LOG_INF("   Drafter:         FOUND %s (%ld MB)\n", drafter_path.c_str(), (long)drafter_mb);
-            LOG_INF("   Hardware Specs:  Host RAM: %lu MB (%lu MB free) | GPU VRAM: %ld MB (Safe Cap: %ld MB)\n",
-                    (unsigned long)host_ram_total_mb, (unsigned long)host_ram_free_mb, (long)gpu_total_vram_mb, (long)safe_vram_cap_mb);
-            LOG_INF("   Context Eval:    %d tokens (Projected KV Cache: %ld MB @ turbo4 | %ld MB @ turbo3 | %ld MB @ turbo2)\n",
-                    ctx_eval, (long)kv_turbo4_mb, (long)kv_turbo3_mb, (long)kv_turbo2_mb);
-            LOG_INF("   ----------------------------------------------------\n");
-            LOG_INF("   [Predictive Hardware-Aware Topology Solver (Technique #29)]\n");
-            LOG_INF("   Target Fit Calc: %d layers max in VRAM -> Offload Ratio Rgpu = %.1f%% (%s 25.0%% threshold)\n",
-                    optimal_layers, offload_ratio * 100.0f, offload_ratio <= 0.25f ? "<=" : ">");
-            if (predict_asymmetric_split) {
-                LOG_INF("   Prediction:      ASYMMETRIC SPLIT (Technique #29: Pure CPU Target + 100%% VRAM Drafter)\n");
-                LOG_INF("   Rationale:       Offloading %d/%ld layers yields <10%% math speedup while incurring ~15ms PCIe sync bubbles.\n",
-                        optimal_layers, (long)total_blocks);
-                LOG_INF("                    Target 100%% on CPU eliminates handoff bubbles, frees VRAM for 100%% drafter offload (180+ t/s),\n");
-                LOG_INF("                    and amortizes DDR5 weight reads via batched GEMM Spec-Tree verification targeting 2.5-3.2 t/s.\n");
-            } else {
-                LOG_INF("   Prediction:      HYBRID OFFLOAD (VRAM Attention/MLP + CPU Tail)\n");
-                LOG_INF("   Rationale:       %.1f%% layer offload computes high-throughput attention & MLP on RTX 5050 (192 GB/s).\n",
-                        offload_ratio * 100.0f);
-            }
-            LOG_INF("   ----------------------------------------------------\n");
-            LOG_INF("   [TurboQuant Predictive Auto-Router (OOM Immunity)]\n");
-            LOG_INF("   Projected VRAM:  %ld MB (Target: %ld MB + Drafter: %ld MB + Gallocr: %ld MB + KV: %ld MB)\n",
-                    (long)total_vram_proj_mb, (long)target_gpu_weight_mb, (long)drafter_mb, (long)gallocr_scratch_mb,
-                    route_kv_to_host ? 0L : (long)kv_turbo4_mb);
-            LOG_INF("   Routing Policy:  %s (%s)\n",
-                    route_kv_to_host ? "HOST DDR5 RAM AUTO-ROUTING" : "GPU VRAM RESIDENT",
-                    ggml_type_name(target_kv_type));
-            LOG_INF("   Rationale:       %s\n", kv_reason.c_str());
-            LOG_INF("   ----------------------------------------------------\n");
-            LOG_INF("   Execution Plan:\n");
-            LOG_INF("   -> Main Target:     n_gpu_layers = %d (%s)\n",
-                    target_gpu_layers, predict_asymmetric_split ? "100% Pure CPU Execution via Raptor Lake P-cores" : "Hybrid GPU/CPU Offload");
-            LOG_INF("   -> Spec Drafter:    n_gpu_layers = 99 (100%% VRAM Resident @ 180+ t/s)\n");
-            LOG_INF("   -> KV Cache Target: %s (k=%s, v=%s)\n",
-                    route_kv_to_host ? "HOST DDR5 RAM" : "GPU VRAM Offloaded",
-                    ggml_type_name(target_kv_type), ggml_type_name(target_kv_type));
-            LOG_INF("   -> KV Cache Draft:  GPU VRAM Offloaded (k=turbo4, v=turbo4)\n");
-            LOG_INF("   -> Tree Decoding:   ACTIVE (depth=3, width=2, p_split=0.15)\n");
-            LOG_INF("   -> 2MB THP Align:   ACTIVE (madvise MADV_HUGEPAGE, Technique #25)\n");
-            LOG_INF("   -> [P1] Spec Pipe:  ACTIVE (Technique #28: Double-buffered asynchronous GPU timeline)\n");
-            if (predict_asymmetric_split) {
-                LOG_INF("   -> [P3] Split-KV:   ACTIVE (Technique #29: Pure VRAM KV cache, 0 bytes KV over DDR5)\n");
-            }
-            LOG_INF("   -> [P4] AVX2-VNNI:  ACTIVE (Technique #30: Single-cycle _mm256_dpbusd_epi32 on P-cores 0-5)\n");
-            if (is_blackwell) {
-                LOG_INF("   -> [P6] Blackwell:  ACTIVE (Technique #32: CC 12.0 NVFP4 / MXFP4 Tensor Cores)\n");
-            }
-
-            params.n_gpu_layers          = target_gpu_layers;
-            params.moe_expert_cache_size = 0;
-            params.no_kv_offload         = route_kv_to_host;
-            params.cache_type_k          = target_kv_type;
-            params.cache_type_v          = target_kv_type;
-            params.flash_attn_type       = LLAMA_FLASH_ATTN_TYPE_ENABLED;
-
-            // Configure Speculative Drafter
-            params.speculative.types.clear();
-            auto detected_types = common_speculative_types_from_gguf(drafter_path);
-            if (!detected_types.empty()) {
-                params.speculative.types = detected_types;
-            } else {
-                params.speculative.types.push_back(COMMON_SPECULATIVE_TYPE_DRAFT_SIMPLE);
-            }
-            params.speculative.draft.mparams.path = drafter_path;
-            if (total_vram_proj_mb <= safe_vram_cap_mb) {
-                params.speculative.draft.n_gpu_layers = 99; // 100% in GPU VRAM
-            } else {
-                params.speculative.draft.n_gpu_layers = 0; // Safe fallback: host (VRAM pinning exceeds guard)
-                LOG_WRN("   -> [Sandwich Guard] VRAM pinning would exceed guard (%ld > %ld MB); falling back to -ngld 0\n",
-                        (long)total_vram_proj_mb, (long)safe_vram_cap_mb);
-            }
-            params.speculative.draft.n_max        = 5;
-            params.speculative.draft.p_min        = 0.75f;
-            params.speculative.draft.cache_type_k = is_assistant ? GGML_TYPE_F16 : GGML_TYPE_TURBO4_0;
-            params.speculative.draft.cache_type_v = is_assistant ? GGML_TYPE_F16 : GGML_TYPE_TURBO4_0;
-
-            // Phase 7: Speculative Tree Decoding
+    if (plan.spec_type == "draft" && !plan.drafter_path.empty()) {
+        params.speculative.draft.mparams.path   = plan.drafter_path;
+        params.speculative.draft.n_gpu_layers   = plan.drafter_gpu_layers;
+        params.speculative.draft.n_max          = plan.spec_n_max;
+        params.speculative.draft.p_min          = plan.spec_p_min;
+        params.speculative.draft.cache_type_k   = sandwich_kv_type_from_name(plan.drafter_kv_type);
+        params.speculative.draft.cache_type_v   = sandwich_kv_type_from_name(plan.drafter_kv_type);
+        if (plan.spec_tree) {
             params.spec_tree         = true;
             params.spec_tree_depth   = 3;
             params.spec_tree_width   = 2;
             params.spec_tree_p_split = 0.15f;
-
-            // Phase 8: Dense Wing Overhaul (preserve weight precision unless user enabled JIT down-quant)
-            params.thp_align         = true;
-            params.early_exit_thresh = predict_asymmetric_split ? 0.0f : 0.92f;
+        }
+        auto detected_types = common_speculative_types_from_gguf(plan.drafter_path);
+        params.speculative.types.clear();
+        if (!detected_types.empty()) {
+            params.speculative.types = detected_types;
         } else {
-            // UNCAPPED VRAM PROFILE (No drafter found)
-            int64_t uncapped_budget_mb = safe_vram_cap_mb - kv_turbo4_mb;
-            if (uncapped_budget_mb < 0) uncapped_budget_mb = 0;
-            int32_t optimal_layers = (uncapped_budget_mb > 500) ? sandwich_calculate_optimal_layers(gguf_ctx.get(), file_bytes, model_arch, uncapped_budget_mb) : 0;
-            float offload_ratio = 0.0f;
-            float ram_ratio = 1.0f;
-            int32_t target_gpu_layers = resolve_dense_offload(optimal_layers, offload_ratio, ram_ratio);
-
-            // Only fall back to pure-CPU target + GPU split-KV when zero layers fit in VRAM.
-            bool push_to_ram = (target_gpu_layers == 0);
-
-            int64_t offloaded_blocks = (total_blocks > 0) ? std::min<int64_t>(target_gpu_layers, total_blocks) : target_gpu_layers;
-            int64_t target_gpu_weight_mb = 0;
-            if (offloaded_blocks > 0 && approx_layer_bytes > 0) {
-                target_gpu_weight_mb = (int64_t)((offloaded_blocks * approx_layer_bytes) / (1024ULL * 1024ULL));
-                if (vocab_size > 0 && embedding_length > 0) {
-                    target_gpu_weight_mb += (vocab_size * embedding_length * 6ULL) / (10ULL * 1024ULL * 1024ULL);
-                }
-            }
-
-            int64_t total_vram_proj_mb = target_gpu_weight_mb + 400 + kv_turbo4_mb;
-            bool route_kv_to_host = false;
-            ggml_type target_kv_type = GGML_TYPE_TURBO4_0;
-            std::string kv_reason;
-
-            if (push_to_ram) {
-                route_kv_to_host = false; // Pinned to GPU VRAM via Asymmetric Split-KV!
-                target_kv_type = GGML_TYPE_TURBO4_0;
-                kv_reason = "Zero-layer VRAM fit fallback: dense weights in CPU DDR5 RAM, KV cache pinned to GPU VRAM (split-kv)";
-            } else if (params.sandwich_predict) {
-                if (ctx_eval >= 48000) {
-                    route_kv_to_host = true;
-                    target_kv_type = GGML_TYPE_TURBO2_0;
-                    kv_reason = "Ultra-long context (>=48K): host DDR5 auto-routing with turbo2 (zero OOM guarantee)";
-                } else if (ctx_eval >= 32768 || total_vram_proj_mb > safe_vram_cap_mb) {
-                    route_kv_to_host = true;
-                    target_kv_type = GGML_TYPE_TURBO3_0;
-                    kv_reason = "Long context / VRAM cap exceeded: host DDR5 auto-routing with turbo3";
-                } else {
-                    route_kv_to_host = false;
-                    target_kv_type = GGML_TYPE_TURBO4_0;
-                    kv_reason = "Fits safely within dynamic VRAM ceiling: GPU resident turbo4";
-                }
-            } else {
-                target_kv_type = GGML_TYPE_TURBO4_0;
-                route_kv_to_host = false;
-                kv_reason = "Default TurboQuant turbo4 policy";
-            }
-
-            LOG_INF("   -> No compatible draft model found in directory tree.\n");
-            if (push_to_ram) {
-                LOG_INF("   -> CPU FALLBACK ACTIVE (Asymmetric Split-KV & CPU Weight Pinning)\n");
-                LOG_INF("   -> 100.0%% of model weights reside in host RAM (0 layers fit in VRAM budget).\n");
-                LOG_INF("   -> KV Cache & FlashAttention pinned in GPU VRAM (split-kv).\n");
-            } else {
-                LOG_INF("   -> Policy: Dense GPU/Hybrid Offload Mode (budget=%ld MB)\n", (long)uncapped_budget_mb);
-                LOG_INF("   -> Main Model:   n_gpu_layers = %d (offload_ratio = %.1f%%)\n", target_gpu_layers, offload_ratio * 100.0f);
-            }
-            LOG_INF("   -> KV Cache Target: %s (k=%s, v=%s, reason: %s)\n",
-                    route_kv_to_host ? "HOST DDR5 RAM" : "GPU VRAM Offloaded",
-                    ggml_type_name(target_kv_type), ggml_type_name(target_kv_type), kv_reason.c_str());
-            LOG_INF("   -> Phase 8: 2MB Transparent HugePages (THP) Alignment ACTIVE (madvise MADV_HUGEPAGE)\n");
-
-            params.n_gpu_layers          = target_gpu_layers;
-            if (push_to_ram) {
-                params.split_kv          = true;
-            }
-            params.moe_expert_cache_size = 0;
-            params.parallel_decoding     = true;
-            if (params.n_parallel < 0) {
-                params.n_parallel = 4;
-            }
-            params.cont_batching         = true;
-            params.no_kv_offload         = route_kv_to_host;
-            params.cache_type_k          = target_kv_type;
-            params.cache_type_v          = target_kv_type;
-            params.flash_attn_type       = LLAMA_FLASH_ATTN_TYPE_ENABLED;
-            params.thp_align             = true;
-
-            if (!has_explicit_non_model_spec) {
-                // Zero-VRAM Context N-Gram Prompt Lookup Speculative Decoding
-                LOG_INF("   -> Speculative:  Activating Zero-VRAM Context N-Gram Lookup Speculation (n=12, m=48)\n");
-                params.speculative.types.clear();
-                params.speculative.types.push_back(COMMON_SPECULATIVE_TYPE_NGRAM_SIMPLE);
-                params.speculative.ngram_simple.size_n   = 12; // Search context for matching 12-grams
-                params.speculative.ngram_simple.size_m   = 48; // Propose up to 48 candidate tokens
-                params.speculative.ngram_simple.min_hits = 1;
-                params.speculative.draft.n_max           = 5;
-            }
+            params.speculative.types.push_back(COMMON_SPECULATIVE_TYPE_DRAFT_SIMPLE);
         }
+    } else if (plan.spec_type == "ngram-simple") {
+        params.speculative.types.clear();
+        params.speculative.types.push_back(COMMON_SPECULATIVE_TYPE_NGRAM_SIMPLE);
+        params.speculative.ngram_simple.size_n   = 12;
+        params.speculative.ngram_simple.size_m   = 48;
+        params.speculative.ngram_simple.min_hits = 1;
+        params.speculative.draft.n_max           = plan.spec_n_max;
     }
 
-    // [Techniques #28 - #36 Synthesis] Hardware-Aware Pipeline Engagement
-    if (params.split_kv || (!is_moe && params.n_gpu_layers == 0)) {
-        params.split_kv = true;
-        params.no_kv_offload = false;
-        params.spec_pipe = true;
-        if (params.logits_topk <= 0) {
-            params.logits_topk = 64;
-        }
-        LOG_INF("   -> [Technique #28] Pipelined Double-Buffered Speculation ACTIVE (--spec-pipe)\n");
-        LOG_INF("   -> [Technique #29] Asymmetric Split-KV Engine ACTIVE (--split-kv, pure VRAM KV cache on CPU target)\n");
-        LOG_INF("   -> [Technique #34] GPU Top-K Logits Reduction ACTIVE (--logits-topk %d, 99.9%% PCIe transfer reduction)\n", params.logits_topk);
-    }
+    LOG_INF("\n=======================================================\n");
+    LOG_INF("🥪 [Project Sandwich] Unified Auto-Dispatcher\n");
+    LOG_INF("   Model Path:        %s\n", params.model.path.c_str());
+    LOG_INF("   Total Model Bytes: %.2f GiB (%" PRIu64 " bytes across all shards)\n",
+            (double) plan.total_model_bytes / (1024.0 * 1024.0 * 1024.0), (uint64_t) plan.total_model_bytes);
+    LOG_INF("   Topology:          %s (arch = %s, experts = %" PRId64 ", layers = %d)\n",
+            plan.is_moe ? "MIXTURE OF EXPERTS (MoE)" : "DENSE TRANSFORMER",
+            plan.model_arch.c_str(), plan.expert_count, plan.total_layers);
+    LOG_INF("   Offload / KV:      ngl=%d, threads=%d, ctk=%s, ctv=%s, warm_ram=%d MiB\n",
+            params.n_gpu_layers, params.cpuparams.n_threads,
+            ggml_type_name(params.cache_type_k), ggml_type_name(params.cache_type_v),
+            params.moe_warm_ram_mb);
 
-    if (params.vnni_enabled) {
-        LOG_INF("   -> [Technique #30] AVX2-VNNI P-Core Vector Execution ACTIVE (Q2_K / IQ2_XXS _mm256_dpbusd_epi32)\n");
+    std::ostringstream _cmd;
+    _cmd << "./build/bin/llama-cli -m \"" << params.model.path << "\""
+         << " -ngl " << params.n_gpu_layers
+         << " -t " << params.cpuparams.n_threads
+         << " -c " << params.n_ctx;
+    if (!params.speculative.draft.mparams.path.empty()) {
+        _cmd << " -md \"" << params.speculative.draft.mparams.path << "\""
+             << " -ngld " << params.speculative.draft.n_gpu_layers;
     }
+    if (params.moe_cache_slots > 0) {
+        _cmd << " --moe-cache-slots " << params.moe_cache_slots;
+    }
+    if (params.moe_warm_ram_mb > 0) {
+        _cmd << " --moe-warm-ram-mb " << params.moe_warm_ram_mb;
+    }
+    if (params.cache_type_k != GGML_TYPE_F16) {
+        _cmd << " -ctk " << ggml_type_name(params.cache_type_k)
+             << " -ctv " << ggml_type_name(params.cache_type_v);
+    }
+    if (params.flash_attn_type != LLAMA_FLASH_ATTN_TYPE_DISABLED) {
+        _cmd << " -fa";
+    }
+    if (params.moe_2q) _cmd << " --moe-2q";
+    if (params.moe_3tier) _cmd << " --io-uring";
+    if (params.turbo_mma) _cmd << " --turbo-mma";
+    else _cmd << " --no-turbo-mma";
+    LOG_INF("   -> [Sandwich Guard] Constructed command line: %s\n", _cmd.str().c_str());
 
-    if (gpu_free_vram_b > 0) {
-        params.flash_attn_native_quants = true;
-        LOG_INF("   -> [Technique #33] Quantized-Native CUDA FlashAttention ACTIVE (-fanq, 0 intermediate F16 buffer, sm_120 2x KQ half)\n");
-
-        // Defensive: the fused turbo4 MMA decode path faults (misaligned address) on
-        // head_dim >= 256 / high-GQA configs (Qwen3.6-35B: DKQ=256, ncols=16).
-        // Never auto-enable it here; keep the safe vector kernel unless explicitly requested.
-        if (params.cache_type_k == GGML_TYPE_TURBO4_0 || params.cache_type_k == GGML_TYPE_TURBO3_0 || params.cache_type_k == GGML_TYPE_TURBO2_0) {
-            LOG_INF("   -> [Technique #35] Fused TurboQuant MMA left DISABLED by dispatch (vector kernel) for load safety\n");
-        }
-
-        // [Turbo-KVarN Unified Hybrid] Closed-Form Dual-Axis Variance Normalization
-        if (params.turboquant_varn || params.cache_type_k == GGML_TYPE_TURBO4_0 || params.cache_type_k == GGML_TYPE_TURBO3_0 || params.cache_type_k == GGML_TYPE_TURBO2_0) {
-            params.turboquant_varn = true;
-            setenv("SANDWICH_TURBOQUANT_VARN", "1", 1);
-            LOG_INF("   -> [Turbo-KVarN] TurboQuant & KVarN Unified Hybrid ACTIVE (Closed-Form Dual-Axis Variance Normalization)\n");
-        }
-
-        if (params.sched_async_cpu) {
-            LOG_INF("   -> [Technique #36] Asynchronous CPU Split Worker Overlap ACTIVE (--sched-async-cpu)\n");
-        }
-    }
-
-    // [Techniques #41 - #46 Synthesis] Frontier Kernel & Pipeline Activation
-    if (params.radix_cache) {
-        LOG_INF("   -> [Technique #41] Radix-Tree Persistent Prefix Caching ACTIVE (max %d tokens, 0ms TTFT prefix reuse)\n", params.radix_cache_tokens);
-    }
-
-    if (params.native_mtp || params.load_mtp) {
-        params.native_mtp = true;
-        params.load_mtp = true;
-        LOG_INF("   -> [Technique #43] Zero-Memory Native MTP Speculative Rollout ACTIVE (--native-mtp, 0MB drafter footprint)\n");
-    }
-
-    if (params.asym_kv_squeeze || (params.cache_type_k == GGML_TYPE_TURBO4_0 && params.cache_type_v == GGML_TYPE_TURBO2_0)) {
-        params.asym_kv_squeeze = true;
-        params.cache_type_k = GGML_TYPE_TURBO4_0;
-        params.cache_type_v = GGML_TYPE_TURBO2_0;
-        LOG_INF("   -> [Technique #44] Asymmetric KV Outlier Channelling ACTIVE (K: turbo4 PolarQuant, V: turbo2 LogScale, 2.75 bits/tok)\n");
-    }
-
-    if (params.chunked_prefill || ctx_eval >= 32768 || is_moe) {
-        params.chunked_prefill = true;
-        if (params.prefill_chunk_size > 0) {
-            params.n_ubatch = params.prefill_chunk_size;
-        } else if (is_moe) {
-            // In fine-grained MoE architectures (e.g. Qwen Flash Next 125B with 512 experts),
-            // large ubatches activate nearly all experts at once, triggering an SSD/DDR5 thrashing storm.
-            // Micro-chunking (64 to 128) concentrates token activations on a compact active expert subset.
-            params.n_ubatch = (expert_count >= 256) ? 64 : 128;
-            params.prefill_chunk_size = params.n_ubatch;
-        } else if (params.n_ubatch > 512 || params.n_ubatch == 0) {
-            params.n_ubatch = 512;
-        }
-        LOG_INF("   -> [Technique #45/#76] Chunked Context Prefill & Ping-Pong Activation Staging ACTIVE (ubatch=%d, transient VRAM < 350MB)\n", params.n_ubatch);
-    }
-
-    const bool is_mla = (model_arch == "deepseek2" || model_arch == "deepseek" || model_arch == "deepseek3" || model_arch == "deepseek4");
-    if (params.latent_mla || is_mla) {
-        params.latent_mla = true;
-        LOG_INF("   -> [Technique #46] Latent FlashMLA Direct Tensor Core MMA ACTIVE (--latent-mla, un-expanded manifold projection)\n");
-    }
-
-    // Phase 15: Strata Assimilation & DeepSeek V4.1 Optimizations (Techniques #49 - #57)
-    if (params.prefill_head_alias) {
-        LOG_INF("   -> [Technique #49] Prefill Head Aliasing ACTIVE (--prefill-head-alias, borrow output head VRAM during prefill)\n");
-    }
-    if (params.kva_prefill || (ctx_eval >= 32768 && (is_moe || is_mla))) {
-        params.kva_prefill = true;
-        LOG_INF("   -> [Technique #50] KVA Late-Layer Recurrence Prefill ACTIVE (--kva-prefill, skip late MoE forward passes)\n");
-    }
-    if (params.moe_disjoint_guard) {
-        LOG_INF("   -> [Technique #51] Disjoint Peer Cache Guard ACTIVE (--moe-disjoint-guard, prevent duplicate expert slots)\n");
-    }
-    if (params.dma_batch) {
-        LOG_INF("   -> [Technique #52] Batched DMA Engine ACTIVE (--dma-batch, cudaMemcpyBatchAsync on CUDA 13+)\n");
-    }
-    if (params.moe_exchange_rot) {
-        LOG_INF("   -> [Technique #53] Exchange Buffer Pointer Rotation ACTIVE (--moe-exchange-rot, zero-copy host DRAM swap)\n");
-    }
-    if (params.msg_boundary_cache) {
-        LOG_INF("   -> [Technique #54] Message-Boundary Delta Caching ACTIVE (--msg-cache, instant agent multi-turn edit)\n");
-    }
-    if (params.fused_expdec) {
-        LOG_INF("   -> [Technique #55] QSA_ROWS & EXPDEC Fused Shared-Memory Kernels ACTIVE (--fused-expdec)\n");
-    }
-    if (params.dsv41_mode || model_arch == "deepseek4") {
-        LOG_INF("   -> [DeepSeek V4.1 Flash] GSQ_RCO Native Mode ACTIVE (experts=%d/word, Engram async NVMe reader)\n", params.dsv41_experts);
-    }
-    if (params.dynamic_yarn && params.rope_scaling_type == LLAMA_ROPE_SCALING_TYPE_YARN) {
-        LOG_INF("   -> [Technique #58] Dynamic YaRN Auto-Frequency Scaling ACTIVE (n_ctx=%d > train=%ld, scale=%.4f, orig_ctx=%d)\n",
-                ctx_eval, (long)n_ctx_train, params.rope_freq_scale, params.yarn_orig_ctx);
-    }
-    LOG_INF("   -> [Universal Attention Sink Guard] ACTIVE (--attn-sinks %d, prevents multi-turn context collapse)\n", params.n_sink_tokens);
-    if (params.unrotated_kv) {
-        LOG_INF("   -> [Technique #60] Unrotated KV Staging ACTIVE (--unrotated-kv, O(1) zero-copy sliding context shifts)\n");
-    }
-
-    if (!params.peer_nodes.empty()) {
-        LOG_INF("   -> [Era 9: P2P Polar Mesh] Techniques #61-#66 ACTIVE\n");
-        LOG_INF("      * Peer Nodes: %s\n", params.peer_nodes.c_str());
-        LOG_INF("      * [Technique #61] Heterogeneous Distributed VRAM Pooling\n");
-        LOG_INF("      * [Technique #62] Topology Partitioning (compute/memory weighted)\n");
-        LOG_INF("      * [Technique #63] %s (Zero-Copy DMA: %s, Split-KV: %s)\n",
-                params.peer_dma ? "Thunderbolt 4 / USB4 DMA PCIe" : "TCP/IP Socket Streaming",
-                params.peer_dma ? "ON" : "OFF",
-                params.peer_split_kv ? "ON" : "OFF");
-        LOG_INF("      * [Technique #64] 2-Bit Walsh-Hadamard Polar Net Quantization: %s (8x network compression)\n",
-                params.peer_turbo_net ? "ON" : "OFF");
-        LOG_INF("      * [Technique #65] Distributed Speculative Pipeline: %s\n",
-                params.peer_spec_pipe ? "ON" : "OFF");
-        LOG_INF("      * [Technique #66] Dynamic Zero-Crash Failover: %s\n",
-                params.peer_fallback ? "ON" : "OFF");
-    }
-
-    if (params.speculative.types.size() > 1 || params.speculative.select) {
-        params.speculative.select = true;
-        LOG_INF("   -> [Dynamic Multi-Drafter] Dynamic Speculative Drafter Arbitration ACTIVE (--spec-select, Bayesian shadow learning)\n");
-    }
-
-    if (params.dynamic_watermark) {
-        LOG_INF("   -> [Technique #73] Dynamic Memory Watermarking System ACTIVE (--dynamic-watermark, live HWM 85%% / LWM 70%% tracking)\n");
-    }
-    if (params.asym_prefetch || (is_moe && expert_count >= 256)) {
-        params.asym_prefetch = true;
-        setenv("SANDWICH_ASYM_PREFETCH", "1", 1);
-        LOG_INF("   -> [Technique #74] Asymmetric Parallel Prefetch ACTIVE (--asym-prefetch, pinned DMA shared weights + async MoE lookahead)\n");
-    }
-    if (params.ram_cache_mb > 0) {
-        LOG_INF("   -> [Technique #75] Dedicated Host RAM Caching Layer ACTIVE (--ram-cache-mb %d, 2MB THP Host L2 Cache)\n", params.ram_cache_mb);
-    }
-    if (params.chunked_prefill) {
-        LOG_INF("   -> [Technique #76] Chunked Prefill Dynamic Scheduling ACTIVE (chunk_size=%d, prevents MoE DDR5 bus thrashing)\n", params.n_ubatch);
-    }
-    if (params.h2o_compression) {
-        LOG_INF("   -> [Technique #77] Heavy Hitter Oracle (H2O) ACTIVE (budget=%d, heavy_hitters=%d, sinks=%d)\n",
-                params.h2o_budget, params.h2o_heavy_hitters, params.n_sink_tokens);
-    }
-
-    // Defensive flag-combination validation (prevents --sandwich-auto load crashes).
-    if (params.turbo_mma && (params.cache_type_k == GGML_TYPE_TURBO4_0 || params.cache_type_k == GGML_TYPE_TURBO3_0 || params.cache_type_k == GGML_TYPE_TURBO2_0) && head_dim >= 256) {
-        params.turbo_mma = false;
-        setenv("GGML_TURBO_MMA_FUSED", "0", 1);
-        LOG_WRN("   -> [Sandwich Guard] disabled --turbo-mma for head_dim=%ld (fused MMA faults); using vector kernel.\n", (long)head_dim);
-    }
-    if (params.speculative.draft.n_gpu_layers >= 99 && gpu_total_vram_mb < 6000) {
-        params.speculative.draft.n_gpu_layers = 0;
-        LOG_WRN("   -> [Sandwich Guard] drafter VRAM pinning exceeds guard; falling back to -ngld 0.\n");
-    }
-    if (params.moe_warm_ram_mb > 16552) {
-        params.moe_warm_ram_mb = 16384;
-        LOG_WRN("   -> [Sandwich Guard] moe_warm_ram_mb clamped to 16384 (host guard).\n");
-    }
-    if (params.moe_cache_slots > 0 && params.moe_cache_size > 0) {
-        // Mutual exclusivity: disable BeeLlama slab to prevent double VRAM allocation.
-        params.moe_cache_size = 0;
-        LOG_WRN("   -> [Sandwich Guard] cleared moe_cache_size (mutually exclusive with moe_cache_slots).\n");
-    }
-
-    // Log the constructed command line for auditability.
-    {
-        std::ostringstream _cmd;
-        _cmd << "./build/bin/llama-cli -m \"" << params.model.path << "\""
-             << " -ngl " << params.n_gpu_layers
-             << " -t " << params.cpuparams.n_threads
-             << " -c " << params.n_ctx;
-        if (!params.speculative.draft.mparams.path.empty()) {
-            _cmd << " -md \"" << params.speculative.draft.mparams.path << "\""
-                 << " -ngld " << params.speculative.draft.n_gpu_layers;
-        }
-        if (params.moe_cache_slots > 0) {
-            _cmd << " --moe-cache-slots " << params.moe_cache_slots;
-        }
-        if (params.moe_warm_ram_mb > 0) {
-            _cmd << " --moe-warm-ram-mb " << params.moe_warm_ram_mb;
-        }
-        if (params.cache_type_k != GGML_TYPE_F16) {
-            _cmd << " -ctk " << ggml_type_name(params.cache_type_k)
-                 << " -ctv " << ggml_type_name(params.cache_type_v);
-        }
-        if (params.flash_attn_type != LLAMA_FLASH_ATTN_TYPE_DISABLED) {
-            _cmd << " -fa";
-        }
-        if (params.moe_2q) _cmd << " --moe-2q";
-        if (params.moe_3tier) _cmd << " --io-uring";
-        if (params.turbo_mma) _cmd << " --turbo-mma";
-        else _cmd << " --no-turbo-mma";
-        LOG_INF("   -> [Sandwich Guard] Constructed command line: %s\n", _cmd.str().c_str());
-        if (const char * _sp = std::getenv("SANDWICH_DISPATCH_PRINT")) {
-            if (_sp[0] != '\0') {
-                std::fprintf(stderr, "SANDWICH_DISPATCH_PRINT argv: %s\n", _cmd.str().c_str());
-                std::fflush(stderr);
-                std::exit(0);
-            }
+    if (const char * _sp = std::getenv("SANDWICH_DISPATCH_PRINT")) {
+        if (_sp[0] != '\0') {
+            std::fprintf(stderr, "SANDWICH_DISPATCH_PRINT total_model_bytes: %" PRIu64 "\n", (uint64_t) plan.total_model_bytes);
+            std::fprintf(stderr, "SANDWICH_DISPATCH_PRINT argv: %s\n", _cmd.str().c_str());
+            std::fflush(stderr);
+            std::exit(0);
         }
     }
 

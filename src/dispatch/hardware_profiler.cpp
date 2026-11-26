@@ -468,6 +468,7 @@ TieringPlan HardwareProfiler::calculate_tiering(
     const std::string & kv_quant
 ) {
     TieringPlan plan;
+    plan.total_model_bytes = model_bytes;
     plan.model_total_mb = model_bytes / (1024 * 1024);
     plan.total_layers = (total_layers > 0) ? total_layers : 32;
 
