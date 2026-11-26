@@ -80,3 +80,16 @@ Tested `Qwen3.8-Flash-Next` (`qwen4exp`, 125.74B, `70.91 GiB` across 2 shards) u
   - `Shared_Clean`: **`8.43 MiB`** (`0.04%`)
   - *Guard Assessment*: Raw `VmHWM` conflates reclaimable clean `mmap` page-cache residency with non-reclaimable `Anonymous + Private_Dirty` footprint (`~254–265 MiB`). For `mmap`-heavy MoE models, `VmHWM` is not measuring actual memory pressure; however, under the current `VmHWM <= 16,552 MiB` rule as defined, this run remains a guard breach.
 - **Throughput & Output**: `140.8 s` total (`5.7 t/s` prefill, `23.0 t/s` decode); **Verdict: `LOADS+DEGENERATE`** (`[Start thinking]\n\n33333333...` even with Jinja template applied and no dense `Q2_K` down-quantization). The universality thesis is **not proven** on `Qwen3.8-Flash-Next`: shard sizing is fixed (`70.91 GiB`), but both guards breach and output collapses.
+
+---
+
+## 5. Dynamic 7,800 MiB Ceiling, MoE Full-Fit & Fill-to-Ceiling Verification (`phase3_ceiling_v3.json`)
+
+Measured across `n=3` runs per model (`60 s` cooldown, chat template active, `--spec-type none`, `SANDWICH_AUTOTUNE_DISABLE=1`, idle GPU floor `2 MiB`) after `6f7c3c34a`, `5b5c22355`, and `5abb2ca40`:
+
+| Model | Before (`-ngl` / VRAM / Decode) | After (`-ngl` / Prefill $\mu \pm \sigma$ / Decode $\mu \pm \sigma$) | Peak VRAM ($\le 7,800$) | Peak VmHWM | Output Verdict |
+|---|---|---|---|---|---|
+| **DeepSeek-Coder-V2-Lite** (`deepseek2`, `6.49 GiB`) | `-ngl 99` + 3-tier slab / `3,650 MiB` / `15.20 ± 0.17 t/s` | **`-ngl 99` (MoE Full-Fit, Tier 2/3 OFF)** / **`113.17 ± 2.08 t/s`** / **`29.97 ± 0.06 t/s`** (**1.97×**) | **7,186.0 MiB** ✓ | **7,100.5 MiB** ✓ | **COHERENT ✓** |
+| **Gemma-4-31B-it QAT** (`gemma4`, `16.44 GiB`) | `-ngl 15` (`16` pre-refactor) / `5,689 MiB` / `2.03 ± 0.55 t/s` | **`-ngl 20`** (`+5` layers, `turbo3` KV) / **`109.33 ± 4.60 t/s`** / **`2.40 ± 0.00 t/s`** | **6,462.0 MiB** ✓ | **17,375.7 MiB** | **COHERENT ✓** |
+| **GLM-4.7-Flash** (`glm4moe`, `12.02 GiB`) | `-ngl 99` (`2,400 MiB` fixed slab) / `2.77 t/s` | **`-ngl 99` (slab filled to ceiling)** / **`9.53 ± 1.25 t/s`** / **`4.97 ± 0.45 t/s`** | **6,038.0 MiB** ✓ | **18,871.1 MiB** | **COHERENT ✓** |
+| **Qwen3.6-35B-A3B (Certified)** (`qwen35moe`) | `-ngl 14 -ngld 99`, `6,576 MiB`, `32.72 ± 0.61 t/s` | **`-ngl 14 -ngld 99`** / **`477.75 ± 4.03 t/s`** *(warm-2)* / **`32.45 ± 0.21 t/s`** *(warm-2)* | **6,576.0 MiB** ✓ | **13,935.0 MiB** ✓ | **COHERENT + 3/3 SHA ✓** |
