@@ -79,4 +79,4 @@ Tested `Qwen3.8-Flash-Next` (`qwen4exp`, 125.74B, `70.91 GiB` across 2 shards) u
   - `Anonymous`: **`253.64 MiB`** (`1.3%`)
   - `Shared_Clean`: **`8.43 MiB`** (`0.04%`)
   - *Guard Assessment*: Raw `VmHWM` conflates reclaimable clean `mmap` page-cache residency with non-reclaimable `Anonymous + Private_Dirty` footprint (`~254–265 MiB`). For `mmap`-heavy MoE models, `VmHWM` is not measuring actual memory pressure; however, under the current `VmHWM <= 16,552 MiB` rule as defined, this run remains a guard breach.
-- **Throughput & Output**: `140.8 s` total (`5.7 t/s` prefill, `23.0 t/s` decode); **Verdict: `LOADS+DEGENERATE`** (`[Start thinking]\n\n33333333...` even with Jinja template applied and no dense `Q2_K` down-quantization).
+- **Throughput & Output**: `140.8 s` total (`5.7 t/s` prefill, `23.0 t/s` decode); **Verdict: `LOADS+DEGENERATE`** (`[Start thinking]\n\n33333333...` even with Jinja template applied and no dense `Q2_K` down-quantization). The universality thesis is **not proven** on `Qwen3.8-Flash-Next`: shard sizing is fixed (`70.91 GiB`), but both guards breach and output collapses.
