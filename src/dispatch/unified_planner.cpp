@@ -249,7 +249,9 @@ int32_t calculate_optimal_layers(
         return 18;
     }
 
-    int64_t base_overhead_mb = 1200;
+    // VRAM_RESERVE_MB (351) and kv_turbo4_mb are already subtracted from vram_budget_mb;
+    // only account for compute scratch (~350 MiB) + GPU-resident output/norm head (~half embd, capped at 400 MiB).
+    int64_t base_overhead_mb = 350;
     int64_t tokens_id = gguf_find_key(ctx, "tokenizer.ggml.tokens");
     int64_t vocab_size = (tokens_id >= 0) ? (int64_t) gguf_get_arr_n(ctx, tokens_id) : 0;
     int64_t embd_id = gguf_find_key(ctx, (arch + ".embedding_length").c_str());
@@ -257,9 +259,9 @@ int32_t calculate_optimal_layers(
 
     if (vocab_size > 0 && embedding_length > 0) {
         int64_t embd_mb = (vocab_size * embedding_length * 6ULL) / (10ULL * 1024ULL * 1024ULL);
-        base_overhead_mb += embd_mb;
+        base_overhead_mb += std::min<int64_t>(embd_mb / 2, 400);
     } else {
-        base_overhead_mb += 400;
+        base_overhead_mb += 200;
     }
 
     int64_t usable_weight_mb = vram_budget_mb - base_overhead_mb;
@@ -524,10 +526,13 @@ TieringPlan plan_auto_dispatch(const DispatchRequest & req) {
             if (plan.moe_3tier) {
                 plan.moe_cache_slots = 0;
                 if (plan.moe_cache_size == 0) {
-                    if (free_vram_mib > 6000)      plan.moe_cache_size = 2400ULL * 1024 * 1024;
-                    else if (free_vram_mib > 4000) plan.moe_cache_size = 1800ULL * 1024 * 1024;
-                    else if (free_vram_mib > 2000) plan.moe_cache_size = 1024ULL * 1024 * 1024;
-                    else                           plan.moe_cache_size = 2048ULL * 1024 * 1024;
+                    // Fill Tier-1 MoE expert slab up to the dynamic VRAM ceiling after backbone + KV + compute scratch
+                    const double backbone_frac = (plan.expert_count >= 256) ? 0.06 : ((plan.expert_count >= 64) ? 0.20 : 0.25);
+                    const int64_t est_backbone_mb = std::max<int64_t>(600, (int64_t) ((double) model_mb * backbone_frac));
+                    int64_t slab_mb = safe_vram_cap_mb - est_backbone_mb - kv_turbo4_mb - 450;
+                    slab_mb = std::max<int64_t>(1024, std::min<int64_t>(slab_mb, 5600));
+                    slab_mb = (slab_mb / 64) * 64;
+                    plan.moe_cache_size = (size_t) slab_mb * 1024ULL * 1024ULL;
                 }
             } else if (plan.moe_cache_slots <= 0 && plan.moe_cache_size == 0) {
                 if (plan.expert_count >= 256) {
