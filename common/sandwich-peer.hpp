@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ggml.h"
+#include "hardware_profiler.hpp"
 #include <string>
 #include <vector>
 #include <memory>
@@ -106,9 +107,10 @@ public:
         // Calculate layer weight estimate
         const double mb_per_layer = static_cast<double>(total_model_mb) / total_layers;
 
-        // Local node gets primary low-latency layers (router gates, first layers)
+        // Local node gets primary low-latency layers (capped by unified effective_vram_ceiling_mb)
+        const uint64_t local_cap_mb = sandwich::dispatch::effective_vram_ceiling_mb(m_local_vram_mb, m_local_vram_mb);
         int local_layers = std::clamp(
-            static_cast<int>(std::floor((m_local_vram_mb * 0.85) / mb_per_layer)),
+            static_cast<int>(std::floor(static_cast<double>(local_cap_mb) / mb_per_layer)),
             1, total_layers
         );
 
@@ -124,8 +126,11 @@ public:
                 continue;
             }
 
+            const uint64_t peer_cap_mb = (node.vram_free_mb > sandwich::dispatch::VRAM_RESERVE_MB)
+                ? (node.vram_free_mb - sandwich::dispatch::VRAM_RESERVE_MB)
+                : (node.vram_free_mb / 2);
             int peer_layers = std::clamp(
-                static_cast<int>(std::floor((node.vram_free_mb * 0.85) / mb_per_layer)),
+                static_cast<int>(std::floor(static_cast<double>(peer_cap_mb) / mb_per_layer)),
                 1, total_layers - current_layer
             );
 

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "hardware_profiler.hpp"
 #include "ram_estimator.hpp"
 #include <cstdint>
 #include <string>
@@ -18,7 +19,7 @@ enum class WatermarkLevel {
 struct WatermarkThresholds {
     double vram_hwm_ratio   = 0.90; // 90% max VRAM allocation
     double vram_lwm_ratio   = 0.75; // 75% safe recovery point
-    uint64_t vram_min_headroom_mb = 750; // Minimum 750 MB cushion for Wayland compositor
+    uint64_t vram_min_headroom_mb = VRAM_RESERVE_MB; // Single unified 351 MiB dGPU reserve
 
     double ram_hwm_ratio    = 0.85; // 85% max Host RAM allocation
     double ram_lwm_ratio    = 0.70; // 70% safe recovery point (Technique #42)

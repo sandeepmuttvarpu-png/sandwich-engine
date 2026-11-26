@@ -250,8 +250,8 @@ int32_t calculate_optimal_layers(
     }
 
     // VRAM_RESERVE_MB (351) and kv_turbo4_mb are already subtracted from vram_budget_mb;
-    // only account for compute scratch (~350 MiB) + GPU-resident output/norm head (~half embd, capped at 400 MiB).
-    int64_t base_overhead_mb = 350;
+    // account only for compute scratch (~200 MiB) + GPU-resident output/norm head (capped at 200 MiB).
+    int64_t base_overhead_mb = 200;
     int64_t tokens_id = gguf_find_key(ctx, "tokenizer.ggml.tokens");
     int64_t vocab_size = (tokens_id >= 0) ? (int64_t) gguf_get_arr_n(ctx, tokens_id) : 0;
     int64_t embd_id = gguf_find_key(ctx, (arch + ".embedding_length").c_str());
@@ -259,9 +259,9 @@ int32_t calculate_optimal_layers(
 
     if (vocab_size > 0 && embedding_length > 0) {
         int64_t embd_mb = (vocab_size * embedding_length * 6ULL) / (10ULL * 1024ULL * 1024ULL);
-        base_overhead_mb += std::min<int64_t>(embd_mb / 2, 400);
+        base_overhead_mb += std::min<int64_t>(embd_mb / 2, 200);
     } else {
-        base_overhead_mb += 200;
+        base_overhead_mb += 150;
     }
 
     int64_t usable_weight_mb = vram_budget_mb - base_overhead_mb;
@@ -381,13 +381,11 @@ TieringPlan plan_auto_dispatch(const DispatchRequest & req) {
     plan.gpu_free_vram_b   = gpu_free_vram_b;
     plan.gpu_total_vram_mb = (gpu_total_vram_b > 0) ? (int64_t) (gpu_total_vram_b / (1024 * 1024)) : 8192;
 
-    const int64_t static_ceiling_mb = (int64_t) DGPU_VRAM_CEILING_MB; // 7,800 MiB (351 MiB reserve below 8,151 MiB)
+    const int64_t static_ceiling_mb = (int64_t) DGPU_VRAM_CEILING_MB; // 7,800 MiB nominal
     const int64_t free_mib = (gpu_free_vram_b > 0)
         ? (int64_t) (gpu_free_vram_b / (1024ULL * 1024ULL))
         : plan.gpu_total_vram_mb;
-    const int64_t runtime_available_mb = (free_mib > (int64_t) VRAM_RESERVE_MB)
-        ? std::min<int64_t>(static_ceiling_mb, free_mib - (int64_t) VRAM_RESERVE_MB)
-        : std::max<int64_t>(0, free_mib / 2);
+    const int64_t runtime_available_mb = (int64_t) effective_vram_ceiling_mb((uint64_t) plan.gpu_total_vram_mb, (uint64_t) free_mib);
 
     int64_t safe_vram_cap_mb = runtime_available_mb;
     if (!req.vram_guard.empty()) {
@@ -526,10 +524,10 @@ TieringPlan plan_auto_dispatch(const DispatchRequest & req) {
             if (plan.moe_3tier) {
                 plan.moe_cache_slots = 0;
                 if (plan.moe_cache_size == 0) {
-                    // Fill Tier-1 MoE expert slab up to the dynamic VRAM ceiling after backbone + KV + compute scratch
-                    const double backbone_frac = (plan.expert_count >= 256) ? 0.06 : ((plan.expert_count >= 64) ? 0.20 : 0.25);
+                    // Fill Tier-1 MoE expert slab up to the effective VRAM ceiling after backbone + KV + compute scratch
+                    const double backbone_frac = (plan.expert_count >= 256) ? 0.06 : ((plan.expert_count >= 64) ? 0.16 : 0.22);
                     const int64_t est_backbone_mb = std::max<int64_t>(600, (int64_t) ((double) model_mb * backbone_frac));
-                    int64_t slab_mb = safe_vram_cap_mb - est_backbone_mb - kv_turbo4_mb - 450;
+                    int64_t slab_mb = safe_vram_cap_mb - est_backbone_mb - kv_turbo4_mb - 250;
                     slab_mb = std::max<int64_t>(1024, std::min<int64_t>(slab_mb, 5600));
                     slab_mb = (slab_mb / 64) * 64;
                     plan.moe_cache_size = (size_t) slab_mb * 1024ULL * 1024ULL;
@@ -636,7 +634,7 @@ TieringPlan plan_auto_dispatch(const DispatchRequest & req) {
                 if (plan.n_ctx_eval >= 48000) {
                     route_kv_to_host = true;
                     kv_t = "turbo2";
-                } else if (plan.n_ctx_eval >= 32768 || total_vram_proj_mb > safe_vram_cap_mb) {
+                } else if (plan.n_ctx_eval >= 32768) {
                     route_kv_to_host = true;
                     kv_t = "turbo3";
                 }
@@ -684,7 +682,7 @@ TieringPlan plan_auto_dispatch(const DispatchRequest & req) {
                 if (plan.n_ctx_eval >= 48000) {
                     route_kv_to_host = true;
                     kv_t = "turbo2";
-                } else if (plan.n_ctx_eval >= 32768 || total_vram_proj_mb > safe_vram_cap_mb) {
+                } else if (plan.n_ctx_eval >= 32768) {
                     route_kv_to_host = true;
                     kv_t = "turbo3";
                 }

@@ -1578,8 +1578,8 @@ void sandwich_auto_dispatch(common_params & params) {
 
     if (const char * _sp = std::getenv("SANDWICH_DISPATCH_PRINT")) {
         if (_sp[0] != '\0') {
-            std::fprintf(stderr, "SANDWICH_DISPATCH_PRINT total_model_bytes: %" PRIu64 " vram_ceiling_mb: %" PRId64 " vram_runtime_available_mb: %" PRId64 "\n",
-                         (uint64_t) plan.total_model_bytes, (int64_t) plan.vram_ceiling_mb, (int64_t) plan.vram_runtime_available_mb);
+            std::fprintf(stderr, "SANDWICH_DISPATCH_PRINT total_model_bytes: %" PRIu64 " nominal_vram_ceiling_mb: %" PRId64 " effective_vram_ceiling_mb: %" PRId64 " vram_ceiling_mb: %" PRId64 " vram_runtime_available_mb: %" PRId64 "\n",
+                         (uint64_t) plan.total_model_bytes, (int64_t) plan.vram_ceiling_mb, (int64_t) plan.vram_runtime_available_mb, (int64_t) plan.vram_ceiling_mb, (int64_t) plan.vram_runtime_available_mb);
             std::fprintf(stderr, "SANDWICH_DISPATCH_PRINT argv: %s\n", _cmd.str().c_str());
             std::fflush(stderr);
             std::exit(0);

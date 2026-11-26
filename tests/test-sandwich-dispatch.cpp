@@ -9,6 +9,7 @@
 #include "sandwich_tui_backend.h"
 #include "common.h"
 #include "unified_planner.hpp"
+#include "sandwich-peer.hpp"
 
 #include <cstdio>
 #include <cstdlib>
@@ -884,6 +885,82 @@ static void test_moe_full_fit_disables_tiering() {
     printf("  [PASS] test_moe_full_fit_disables_tiering\n");
 }
 
+static void test_all_vram_paths_agree() {
+    printf("[test_all_vram_paths_agree] Starting...\n");
+    namespace fs = std::filesystem;
+
+    // Fixed host fixture: 7,767 MiB CUDA total, 7,765 MiB idle free -> effective ceiling = 7,414 MiB
+    const uint64_t total_mb = 7767;
+    const uint64_t free_mb  = 7765;
+    const uint64_t expected = sandwich::dispatch::effective_vram_ceiling_mb(total_mb, free_mb);
+    SANDWICH_TEST_CHECK(expected == 7414);
+
+    // 1. Unified planner
+    const fs::path tmp_dir = fs::temp_directory_path() / ("sandwich_agree_" + std::to_string((int) getpid()));
+    fs::remove_all(tmp_dir);
+    fs::create_directories(tmp_dir);
+    const fs::path model_path = tmp_dir / "agree.gguf";
+    struct gguf_context * g = gguf_init_empty();
+    gguf_set_val_str(g, "general.architecture", "llama");
+    gguf_set_val_u32(g, "llama.block_count", 32);
+    gguf_set_val_u32(g, "llama.attention.head_count", 32);
+    gguf_set_val_u32(g, "llama.attention.head_count_kv", 8);
+    gguf_set_val_u32(g, "llama.embedding_length", 4096);
+    gguf_set_val_str(g, "tokenizer.ggml.model", "llama");
+    const char * toks[2] = { "<unk>", "<s>" };
+    gguf_set_arr_str(g, "tokenizer.ggml.tokens", toks, 2);
+    SANDWICH_TEST_CHECK(gguf_write_to_file(g, model_path.c_str(), true));
+    gguf_free(g);
+
+    sandwich::dispatch::DispatchRequest req;
+    req.model.path = model_path.string();
+    req.n_ctx = 4096;
+    req.explicit_non_model_spec = true;
+    req.override_total_vram_mb = (int64_t) total_mb;
+    req.override_free_vram_mb  = (int64_t) free_mb;
+    const auto plan = sandwich::dispatch::plan_auto_dispatch(req);
+    SANDWICH_TEST_CHECK(plan.valid);
+    SANDWICH_TEST_CHECK((uint64_t) plan.vram_runtime_available_mb == expected);
+    SANDWICH_TEST_CHECK((uint64_t) plan.safe_vram_cap_mb == expected);
+
+    // 2. RAMEstimator
+    RealtimeRAMStats ram{};
+    ram.total_mb = 24000;
+    ram.available_mb = 16000;
+    ram.free_mb = 16000;
+    RealtimeVRAMStats vram{};
+    vram.cuda_available = true;
+    vram.total_mb = total_mb;
+    vram.free_mb = free_mb;
+    ModelMemoryFootprint fp = RAMEstimator::calculate_footprint(2000ULL * 1024 * 1024, 32, 4096, "turbo4", false, 0, 0);
+    DynamicDispatchRecommendation rec = RAMEstimator::compute_realtime_dispatch(fp, ram, vram, false, 4096);
+    SANDWICH_TEST_CHECK(rec.target_vram_budget_mb == expected);
+
+    // 3. MemoryWatermarker
+    MemoryWatermarker wm;
+    SANDWICH_TEST_CHECK(wm.get_dynamic_vram_limit_mb(free_mb) == expected);
+
+    // 4. fit_params default margin
+    common_params def_params;
+    SANDWICH_TEST_CHECK(def_params.fit_params_target[0] == sandwich::dispatch::VRAM_RESERVE_MB * 1024ULL * 1024ULL);
+    SANDWICH_TEST_CHECK(std::min<uint64_t>(sandwich::dispatch::DGPU_VRAM_CEILING_MB,
+                                           free_mb - def_params.fit_params_target[0] / (1024ULL * 1024ULL)) == expected);
+
+    // 5. sandwich_peer_mesh
+    sandwich_peer_config pcfg;
+    sandwich_peer_mesh mesh(pcfg);
+    mesh.set_local_vram(free_mb);
+    SANDWICH_TEST_CHECK(mesh.solve_heterogeneous_topology(10, 7414));
+    SANDWICH_TEST_CHECK(mesh.local_end_layer() == 10); // fits 100% at 7,414 MiB effective ceiling
+
+    // 6. HardwareProfiler ceiling helper
+    SANDWICH_TEST_CHECK(sandwich::dispatch::effective_vram_ceiling_mb(total_mb, free_mb) == expected);
+
+    fs::remove_all(tmp_dir);
+    printf("  All 6 VRAM paths agreed on effective ceiling = %zu MiB\n", (size_t) expected);
+    printf("  [PASS] test_all_vram_paths_agree\n");
+}
+
 int main() {
     printf("=== Running sandwich.cpp Dispatch Subsystem Unit Tests ===\n");
     test_ram_estimator();
@@ -899,6 +976,7 @@ int main() {
     test_dense_auto_dispatch_regressions();
     test_dynamic_vram_ceiling_occupied();
     test_moe_full_fit_disables_tiering();
+    test_all_vram_paths_agree();
     printf("=== All Sandwich Dispatch Tests Passed Successfully! ===\n");
     return 0;
 }

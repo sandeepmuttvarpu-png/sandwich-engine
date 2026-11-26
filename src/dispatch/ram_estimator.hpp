@@ -1,5 +1,6 @@
 #pragma once
 
+#include "hardware_profiler.hpp"
 #include <string>
 #include <cstdint>
 #include <vector>
@@ -89,7 +90,7 @@ public:
         const RealtimeVRAMStats & vram,
         bool is_moe,
         int context_length,
-        uint64_t max_wayland_guard_mb = 7800
+        uint64_t max_guard_mb = DGPU_VRAM_CEILING_MB
     );
 };
 

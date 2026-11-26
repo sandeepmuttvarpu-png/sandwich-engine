@@ -334,11 +334,8 @@ GPUProfile HardwareProfiler::detect_gpu() {
         }
     }
 
-    uint64_t vram_cushion = dgpu_has_display
-        ? std::max<uint64_t>(800, static_cast<uint64_t>(gpu.total_vram_mb * 0.08))
-        : std::max<uint64_t>(350, static_cast<uint64_t>(gpu.total_vram_mb * 0.045));
-
-    gpu.wayland_guard_vram_mb = (gpu.total_vram_mb > vram_cushion) ? (gpu.total_vram_mb - vram_cushion) : gpu.total_vram_mb;
+    (void) dgpu_has_display;
+    gpu.wayland_guard_vram_mb = effective_vram_ceiling_mb(gpu.total_vram_mb, gpu.free_vram_mb);
 
     // Estimate bandwidth
     if (gpu.device_name.find("5050") != std::string::npos) {

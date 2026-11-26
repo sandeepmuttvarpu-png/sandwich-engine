@@ -212,17 +212,14 @@ DynamicDispatchRecommendation RAMEstimator::compute_realtime_dispatch(
     const RealtimeVRAMStats & vram,
     bool is_moe,
     int context_length,
-    uint64_t max_wayland_guard_mb
+    uint64_t max_guard_mb
 ) {
     DynamicDispatchRecommendation rec;
 
-    // 1. Determine safe GPU VRAM allocation considering live free memory and Wayland guard
-    uint64_t vram_safe_ceiling = max_wayland_guard_mb;
+    // 1. Determine safe GPU VRAM ceiling via the single unified helper
+    uint64_t vram_safe_ceiling = max_guard_mb;
     if (vram.cuda_available && vram.total_mb > 0) {
-        // Leave at least 800 MB cushion for OS / Wayland compositor / browser spikes
-        uint64_t dynamic_cushion = 800;
-        uint64_t live_ceiling = (vram.free_mb > dynamic_cushion) ? (vram.free_mb - dynamic_cushion) : (vram.free_mb / 2);
-        vram_safe_ceiling = std::min(max_wayland_guard_mb, live_ceiling);
+        vram_safe_ceiling = std::min<uint64_t>(max_guard_mb, effective_vram_ceiling_mb(vram.total_mb, vram.free_mb));
     }
 
     // 2. Reserve VRAM for KV cache and scratchpad activations

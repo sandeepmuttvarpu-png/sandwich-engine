@@ -1,6 +1,7 @@
 #include "fit.h"
 
 #include "common.h"
+#include "hardware_profiler.hpp"
 #include "json.h"
 #include "llama-cpp.h"
 #include "log.h"
@@ -748,7 +749,8 @@ static void common_params_fit_impl(
     std::vector<int64_t> targets; // maximum acceptable memory use per device
     targets.reserve(nd);
     for (size_t id = 0; id < nd; id++) {
-        targets.push_back(dmds_full[id].free - margins[id]);
+        const int64_t ceiling_bytes = (int64_t) sandwich::dispatch::DGPU_VRAM_CEILING_MB * MiB;
+        targets.push_back(std::min<int64_t>(ceiling_bytes, dmds_full[id].free - margins[id]));
         LOG_TRC("%s: id=%zu, target=%" PRId64 " MiB\n", __func__, id, targets[id]/MiB);
     }
 

@@ -110,13 +110,7 @@ bool MemoryWatermarker::is_critical() const {
 }
 
 uint64_t MemoryWatermarker::get_dynamic_vram_limit_mb(uint64_t total_vram_mb) const {
-    if (total_vram_mb == 0) return 0;
-    // Always preserve at least min headroom for Wayland compositor
-    uint64_t max_usable = (total_vram_mb > m_thresholds.vram_min_headroom_mb)
-                            ? (total_vram_mb - m_thresholds.vram_min_headroom_mb)
-                            : (total_vram_mb / 2);
-    uint64_t ratio_limit = static_cast<uint64_t>(total_vram_mb * m_thresholds.vram_hwm_ratio);
-    return std::min(max_usable, ratio_limit);
+    return effective_vram_ceiling_mb(total_vram_mb, total_vram_mb);
 }
 
 uint64_t MemoryWatermarker::get_dynamic_ram_limit_mb(uint64_t total_ram_mb) const {

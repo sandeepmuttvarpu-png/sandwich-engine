@@ -17,6 +17,15 @@ constexpr int      FALLBACK_THREADS      = 6;    // Optimal physical P-cores on 
 constexpr uint64_t FALLBACK_VRAM_MB      = 7800;
 constexpr uint64_t FALLBACK_RAM_MB       = 16552;
 
+inline uint64_t effective_vram_ceiling_mb(uint64_t total_vram_mb, uint64_t free_vram_mb) {
+    const uint64_t avail = (free_vram_mb > 0) ? free_vram_mb : total_vram_mb;
+    if (avail == 0) {
+        return 0;
+    }
+    const uint64_t runtime_cap = (avail > VRAM_RESERVE_MB) ? (avail - VRAM_RESERVE_MB) : (avail / 2);
+    return std::min<uint64_t>(DGPU_VRAM_CEILING_MB, runtime_cap);
+}
+
 struct CPUProfile {
     std::string model_name           = "Generic x86_64";
     int         total_logical_cores  = 8;
