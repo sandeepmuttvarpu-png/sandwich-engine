@@ -1,0 +1,38 @@
+{
+  "model": "/home/sandeep/ai-models/moe/Qwen3.8-Flash-Next-GSQ-RCO-GGUF/IQ3_XXS/Qwen3.8-Flash-Next-GSQ-RCO-abliterated-IQ3_XXS-00001-of-00002.gguf",
+  "rc": 0,
+  "timed_out": false,
+  "elapsed_s": 140.8,
+  "total_model_bytes_line": "76142283328",
+  "resolved_argv": "./build/bin/llama-cli -m \"/home/sandeep/ai-models/moe/Qwen3.8-Flash-Next-GSQ-RCO-GGUF/IQ3_XXS/Qwen3.8-Flash-Next-GSQ-RCO-abliterated-IQ3_XXS-00001-of-00002.gguf\" -ngl 99 -t 6 -c 4096 --moe-warm-ram-mb 14336 -ctk turbo4 -ctv turbo4 -fa --moe-2q --io-uring --no-turbo-mma",
+  "peak_vram_mib": 7222.0,
+  "peak_vmhwm_mib": 18697.9,
+  "peak_temp_c": 62.38,
+  "guard_vram_ok": false,
+  "guard_vmhwm_ok": false,
+  "smaps_at_peak_vmhwm": {
+    "vmhwm_mib": 18687.63,
+    "vmrss_mib": 18641.38,
+    "rss_mib": 18831.78,
+    "pss_mib": 18825.31,
+    "shared_clean_mib": 8.43,
+    "shared_dirty_mib": 0.0,
+    "private_clean_mib": 18557.94,
+    "private_dirty_mib": 265.41,
+    "anonymous_mib": 253.64
+  },
+  "smaps_last": {
+    "vmhwm_mib": 18697.89,
+    "vmrss_mib": 371.96,
+    "rss_mib": 299.04,
+    "pss_mib": 295.15,
+    "shared_clean_mib": 4.65,
+    "shared_dirty_mib": 0.0,
+    "private_clean_mib": 113.13,
+    "private_dirty_mib": 181.27,
+    "anonymous_mib": 166.74
+  },
+  "prompt_tps": 5.7,
+  "gen_tps": 23.0,
+  "preview": "\n\n> The design of modern operating systems and runtime environments for large language models presents fundamental challenges at the boundary between hardware abstractions and high-throughput kernel execution. Traditional operating system primitives\u2014such as virtual memory paging, demand paging, and POSIX read/write syscalls\u2014were conceived in an era where compute devices operated either as passive peripherals or through isolated memory address spaces managed exclusively by the host kernel. In con ... (truncated)\n\n[Start thinking]\n\n3333333333333333333333333333333333333333333333333333333333333333"
+}

@@ -61,3 +61,22 @@ Diagnostic `n=1` verification runs (`prompt_512.txt`, `SANDWICH_AUTOTUNE_DISABLE
 | **Qwen3.6-35B-A3B** (`qwen35moe`) | `-ngl 14 -ngld 99`, slots 16, warm 8000, `-t 6`, `SANDWICH_AUTOTUNE_DISABLE=1` | `13.89 s` | `274.3 t/s` | `21.8 t/s` | **6,458.0 MiB** ✓ | **13,843.7 MiB** ✓ | **`false` ✓** | **REPACK SUPPRESSED + CLEAN GUARDS ✓** |
 | **Muse-Glimmer-30B** (`muse-glimmer`, dense) | `--sandwich-auto --spec-type none` (`-ngl 18`, `-t 6`) | `38.00 s` | `125.9 t/s` | `2.8 t/s` | **6,330.0 MiB** ✓ | **15,881.6 MiB** ✓ | `false` | **COHERENT + CLEAN GUARDS ✓** *(was `17,762 MiB` / `-ngl 0`)* |
 | **C4AI Command-R 08-2024** (`command-r`, dense) | `--sandwich-auto --spec-type none` (`-ngl 15`, `-t 6`, `600s` cap) | `45.05 s` | `236.7 t/s` | `2.0 t/s` | **6,692.0 MiB** ✓ | **13,913.8 MiB** ✓ | `false` | **COHERENT + CLEAN GUARDS ✓** *(was `180s` timeout @ `-t 12`)* |
+
+---
+
+## 4. Unified-Planner Flash Next Verification & `smaps_rollup` Decomposition (`flash_next_unified.json`)
+
+Tested `Qwen3.8-Flash-Next` (`qwen4exp`, 125.74B, `70.91 GiB` across 2 shards) under the unified planner (`3a15ae24c`, `run_flash_next_unified.py`):
+
+- **Resolved `total_model_bytes`**: **`76,142,283,328` bytes (`70.91 GiB`)** summed across both shards (verified via `SANDWICH_DISPATCH_PRINT=1`; previously `44.09 GB` shard 1 only).
+- **Resolved CLI Plan**: `-ngl 99 -t 6 -c 4096 --moe-warm-ram-mb 14336 -ctk turbo4 -ctv turbo4 -fa --moe-2q --io-uring --no-turbo-mma` *(note: omitting `-c 4096` with `-c 0` failed `cudaMalloc` on `2,397.95 MiB` MoE cache because `llama_context` defaulted to full training context instead of `plan.n_ctx_eval = 4096`)*.
+- **Guards**:
+  - **Peak VRAM**: **`7,222.0 MiB`** (**FAILS** `<= 7,100 MiB` guard by `+122.0 MiB`; previously `7,220 MiB`).
+  - **Peak `VmHWM`**: **`18,697.9 MiB`** (**FAILS** `<= 16,552 MiB` guard by `+2,145.9 MiB`; previously `18,018 MiB`).
+- **`/proc/<pid>/smaps_rollup` at Peak `VmHWM` (`18,687.63 MiB` VmHWM / `18,831.78 MiB` RSS)**:
+  - `Private_Clean`: **`18,557.94 MiB`** (`98.5%` — clean file-backed `mmap` pages, immediately reclaimable by kernel page cache, not memory pressure)
+  - `Private_Dirty`: **`265.41 MiB`** (`1.4%`)
+  - `Anonymous`: **`253.64 MiB`** (`1.3%`)
+  - `Shared_Clean`: **`8.43 MiB`** (`0.04%`)
+  - *Guard Assessment*: Raw `VmHWM` conflates reclaimable clean `mmap` page-cache residency with non-reclaimable `Anonymous + Private_Dirty` footprint (`~254–265 MiB`). For `mmap`-heavy MoE models, `VmHWM` is not measuring actual memory pressure; however, under the current `VmHWM <= 16,552 MiB` rule as defined, this run remains a guard breach.
+- **Throughput & Output**: `140.8 s` total (`5.7 t/s` prefill, `23.0 t/s` decode); **Verdict: `LOADS+DEGENERATE`** (`[Start thinking]\n\n33333333...` even with Jinja template applied and no dense `Q2_K` down-quantization).
