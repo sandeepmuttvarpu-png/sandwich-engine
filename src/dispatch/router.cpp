@@ -302,6 +302,23 @@ int Router::auto_calibrate_and_dispatch(int argc, char ** argv) {
               << " MB Dynamic VRAM Guard | 70% Host RAM Cap\n\n";
 
     // Prepare C-style argv array
+    if (const char * sp = std::getenv("SANDWICH_DISPATCH_PRINT")) {
+        if (sp[0] != '\0') {
+            std::ostringstream cmd;
+            for (size_t i = 0; i < args.size(); ++i) {
+                if (i > 0) cmd << ' ';
+                if (args[i].find(' ') != std::string::npos) {
+                    cmd << '"' << args[i] << '"';
+                } else {
+                    cmd << args[i];
+                }
+            }
+            std::fprintf(stderr, "SANDWICH_DISPATCH_PRINT argv: %s\n", cmd.str().c_str());
+            std::fflush(stderr);
+            return 0;
+        }
+    }
+
     std::vector<char*> c_args;
     for (const auto & s : args) {
         c_args.push_back(const_cast<char*>(s.c_str()));
