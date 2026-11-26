@@ -359,42 +359,55 @@ TieringPlan plan_auto_dispatch(const DispatchRequest & req) {
         plan.model_arch == "deepseek4"
     );
 
-    // 3. GPU VRAM discovery & guard ceiling
+    // 3. GPU VRAM discovery & dynamic ceiling: min(DGPU_VRAM_CEILING_MB=7800, free_mib - VRAM_RESERVE_MB=351)
     size_t gpu_free_vram_b  = 0;
     size_t gpu_total_vram_b = 0;
-    for (size_t i = 0; i < ggml_backend_dev_count(); ++i) {
-        auto * dev = ggml_backend_dev_get(i);
-        if (ggml_backend_dev_type(dev) == GGML_BACKEND_DEVICE_TYPE_GPU) {
-            size_t free_b = 0, total_b = 0;
-            ggml_backend_dev_memory(dev, &free_b, &total_b);
-            gpu_free_vram_b  += free_b;
-            gpu_total_vram_b += total_b;
+    if (req.override_total_vram_mb >= 0 && req.override_free_vram_mb >= 0) {
+        gpu_total_vram_b = (size_t) req.override_total_vram_mb * 1024ULL * 1024ULL;
+        gpu_free_vram_b  = (size_t) req.override_free_vram_mb * 1024ULL * 1024ULL;
+    } else {
+        for (size_t i = 0; i < ggml_backend_dev_count(); ++i) {
+            auto * dev = ggml_backend_dev_get(i);
+            if (ggml_backend_dev_type(dev) == GGML_BACKEND_DEVICE_TYPE_GPU) {
+                size_t free_b = 0, total_b = 0;
+                ggml_backend_dev_memory(dev, &free_b, &total_b);
+                gpu_free_vram_b  += free_b;
+                gpu_total_vram_b += total_b;
+            }
         }
     }
     plan.gpu_free_vram_b   = gpu_free_vram_b;
     plan.gpu_total_vram_mb = (gpu_total_vram_b > 0) ? (int64_t) (gpu_total_vram_b / (1024 * 1024)) : 8192;
 
-    int64_t safe_vram_cap_mb = (plan.gpu_total_vram_mb > 300) ? (plan.gpu_total_vram_mb - 160) : plan.gpu_total_vram_mb;
-    if (safe_vram_cap_mb > 8000) safe_vram_cap_mb = 8000;
+    const int64_t static_ceiling_mb = (int64_t) DGPU_VRAM_CEILING_MB; // 7,800 MiB (351 MiB reserve below 8,151 MiB)
+    const int64_t free_mib = (gpu_free_vram_b > 0)
+        ? (int64_t) (gpu_free_vram_b / (1024ULL * 1024ULL))
+        : plan.gpu_total_vram_mb;
+    const int64_t runtime_available_mb = (free_mib > (int64_t) VRAM_RESERVE_MB)
+        ? std::min<int64_t>(static_ceiling_mb, free_mib - (int64_t) VRAM_RESERVE_MB)
+        : std::max<int64_t>(0, free_mib / 2);
+
+    int64_t safe_vram_cap_mb = runtime_available_mb;
     if (!req.vram_guard.empty()) {
         const std::string & vg = req.vram_guard;
         if (vg == "none" || vg == "uncapped" || vg == "max" || vg == "0") {
-            safe_vram_cap_mb = (plan.gpu_total_vram_mb > 80) ? (plan.gpu_total_vram_mb - 80) : plan.gpu_total_vram_mb;
+            safe_vram_cap_mb = std::min<int64_t>(static_ceiling_mb, std::max<int64_t>(0, free_mib - 80));
         } else {
             try {
                 size_t end_idx = 0;
                 double val = std::stod(vg, &end_idx);
                 std::string unit = vg.substr(end_idx);
-                if (unit == "G" || unit == "g" || unit == "GB" || unit == "gb" || unit == "GiB") {
-                    safe_vram_cap_mb = (int64_t) (val * 1024.0);
-                } else {
-                    safe_vram_cap_mb = (int64_t) val;
-                }
+                int64_t parsed_mb = (unit == "G" || unit == "g" || unit == "GB" || unit == "gb" || unit == "GiB")
+                    ? (int64_t) (val * 1024.0)
+                    : (int64_t) val;
+                safe_vram_cap_mb = std::min<int64_t>(parsed_mb, runtime_available_mb > 0 ? runtime_available_mb : parsed_mb);
             } catch (...) {
             }
         }
     }
-    plan.safe_vram_cap_mb = safe_vram_cap_mb;
+    plan.vram_ceiling_mb           = static_ceiling_mb;
+    plan.vram_runtime_available_mb = runtime_available_mb;
+    plan.safe_vram_cap_mb          = safe_vram_cap_mb;
 
     // 4. Layer / attention / shard size metadata (authoritative multi-shard sum!)
     int64_t block_id = gguf_find_key(gguf_ctx.get(), (plan.model_arch + ".block_count").c_str());

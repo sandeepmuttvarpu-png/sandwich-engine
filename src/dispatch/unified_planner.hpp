@@ -40,6 +40,9 @@ struct DispatchRequest {
     bool        native_mtp               = false;
     bool        load_mtp                 = false;
     bool        jit_down_quant           = false;
+    // Optional overrides for deterministic unit-test fixtures (-1 = probe live hardware)
+    int64_t     override_total_vram_mb   = -1;
+    int64_t     override_free_vram_mb    = -1;
 };
 
 // Single authoritative auto-dispatch planner used by both `llama-cli --sandwich-auto`

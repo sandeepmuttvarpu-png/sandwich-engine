@@ -9,11 +9,12 @@ namespace sandwich {
 namespace dispatch {
 
 // Invariant Constants
-constexpr uint64_t WAYLAND_VRAM_GUARD_MB = 7100; // Hard invariant: 7,100 MB max VRAM allocation
+constexpr uint64_t DGPU_VRAM_CEILING_MB  = 7800; // Single dGPU VRAM ceiling (351 MiB reserve below 8,151 MiB physical; compositor runs on iGPU)
+constexpr uint64_t VRAM_RESERVE_MB       = 351;  // Runtime reserve subtracted from cudaMemGetInfo free VRAM
 constexpr double   RAM_RULE_42_RATIO     = 0.70; // Hard invariant: Technique #42 (70% Max Host RAM = 16,552 MB)
 constexpr uint64_t HOST_RAM_CEILING_MB   = 16552;
 constexpr int      FALLBACK_THREADS      = 6;    // Optimal physical P-cores on i7-13620H
-constexpr uint64_t FALLBACK_VRAM_MB      = 7100;
+constexpr uint64_t FALLBACK_VRAM_MB      = 7800;
 constexpr uint64_t FALLBACK_RAM_MB       = 16552;
 
 struct CPUProfile {
@@ -36,7 +37,7 @@ struct GPUProfile {
     std::string device_name            = "NVIDIA GPU (Autodetected)";
     uint64_t    total_vram_mb          = FALLBACK_VRAM_MB;
     uint64_t    free_vram_mb           = FALLBACK_VRAM_MB;
-    uint64_t    wayland_guard_vram_mb  = std::min(FALLBACK_VRAM_MB, WAYLAND_VRAM_GUARD_MB);
+    uint64_t    wayland_guard_vram_mb  = std::min(FALLBACK_VRAM_MB, DGPU_VRAM_CEILING_MB);
     double      est_bandwidth_gbps     = 224.0; // GDDR6 mobile bus bandwidth
     bool        cuda_available         = false;
 };
@@ -71,7 +72,7 @@ struct HardwareProfile {
 struct TieringPlan {
     uint64_t total_model_bytes    = 0; // Authoritative sum across ALL shards
     uint64_t model_total_mb       = 0;
-    uint64_t tier1_hot_vram_mb    = 0; // GPU VRAM (capped by WAYLAND_VRAM_GUARD_MB)
+    uint64_t tier1_hot_vram_mb    = 0; // GPU VRAM (capped by DGPU_VRAM_CEILING_MB)
     uint64_t tier2_warm_ddr5_mb   = 0; // Host RAM (capped by 70% RAM Rule)
     uint64_t tier3_cold_nvme_mb   = 0; // Direct NVMe mmap paging
     int      gpu_layers           = 0;
@@ -96,6 +97,8 @@ struct TieringPlan {
     int64_t     n_ctx_train              = 0;
     int64_t     gpu_total_vram_mb        = 8192;
     size_t      gpu_free_vram_b          = 0;
+    int64_t     vram_ceiling_mb          = (int64_t) DGPU_VRAM_CEILING_MB;
+    int64_t     vram_runtime_available_mb = 0;
     int64_t     safe_vram_cap_mb         = 0;
     int32_t     threads                  = 0;
     std::vector<int> p_core_ids;

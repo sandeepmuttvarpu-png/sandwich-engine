@@ -8,6 +8,7 @@
 #include "gpudirect_storage.hpp"
 #include "sandwich_tui_backend.h"
 #include "common.h"
+#include "unified_planner.hpp"
 
 #include <cstdio>
 #include <cstdlib>
@@ -781,6 +782,58 @@ static void test_dense_auto_dispatch_regressions() {
     printf("  [PASS] test_dense_auto_dispatch_regressions\n");
 }
 
+static void test_dynamic_vram_ceiling_occupied() {
+    printf("[test_dynamic_vram_ceiling_occupied] Starting...\n");
+    namespace fs = std::filesystem;
+
+    const fs::path tmp_dir = fs::temp_directory_path() / ("sandwich_vram_occ_" + std::to_string((int) getpid()));
+    fs::remove_all(tmp_dir);
+    fs::create_directories(tmp_dir);
+
+    const fs::path model_path = tmp_dir / "dense-2gb.gguf";
+    struct gguf_context * g = gguf_init_empty();
+    SANDWICH_TEST_CHECK(g != nullptr);
+    gguf_set_val_str(g, "general.architecture", "llama");
+    gguf_set_val_u32(g, "llama.block_count", 32);
+    gguf_set_val_u32(g, "llama.attention.head_count", 32);
+    gguf_set_val_u32(g, "llama.attention.head_count_kv", 8);
+    gguf_set_val_u32(g, "llama.embedding_length", 4096);
+    gguf_set_val_str(g, "tokenizer.ggml.model", "llama");
+    const char * toks[2] = { "<unk>", "<s>" };
+    gguf_set_arr_str(g, "tokenizer.ggml.tokens", toks, 2);
+    SANDWICH_TEST_CHECK(gguf_write_to_file(g, model_path.c_str(), true));
+    gguf_free(g);
+    fs::resize_file(model_path, 2000ULL * 1024ULL * 1024ULL);
+
+    // 1. Idle 8 GB GPU (7,767 MiB CUDA, 2 MiB used -> 7,765 MiB free): fits 100% -> ngl=99
+    sandwich::dispatch::DispatchRequest req_idle;
+    req_idle.model.path = model_path.string();
+    req_idle.n_ctx = 4096;
+    req_idle.explicit_non_model_spec = true;
+    req_idle.override_total_vram_mb = 7767;
+    req_idle.override_free_vram_mb  = 7765;
+    const auto plan_idle = sandwich::dispatch::plan_auto_dispatch(req_idle);
+    SANDWICH_TEST_CHECK(plan_idle.valid);
+    SANDWICH_TEST_CHECK(plan_idle.vram_ceiling_mb == 7800);
+    SANDWICH_TEST_CHECK(plan_idle.vram_runtime_available_mb == 7765 - 351);
+    SANDWICH_TEST_CHECK(plan_idle.gpu_layers == 99);
+
+    // 2. 6,130 MiB occupied by external process (e.g. LM Studio) -> free = 1,635 MiB
+    //    runtime_available = min(7800, 1635 - 351) = 1,284 MiB -> planner MUST reduce offload, not OOM
+    sandwich::dispatch::DispatchRequest req_occ = req_idle;
+    req_occ.override_free_vram_mb = 7765 - 6130; // 1,635 MiB free
+    const auto plan_occ = sandwich::dispatch::plan_auto_dispatch(req_occ);
+    SANDWICH_TEST_CHECK(plan_occ.valid);
+    SANDWICH_TEST_CHECK(plan_occ.vram_ceiling_mb == 7800);
+    SANDWICH_TEST_CHECK(plan_occ.vram_runtime_available_mb == 1635 - 351);
+    SANDWICH_TEST_CHECK(plan_occ.gpu_layers < 32);
+    printf("  Occupied 6130 MiB -> ceiling=%ld, runtime_avail=%ld, reduced ngl=%d\n",
+           (long) plan_occ.vram_ceiling_mb, (long) plan_occ.vram_runtime_available_mb, plan_occ.gpu_layers);
+
+    fs::remove_all(tmp_dir);
+    printf("  [PASS] test_dynamic_vram_ceiling_occupied\n");
+}
+
 int main() {
     printf("=== Running sandwich.cpp Dispatch Subsystem Unit Tests ===\n");
     test_ram_estimator();
@@ -794,6 +847,7 @@ int main() {
     test_strata_backend();
     test_multi_shard_size_aggregation();
     test_dense_auto_dispatch_regressions();
+    test_dynamic_vram_ceiling_occupied();
     printf("=== All Sandwich Dispatch Tests Passed Successfully! ===\n");
     return 0;
 }

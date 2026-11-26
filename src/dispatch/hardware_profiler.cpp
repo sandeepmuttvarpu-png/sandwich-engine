@@ -73,7 +73,7 @@ HardwareProfile HardwareProfiler::get_conservative_fallback() {
     fb.gpu.device_name = "GPU (Safe Mode)";
     fb.gpu.total_vram_mb = FALLBACK_VRAM_MB;
     fb.gpu.free_vram_mb = FALLBACK_VRAM_MB;
-    fb.gpu.wayland_guard_vram_mb = std::min(FALLBACK_VRAM_MB, WAYLAND_VRAM_GUARD_MB);
+    fb.gpu.wayland_guard_vram_mb = std::min(FALLBACK_VRAM_MB, DGPU_VRAM_CEILING_MB);
     fb.gpu.est_bandwidth_gbps = 150.0;
     fb.gpu.cuda_available = false;
 
@@ -130,7 +130,7 @@ std::string HardwareProfile::to_json() const {
     };
 
     j["invariants"] = {
-        {"wayland_vram_guard_mb", WAYLAND_VRAM_GUARD_MB},
+        {"wayland_vram_guard_mb", DGPU_VRAM_CEILING_MB},
         {"ram_rule_42_ratio",     RAM_RULE_42_RATIO}
     };
 
@@ -170,7 +170,7 @@ HardwareProfile HardwareProfile::from_json(const std::string & json_str) {
             p.gpu.device_name           = j["gpu"].value("device_name", "GPU");
             p.gpu.total_vram_mb         = j["gpu"].value("total_vram_mb", FALLBACK_VRAM_MB);
             p.gpu.free_vram_mb          = j["gpu"].value("free_vram_mb", FALLBACK_VRAM_MB);
-            p.gpu.wayland_guard_vram_mb = std::min(static_cast<uint64_t>(j["gpu"].value("wayland_guard_vram_mb", WAYLAND_VRAM_GUARD_MB)), WAYLAND_VRAM_GUARD_MB);
+            p.gpu.wayland_guard_vram_mb = std::min(static_cast<uint64_t>(j["gpu"].value("wayland_guard_vram_mb", DGPU_VRAM_CEILING_MB)), DGPU_VRAM_CEILING_MB);
             p.gpu.est_bandwidth_gbps    = j["gpu"].value("est_bandwidth_gbps", 224.0);
             p.gpu.cuda_available        = j["gpu"].value("cuda_available", true);
         }

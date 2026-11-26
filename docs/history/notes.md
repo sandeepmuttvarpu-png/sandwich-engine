@@ -51,7 +51,7 @@ This document collects ongoing observational notes, future refinement tasks, and
 
 ## 10. Unified-Planner `Qwen3.8-Flash-Next` Verification & `smaps_rollup` Findings
 - **Shard Sizing Fixed:** `plan_auto_dispatch()` (`3a15ae24c`) resolved `total_model_bytes = 76,142,283,328` bytes (`70.91 GiB`) across both shards (`flash_next_unified.json`).
-- **Guards (`-c 4096`):** Peak VRAM `7,222.0 MiB` (**+122.0 MiB** over `7,100 MiB` guard) and peak `VmHWM` `18,697.9 MiB` (**+2,145.9 MiB** over `16,552 MiB` guard).
+- **Guards (`-c 4096`):** Peak VRAM `7,222.0 MiB` (breached legacy `7,100 MiB` guard by `+122.0 MiB`, **UNDER** the unified `7,800 MiB` dGPU ceiling — not a sizing bug) and peak `VmHWM` `18,697.9 MiB` (**+2,145.9 MiB** over `16,552 MiB` guard).
 - **`smaps_rollup` Decomposition at Peak:** `18,557.94 MiB` `Private_Clean` (`98.5%` reclaimable `mmap` pages) vs `253.64 MiB` `Anonymous` and `265.41 MiB` `Private_Dirty`. Raw `VmHWM` overstates memory pressure on `mmap`-heavy MoEs; private dirty/anonymous footprint is `< 300 MiB`.
 - **Throughput & Output:** `5.7 t/s` pp, `23.0 t/s` tg, `LOADS+DEGENERATE` (`[Start thinking]\n\n3333...`). Universality thesis is **not proven** on `Qwen3.8-Flash-Next`: shard sizing is fixed (`70.91 GiB`), but both guards still breach (`7,222.0 MiB` VRAM, `18,697.9 MiB` VmHWM) and output collapses into repetition.
 - **Open Actions:**
